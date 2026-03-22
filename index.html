@@ -1197,6 +1197,112 @@ input::placeholder, textarea::placeholder { color: var(--text4); }
 .danger-desc  { font-size: 0.8rem; color: var(--text3); margin-bottom: 14px; line-height: 1.6; }
 
 /* ═══════════════════════════════════════════════════════════
+   TRAINING / LEARNING SYSTEM
+═══════════════════════════════════════════════════════════ */
+.correction-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.correction-card:hover { border-color: var(--border-md); }
+.correction-header {
+  padding: 12px 16px;
+  background: var(--inset);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.correction-badge {
+  font-size: 0.68rem; font-weight: 700; padding: 2px 8px;
+  border-radius: 99px; letter-spacing: 0.5px;
+}
+.badge-correction { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(245,200,66,0.25); }
+.badge-accepted   { background: var(--green-dim); color: var(--green); border: 1px solid rgba(61,214,140,0.25); }
+.correction-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.diff-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.diff-before {
+  background: rgba(232,71,63,0.06); border: 1px solid rgba(232,71,63,0.18);
+  border-radius: var(--radius-sm); padding: 10px 12px;
+}
+.diff-after {
+  background: rgba(61,214,140,0.06); border: 1px solid rgba(61,214,140,0.18);
+  border-radius: var(--radius-sm); padding: 10px 12px;
+}
+.diff-label { font-size: 0.67rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+.diff-before .diff-label { color: var(--red); }
+.diff-after  .diff-label { color: var(--green); }
+.diff-value { font-size: 0.84rem; color: var(--text); line-height: 1.55; }
+
+.training-stat {
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  text-align: center;
+}
+.training-stat-num { font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 700; }
+.training-stat-lbl { font-size: 0.72rem; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+
+.training-progress {
+  height: 8px; background: var(--border-md); border-radius: 99px; overflow: hidden; margin-top: 8px;
+}
+.training-progress-fill {
+  height: 100%; border-radius: 99px;
+  background: linear-gradient(90deg, var(--blue), var(--green));
+  transition: width 0.5s ease;
+}
+
+.step-list { display: flex; flex-direction: column; gap: 0; }
+.step-item {
+  display: flex; gap: 14px; align-items: flex-start;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.step-item:last-child { border-bottom: none; padding-bottom: 0; }
+.step-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--blue-dim); border: 1px solid rgba(108,143,245,0.25);
+  color: var(--blue); font-size: 0.78rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.step-title { font-size: 0.88rem; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+.step-desc  { font-size: 0.8rem; color: var(--text2); line-height: 1.6; }
+.step-code  {
+  background: var(--inset); border: 1px solid var(--border-md);
+  border-radius: var(--radius-sm); padding: 10px 13px;
+  font-family: 'Courier New', monospace; font-size: 0.8rem;
+  color: var(--green); margin-top: 8px; white-space: pre-wrap; word-break: break-all;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   QUICK MARK — ANNOTATED IMAGE PREVIEW
+═══════════════════════════════════════════════════════════ */
+.qm-annotated-wrap {
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border-md);
+  background: #0a0a0e;
+  position: relative;
+}
+.qm-annotated-wrap canvas { display: block; width: 100%; }
+.qm-annotated-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  background: var(--inset);
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.annot-legend {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  font-size: 0.72rem; color: var(--text3);
+}
+.annot-legend-item { display: flex; align-items: center; gap: 4px; }
+.annot-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════════════════════
    UTILITY
 ═══════════════════════════════════════════════════════════ */
 .sep { height: 1px; background: var(--border); margin: 14px 0; }
@@ -1396,6 +1502,7 @@ function NovaVista() {
   const [qmQuestion,setQmQuestion] = useState("");
   const [qmScheme,setQmScheme] = useState("");
   const [qmOcr,setQmOcr]       = useState("");
+  const [qmOcrOriginal,setQmOcrOriginal] = useState(""); // AI's raw OCR before teacher edits
   const [qmOcrLoading,setQmOcrLoading] = useState(false);
   const [qmLoading,setQmLoading] = useState(false);
   const [qmResult,setQmResult] = useState(null);
@@ -1434,7 +1541,19 @@ function NovaVista() {
   const [endpointTesting,setEndpointTesting] = useState(false);
   const [showClearConfirm,setShowClearConfirm] = useState(false);
 
+  // Learning from corrections
+  // Each entry: { id, timestamp, subject, question, markScheme,
+  //   aiAnswer (text), humanAnswer (text),
+  //   aiMarks, humanMarks, aiMaxMarks,
+  //   aiFeedback, humanFeedback,
+  //   aiOcr, humanOcr,  <- if transcription was corrected
+  //   type: "marks"|"feedback"|"ocr"|"full"
+  // }
+  const [corrections,setCorrections]       = useState([]);
+
   const videoRef=useRef(null),canvasRef=useRef(null),annotRef=useRef(null),streamRef=useRef(null);
+  const qmAnnotRef = useRef(null); // canvas for Quick Mark annotated image
+  const [qmAnnotReady,setQmAnnotReady] = useState(false); // true once annotation drawn
   const autoScanRafRef  = useRef(null);
   const prevFrameRef    = useRef(null);
   const stableStartRef  = useRef(null);
@@ -1464,6 +1583,10 @@ function NovaVista() {
       if (raw) setSaved(JSON.parse(raw));
     } catch {}
     try {
+      const raw = localStorage.getItem("nv_corrections");
+      if (raw) setCorrections(JSON.parse(raw));
+    } catch {}
+    try {
       const raw = localStorage.getItem("nv_prefs");
       if (raw) { const p=JSON.parse(raw); if(p.apiMode)setApiMode(p.apiMode); if(p.localEndpoint)setLocalEndpoint(p.localEndpoint); if(p.localModel)setLocalModel(p.localModel); }
     } catch {}
@@ -1490,6 +1613,10 @@ function NovaVista() {
   useEffect(() => {
     try { localStorage.setItem("nv_saved", JSON.stringify(saved.slice(0,50))); } catch {}
   }, [saved]);
+
+  useEffect(() => {
+    try { localStorage.setItem("nv_corrections", JSON.stringify(corrections.slice(0,500))); } catch {}
+  }, [corrections]);
 
   useEffect(() => {
     try { localStorage.setItem("nv_prefs", JSON.stringify({apiMode,localEndpoint,localModel})); } catch {}
@@ -1561,10 +1688,98 @@ function NovaVista() {
     } finally { setEndpointTesting(false); }
   }, [localEndpoint]);
 
-  /* ── Clear all local data ── */
+  /* ── Record a correction whenever teacher edits AI output ── */
+  const recordCorrection = useCallback((type, aiVal, humanVal, context={}) => {
+    if (!aiVal || !humanVal) return;
+    if (String(aiVal).trim() === String(humanVal).trim()) return;
+    setCorrections(prev => [{
+      id: Date.now(),
+      timestamp: new Date().toISOString(),
+      type,
+      subject:   context.subject   || subject   || "",
+      question:  context.question  || qmQuestion || "",
+      markScheme: context.markScheme || globalScheme || "",
+      aiVal:    String(aiVal).trim(),
+      humanVal: String(humanVal).trim(),
+      context,
+    }, ...prev]);
+  }, [subject, qmQuestion, globalScheme]);
+
+  /* ── Export corrections as Ollama JSONL training file ── */
+  const exportTrainingData = useCallback(() => {
+    if (!corrections.length) return;
+    const lines = corrections.map(c => {
+      const sys = ["You are NovaVista, an expert AI teaching assistant for UK schools.", c.subject?`Subject: ${c.subject}`:"", c.markScheme?`Mark Scheme: ${c.markScheme}`:""].filter(Boolean).join("\n");
+      let user="", asst="";
+      if (c.type==="ocr") {
+        user="Transcribe the handwritten student answer."; asst=c.humanVal;
+      } else {
+        user=`Mark this answer.\n\nQuestion: ${c.question}\n\nStudent answer: ${c.context.studentAnswer||""}`;
+        asst=c.type==="marks"?JSON.stringify({marksAwarded:c.humanVal,feedback:c.context.feedback||""}):c.type==="feedback"?JSON.stringify({marksAwarded:c.context.marks||0,feedback:c.humanVal}):c.humanVal;
+      }
+      return JSON.stringify({messages:[{role:"system",content:sys},{role:"user",content:user},{role:"assistant",content:asst}]});
+    });
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([lines.join("\n")],{type:"application/jsonl"}));
+    a.download=`novavista_training_${new Date().toISOString().slice(0,10)}.jsonl`;
+    a.click();
+  }, [corrections]);
+
+  /* ── Generate updated Modelfile with learnings baked in ── */
+  const generateModelfile = useCallback(() => {
+    const fbFixes  = corrections.filter(c=>c.type==="feedback").slice(0,8);
+    const mkFixes  = corrections.filter(c=>c.type==="marks").slice(0,8);
+    const ocrFixes = corrections.filter(c=>c.type==="ocr").slice(0,5);
+    let learned=[];
+    if (mkFixes.length)  { learned.push("MARKING CORRECTIONS LEARNED:"); mkFixes.forEach(c=>learned.push(`- AI gave ${c.aiVal} marks, teacher corrected to ${c.humanVal}. Question: ${(c.question||"").slice(0,80)}`)); }
+    if (fbFixes.length)  { learned.push("\nFEEDBACK STYLE LEARNED:"); fbFixes.slice(0,3).forEach(c=>learned.push(`- Instead of: "${c.aiVal.slice(0,60)}…"\n  Write: "${c.humanVal.slice(0,60)}…"`)); }
+    if (ocrFixes.length) { learned.push("\nHANDWRITING CORRECTIONS LEARNED:"); ocrFixes.forEach(c=>learned.push(`- "${c.aiVal}" should be read as "${c.humanVal}"`)); }
+    const mf=`FROM ${localModel||"llava"}\n\nSYSTEM """\nYou are NovaVista, an expert AI teaching assistant for UK schools.\n${subject?`Default subject: ${subject}`:""}\n\nCORE BEHAVIOUR:\n- Read handwritten student work carefully before marking\n- Apply UK exam board marking standards (AQA, OCR, Edexcel, WJEC)\n- Give constructive, encouraging, age-appropriate feedback\n- Always respond with valid JSON as instructed\n\n${learned.length?learned.join("\n"):"No corrections recorded yet — use the app to mark papers and correct mistakes."}\n\nGENERAL RULES:\n- If a letter is ambiguous, use subject context to determine the most likely word\n- Award method marks even if the final answer is wrong\n- Note misconceptions specifically\n- Keep feedback concise, specific and actionable\n"""\n\nPARAMETER temperature 0.1\nPARAMETER num_ctx 8192\n`;
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([mf],{type:"text/plain"}));
+    a.download="novavista-Modelfile";
+    a.click();
+  }, [corrections, localModel, subject]);
+
+  /* ── Save Quick Mark result to a Class Folder ── */
+  const [showQmSaveModal,setShowQmSaveModal] = useState(false);
+  const [qmSavePaper,setQmSavePaper]         = useState("");
+  const [qmSaveStudent,setQmSaveStudent]     = useState("");
+  const [showQmRosterDrop,setShowQmRosterDrop] = useState(false);
+
+  const saveQmToClass = useCallback(()=>{
+    if(!qmSavePaper.trim()||!qmSaveStudent.trim()||!qmResult)return;
+    const pid=qmSavePaper.trim().toLowerCase().replace(/\s+/g,"-");
+
+    // Get annotated image from canvas if available, else null
+    const annotImg = (qmAnnotReady && qmAnnotRef.current)
+      ? qmAnnotRef.current.toDataURL("image/jpeg",0.93) : null;
+
+    // Generate personalised feedback HTML for this single question
+    const date=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
+    const pct=qmResult.percentage||0;
+    const gc=pct>=70?"#3dd68c":pct>=50?"#f5c842":"#e8473f";
+    const feedbackHTML=`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(qmSaveStudent)} — ${escHtml(qmSavePaper)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:720px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:28px;margin-bottom:24px}.hdr h1{font-size:1.5rem;margin:0 0 4px}.sub{opacity:.65;font-size:.85rem}.scores{display:flex;gap:14px;margin-top:16px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:10px 16px;text-align:center}.sbig{font-size:1.8rem;font-weight:700}.slbl{font-size:.65rem;text-transform:uppercase;letter-spacing:1px;opacity:.6}.gp{padding:4px 14px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1rem;margin:20px 0 8px;border-bottom:2px solid #e8e8f0;padding-bottom:6px}.bk{background:white;border-radius:8px;padding:12px;margin-bottom:6px;border-left:4px solid}.bk.c{border-left-color:#3dd68c}.bk.w{border-left-color:#e8473f;background:#fff8f8}.bk.p{border-left-color:#f5c842}.bkh{display:flex;justify-content:space-between;margin-bottom:4px}.code{font-size:.72rem;font-weight:700;letter-spacing:1px;padding:2px 8px;border-radius:99px}.code-c{background:#e8fdf2;color:#3dd68c}.code-w{background:#fde8e8;color:#e8473f}.pt{font-size:.84rem;margin-bottom:3px}.cm{font-size:.8rem;color:#666;font-style:italic}.fb{background:white;border:1px solid #e0e0ef;border-radius:8px;padding:14px;font-size:.85rem;line-height:1.7;color:#444}.qbox{background:#f0f0f8;border-radius:8px;padding:12px;font-size:.84rem;margin-bottom:14px}.footer{text-align:center;font-size:.7rem;color:#bbb;margin-top:24px;padding-top:12px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>${escHtml(qmSavePaper)}</h1><p class="sub">Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${qmResult.marksAwarded}${qmResult.marksAvailable!=null?"/"+qmResult.marksAvailable:""}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Score</div></div><div class="sbox"><div class="gp">${pct>=70?"A":pct>=60?"B":pct>=50?"C":pct>=40?"D":"F"}</div></div></div></div><p>Hello <strong>${escHtml(qmSaveStudent)}</strong>, here is your detailed feedback for this question.</p>${qmQuestion?`<div class="qbox"><strong>Question:</strong> ${escHtml(qmQuestion)}</div>`:""}<h2>Mark Scheme Breakdown</h2>${(qmResult.breakdown||[]).map(pt=>`<div class="bk ${pt.awarded?"c":"w"}"><div class="bkh"><span class="pt"><strong>${escHtml(pt.point)}</strong></span><span class="code ${pt.awarded?"code-c":"code-w"}">${pt.code||""} ${pt.awarded?"✓":"✗"}</span></div>${pt.comment?`<div class="cm">${escHtml(pt.comment)}</div>`:""}</div>`).join("")}<h2>Feedback</h2><div class="fb">${escHtml(qmResult.feedback)}</div>${(qmResult.misconceptions||[]).length?`<h2>Misconceptions</h2><ul>${qmResult.misconceptions.map(m=>`<li>${escHtml(m)}</li>`).join("")}</ul>`:""}<div class="footer">Generated by NovaVista AI · ${date}</div></div></body></html>`;
+
+    const rec={
+      id:Date.now(), name:qmSaveStudent.trim(),
+      timestamp:new Date().toISOString(),
+      question:qmQuestion, markScheme:qmScheme||globalScheme,
+      originalImage:qmImageB64||null,
+      markedImage:annotImg,
+      results:{ ...qmResult, totalScore:qmResult.marksAwarded, maxScore:qmResult.marksAvailable,
+                grade:pct>=70?"A":pct>=60?"B":pct>=50?"C":pct>=40?"D":"F",
+                questions:[{id:"Q1",description:qmQuestion||"Question",marksAwarded:qmResult.marksAwarded,marksAvailable:qmResult.marksAvailable,feedback:qmResult.feedback,correct:qmResult.percentage>=50}],
+                overallFeedback:qmResult.feedback, strengths:qmResult.strengths, improvements:qmResult.improvements },
+      feedbackHTML,
+    };
+    setClasses(prev=>({...prev,[pid]:{name:qmSavePaper.trim(),subject:subject||"",date:new Date().toLocaleDateString("en-GB"),students:[...(prev[pid]?.students||[]).filter(s=>s.name!==qmSaveStudent.trim()),rec]}}));
+    setShowQmSaveModal(false); setQmSavePaper(""); setQmSaveStudent("");
+    setExpandedPaper(pid); setTab("classes");
+  },[qmResult,qmSavePaper,qmSaveStudent,qmQuestion,qmScheme,globalScheme,qmImageB64,qmAnnotReady,subject]);
   const clearAllData = useCallback(() => {
-    ["nv_roster","nv_classes","nv_saved","nv_prefs"].forEach(k => localStorage.removeItem(k));
-    setClassRoster([]); setClasses({}); setSaved([]);
+    ["nv_roster","nv_classes","nv_saved","nv_prefs","nv_corrections"].forEach(k => localStorage.removeItem(k));
+    setClassRoster([]); setClasses({}); setSaved([]); setCorrections([]);
     setResults(null); setScannedPages([]);
     setShowClearConfirm(false);
     setError("");
@@ -1811,7 +2026,10 @@ function NovaVista() {
     const reader=new FileReader();
     reader.onload=async e=>{
       const b64=e.target.result;setQmImageB64(b64);setQmImageURL(URL.createObjectURL(file));setQmOcr("");setQmResult(null);setQmOcrLoading(true);
-      try{const data=b64.split(",")[1];const text=await callAPI([{role:"user",content:[{type:"image",source:{type:"base64",media_type:file.type||"image/jpeg",data}},{type:"text",text:"Transcribe the handwritten student answer. Output only the text, no commentary."}]}],"Expert at reading handwritten student answers.",800);setQmOcr(text.trim());}
+      try{const data=b64.split(",")[1];const text=await callAPI([{role:"user",content:[{type:"image",source:{type:"base64",media_type:file.type||"image/jpeg",data}},{type:"text",text:"Transcribe the handwritten student answer. Output only the text, no commentary."}]}],"Expert at reading handwritten student answers.",800);
+        setQmOcr(text.trim());
+        setQmOcrOriginal(text.trim()); // save unedited version for correction tracking
+      }
       catch{setQmOcr("(OCR failed — type the answer below)");}
       finally{setQmOcrLoading(false);}
     };
@@ -1821,19 +2039,50 @@ function NovaVista() {
   const handleMark=useCallback(async()=>{
     const answer=qmMode==="image"?qmOcr:qmPasted;
     if(!answer.trim()){setError("Please provide a student answer.");return;}
+    // If teacher edited OCR text, record as a correction before marking
+    if(qmMode==="image" && qmOcr && qmOcr!==qmOcrOriginal && qmOcrOriginal) {
+      recordCorrection("ocr", qmOcrOriginal, qmOcr, { question:qmQuestion, subject });
+    }
     const scheme=qmScheme.trim()||globalScheme.trim();
-    const sys=`You are an expert examiner marking a single student answer.\n${subject?`Subject: ${subject}`:""}\n${qmQuestion?`Question: ${qmQuestion}`:""}\nMark Scheme: ${scheme||"Apply appropriate academic standards."}\n${globalMisconceptions?`Misconceptions: ${globalMisconceptions}`:""}\nRespond ONLY with valid JSON:\n{"marksAwarded":<n>,"marksAvailable":<n or null>,"percentage":<0-100>,"breakdown":[{"point":"","awarded":<bool>,"comment":""}],"feedback":"<2-3 sentences>","misconceptions":[],"strengths":[],"improvements":[]}`;
+
+    // Detect annotation style from scheme (B/M/A/P marks etc.)
+    const hasB = /\bB\d/i.test(scheme);
+    const hasM = /\bM\d/i.test(scheme);
+    const hasA = /\bA\d/i.test(scheme);
+    const hasP = /\bP\d/i.test(scheme);
+    const markTypes = [hasB?"B (knowledge/fact)":"", hasM?"M (method)":"", hasA?"A (accuracy)":"", hasP?"P (process)":""].filter(Boolean).join(", ") || "B (knowledge), M (method), A (accuracy)";
+
+    const sys=`You are an expert examiner marking a single student answer for a UK school.\n${subject?`Subject: ${subject}`:""}\n${qmQuestion?`Question: ${qmQuestion}`:""}\nMark Scheme: ${scheme||"Apply appropriate UK academic standards."}\n${globalMisconceptions?`Misconceptions to watch for: ${globalMisconceptions}`:""}\n\nANNOTATION STYLE:\nUse proper exam board annotation notation. Detected mark types in this scheme: ${markTypes}.\nFor each marking point: assign the correct mark code (B1, B2, M1, M2, A1, A2, P1, P2 etc.) based on what appears in the marking scheme. If no specific codes appear in the scheme, use B marks for knowledge/fact points and M/A for method/accuracy in calculations.\n\nRespond ONLY with valid JSON, no markdown:\n{"marksAwarded":<n>,"marksAvailable":<n or null>,"percentage":<0-100>,"breakdown":[{"point":"<mark scheme point text>","code":"<B1|M1|A1|P1 etc>","awarded":<bool>,"comment":"<why awarded or not>"}],"annotations":[{"label":"<B1✓ or M1✗ or A1✓ etc>","type":"correct|incorrect|partial","placement":"<top-left|top-right|middle-left|middle-right|bottom-left|bottom-right>"}],"feedback":"<2-3 sentences directly to student>","misconceptions":[],"strengths":[],"improvements":[]}`;
+    setQmAnnotReady(false);
     setQmLoading(true);setQmResult(null);setError("");
-    try{const text=await callAPI([{role:"user",content:`Student answer:\n\n${answer}`}],sys,1200);setQmResult(parseJSON(text));setQmEditing(false);}
+    try{const text=await callAPI([{role:"user",content:`Student answer:\n\n${answer}`}],sys,1200);
+      const parsed=parseJSON(text);
+      // Tag with original AI values so we can detect teacher corrections later
+      parsed._aiMarks    = parsed.marksAwarded;
+      parsed._aiFeedback = parsed.feedback;
+      setQmResult(parsed);setQmEditing(false);}
     catch(e){setError("Marking failed: "+e.message);}
     finally{setQmLoading(false);}
-  },[callAPI,qmMode,qmOcr,qmPasted,qmScheme,globalScheme,globalMisconceptions,subject,qmQuestion]);
+  },[callAPI,qmMode,qmOcr,qmOcrOriginal,qmPasted,qmScheme,globalScheme,globalMisconceptions,subject,qmQuestion,recordCorrection]);
 
   const handleAccept=useCallback(()=>{
     if(!qmResult)return;
+    // Store the original AI result before teacher edits for comparison
+    const originalResult = qmResult._original || qmResult;
+    // Record any corrections the teacher made
+    if (qmEditing && originalResult._aiMarks !== undefined && qmResult.marksAwarded !== originalResult._aiMarks) {
+      recordCorrection("marks", originalResult._aiMarks, qmResult.marksAwarded, {
+        question: qmQuestion, studentAnswer: qmMode==="image"?qmOcr:qmPasted, feedback: qmResult.feedback, markScheme: qmScheme||globalScheme
+      });
+    }
+    if (qmEditing && originalResult._aiFeedback && qmResult.feedback !== originalResult._aiFeedback) {
+      recordCorrection("feedback", originalResult._aiFeedback, qmResult.feedback, {
+        question: qmQuestion, studentAnswer: qmMode==="image"?qmOcr:qmPasted, marks: qmResult.marksAwarded, markScheme: qmScheme||globalScheme
+      });
+    }
     setSaved(p=>[{id:Date.now(),question:qmQuestion||"(no question)",score:`${qmResult.marksAwarded}${qmResult.marksAvailable?"/"+qmResult.marksAvailable:""}`,pct:qmResult.percentage,feedback:qmResult.feedback,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),result:qmResult},...p]);
-    setQmResult(null);setQmOcr("");setQmPasted("");setQmQuestion("");setQmScheme("");setQmImageB64(null);setQmImageURL(null);
-  },[qmResult,qmQuestion]);
+    setQmResult(null);setQmOcr("");setQmOcrOriginal("");setQmPasted("");setQmQuestion("");setQmScheme("");setQmImageB64(null);setQmImageURL(null);setQmEditing(false);
+  },[qmResult,qmQuestion,qmMode,qmOcr,qmPasted,qmScheme,globalScheme,qmEditing,recordCorrection]);
 
   /* ── annotation canvas ── */
   useEffect(()=>{
@@ -1862,6 +2111,73 @@ function NovaVista() {
   },[results]);
 
   const downloadAnnotated=()=>{const link=document.createElement("a");const n=results?.studentName||studentName||"student";link.download=`NovaVista_${n.replace(/\s+/g,"_")}_marked.jpg`;link.href=annotRef.current.toDataURL("image/jpeg",0.95);link.click();};
+
+  /* ── Draw exam-style annotations on Quick Mark image ── */
+  useEffect(()=>{
+    if(!qmResult||!qmImageB64||!qmAnnotRef.current){setQmAnnotReady(false);return;}
+    const canvas=qmAnnotRef.current, img=new Image();
+    img.onload=()=>{
+      canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
+      const ctx=canvas.getContext("2d"); ctx.drawImage(img,0,0);
+      const W=canvas.width, H=canvas.height;
+      const fs=Math.max(20,Math.round(W*0.025)); // font size proportional to image
+
+      const placements={
+        "top-left":     [W*0.04, H*0.06],
+        "top-right":    [W*0.70, H*0.06],
+        "middle-left":  [W*0.04, H*0.45],
+        "middle-right": [W*0.70, H*0.45],
+        "bottom-left":  [W*0.04, H*0.88],
+        "bottom-right": [W*0.70, H*0.88],
+      };
+
+      // Track used positions to avoid overlap
+      const usedY={};
+
+      (qmResult.annotations||[]).forEach((ann,idx)=>{
+        const colMap={correct:"#3dd68c", incorrect:"#e8473f", partial:"#f5c842"};
+        const col=colMap[ann.type]||"#f5c842";
+        const basePos=placements[ann.placement]||placements["top-left"];
+        let x=basePos[0], y=basePos[1];
+
+        // Nudge down if position is already used
+        const posKey=ann.placement||"top-left";
+        if(usedY[posKey]==null) usedY[posKey]=y;
+        else { usedY[posKey]+=fs*2.2; y=usedY[posKey]; }
+
+        ctx.font=`bold ${fs}px Inter,sans-serif`;
+        const metrics=ctx.measureText(ann.label);
+        const pad=fs*0.45;
+        const bw=metrics.width+pad*2, bh=fs*1.5;
+
+        // Background pill
+        ctx.fillStyle="rgba(11,12,15,0.82)";
+        rrect(ctx, x-pad*0.5, y-bh*0.75, bw, bh, bh*0.4);
+        ctx.fill();
+
+        // Coloured left strip
+        ctx.fillStyle=col;
+        ctx.fillRect(x-pad*0.5, y-bh*0.75, 4, bh);
+
+        // Text
+        ctx.fillStyle=col;
+        ctx.fillText(ann.label, x+4, y);
+      });
+
+      // Score stamp top-right corner
+      const scoreText=`${qmResult.marksAwarded}${qmResult.marksAvailable!=null?"/"+qmResult.marksAvailable:""}`;
+      const sf=Math.max(30,Math.round(W*0.038));
+      ctx.font=`bold ${sf}px Playfair Display,serif`;
+      const sm=ctx.measureText(scoreText);
+      const sx=W-sm.width-W*0.04, sy=H*0.055;
+      ctx.fillStyle="rgba(11,12,15,0.88)"; rrect(ctx,sx-12,sy-sf,sm.width+24,sf*1.5,8); ctx.fill();
+      ctx.fillStyle=qmResult.percentage>=70?"#3dd68c":qmResult.percentage>=50?"#f5c842":"#e8473f";
+      ctx.fillText(scoreText,sx,sy);
+
+      setQmAnnotReady(true);
+    };
+    img.src=qmImageB64;
+  },[qmResult,qmImageB64]);
 
   /* ── derived ── */
   const gradeClass=g=>`grade-${["A","B","C","D","F"].includes(g)?g:"D"}`;
@@ -1943,6 +2259,10 @@ function NovaVista() {
           <div className="nav-divider"/>
           <button className={`nav-item ${tab==="privacy"?"active":""}`} onClick={()=>setTab("privacy")}>
             <span className="nav-icon"><Ic d={I.shield} size={16}/></span> Privacy & Data
+          </button>
+          <button className={`nav-item ${tab==="training"?"active":""}`} onClick={()=>setTab("training")}>
+            <span className="nav-icon"><Ic d={I.zap} size={16}/></span> AI Training
+            {corrections.length>0&&<span className="nav-badge blue">{corrections.length}</span>}
           </button>
         </nav>
 
@@ -2227,7 +2547,10 @@ function NovaVista() {
                               <div key={i} className="bk-row">
                                 <div className="bk-pip" style={{background:pt.awarded?"var(--green)":"var(--red)"}}/>
                                 <div style={{flex:1}}>
-                                  <div className="bk-head" style={{color:pt.awarded?"var(--green)":"var(--red)"}}>{pt.awarded?"✓ Awarded":"✗ Not awarded"}</div>
+                                  <div className="row gap8 mb4" style={{flexWrap:"wrap",alignItems:"center"}}>
+                                    <div className="bk-head" style={{color:pt.awarded?"var(--green)":"var(--red)",marginBottom:0}}>{pt.awarded?"✓ Awarded":"✗ Not awarded"}</div>
+                                    {pt.code&&<span style={{fontSize:"0.72rem",fontWeight:800,padding:"2px 9px",borderRadius:99,letterSpacing:"0.5px",background:pt.awarded?"rgba(61,214,140,0.15)":"rgba(232,71,63,0.12)",color:pt.awarded?"var(--green)":"var(--red)",border:`1px solid ${pt.awarded?"rgba(61,214,140,0.3)":"rgba(232,71,63,0.25)"}`}}>{pt.code}</span>}
+                                  </div>
                                   <div className="bk-text"><strong>{pt.point}</strong></div>
                                   {pt.comment&&<div style={{fontSize:"0.78rem",color:"var(--text2)",marginTop:3,fontStyle:"italic"}}>{pt.comment}</div>}
                                 </div>
@@ -2284,8 +2607,39 @@ function NovaVista() {
                         <span className="result-actions-label">What next?</span>
                         <button className="btn btn-green btn-sm" onClick={handleAccept}><Ic d={I.check} size={14}/> Accept ✅</button>
                         <button className="btn btn-gold btn-sm"  onClick={()=>setQmEditing(e=>!e)}><Ic d={I.pencil} size={14}/> {qmEditing?"Done":"Edit"} ✏️</button>
-                        <button className="btn btn-ghost btn-sm" onClick={()=>{setQmResult(null);setQmEditing(false);}}>New</button>
+                        <button className="btn btn-blue btn-sm"  onClick={()=>{setQmSavePaper(subject||"");setQmSaveStudent(studentName||"");setShowQmSaveModal(true);}}><Ic d={I.folderplus} size={14}/> Save to Class 📁</button>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>{setQmResult(null);setQmEditing(false);setQmAnnotReady(false);}}>New</button>
                       </div>
+
+                      {/* ── Annotated image (if photo was uploaded) ── */}
+                      {qmImageB64&&(
+                        <div style={{borderTop:"1px solid var(--border)",padding:"16px 20px 20px"}}>
+                          <div className="row-between mb8">
+                            <div style={{fontSize:"0.82rem",fontWeight:600,color:"var(--text)"}}>📄 Annotated Paper</div>
+                            {qmAnnotReady&&(
+                              <button className="btn btn-ghost btn-sm" onClick={()=>{
+                                const a=document.createElement("a");
+                                a.href=qmAnnotRef.current.toDataURL("image/jpeg",0.95);
+                                a.download=`${(qmSaveStudent||studentName||"student").replace(/\s+/g,"_")}_annotated.jpg`;
+                                a.click();
+                              }}><Ic d={I.dl} size={13}/> Download</button>
+                            )}
+                          </div>
+                          <div className="qm-annotated-wrap">
+                            <canvas ref={qmAnnotRef} style={{width:"100%",display:"block"}}/>
+                          </div>
+                          {qmAnnotReady&&(
+                            <div className="qm-annotated-toolbar">
+                              <div className="annot-legend">
+                                <div className="annot-legend-item"><div className="annot-dot" style={{background:"#3dd68c"}}/> Awarded</div>
+                                <div className="annot-legend-item"><div className="annot-dot" style={{background:"#e8473f"}}/> Not awarded</div>
+                                <div className="annot-legend-item"><div className="annot-dot" style={{background:"#f5c842"}}/> Partial</div>
+                              </div>
+                              <div className="dim small" style={{marginLeft:"auto"}}>B=knowledge · M=method · A=accuracy · P=process</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -2926,6 +3280,201 @@ function NovaVista() {
       </main>
 
         {/* ─────────────────────────
+            AI TRAINING
+        ───────────────────────── */}
+        {tab==="training"&&(
+          <>
+            <div className="topbar">
+              <div className="page-header">
+                <div>
+                  <div className="page-title">AI Training</div>
+                  <div className="page-sub">Every correction you make teaches NovaVista to mark better</div>
+                </div>
+                <div className="row gap8">
+                  <button className="btn btn-ghost" onClick={exportTrainingData} disabled={corrections.length===0} title={corrections.length===0?"No corrections yet — mark some papers and edit the results first":""}>
+                    <Ic d={I.dl} size={15}/> Export Training Data {corrections.length>0&&`(${corrections.length})`}
+                  </button>
+                  <button className="btn btn-blue" onClick={generateModelfile}>
+                    <Ic d={I.server} size={15}/> Generate Modelfile
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="content col gap16">
+
+              {/* Primary action cards */}
+              <div className="g2 gap14">
+                <div className="card card-pad col gap12" style={{borderColor:"rgba(108,143,245,0.3)",background:"rgba(108,143,245,0.04)"}}>
+                  <div className="row gap10">
+                    <div style={{fontSize:"2rem"}}>🧠</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:"0.95rem",color:"var(--text)",marginBottom:3}}>Generate Modelfile</div>
+                      <div className="dim small">Downloads a config file with your corrections baked in. Rebuild your local Ollama model in 2 minutes.</div>
+                    </div>
+                  </div>
+                  <button className="btn btn-blue" style={{width:"100%",justifyContent:"center"}} onClick={generateModelfile}>
+                    <Ic d={I.server} size={16}/> Download Modelfile
+                  </button>
+                  <div className="dim small">Works with 0 corrections — generates a strong base model. Gets better every time you correct a result.</div>
+                </div>
+
+                <div className="card card-pad col gap12" style={{borderColor: corrections.length===0?"var(--border)":"rgba(61,214,140,0.3)", background: corrections.length===0?"var(--card)":"rgba(61,214,140,0.04)"}}>
+                  <div className="row gap10">
+                    <div style={{fontSize:"2rem"}}>📦</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:"0.95rem",color:"var(--text)",marginBottom:3}}>Export Training Data</div>
+                      <div className="dim small">Downloads a JSONL file of all your corrections for deep fine-tuning with Unsloth.</div>
+                    </div>
+                  </div>
+                  <button className="btn btn-green" style={{width:"100%",justifyContent:"center"}} onClick={exportTrainingData} disabled={corrections.length===0}>
+                    <Ic d={I.dl} size={16}/> Export {corrections.length>0?`${corrections.length} Corrections`:"(no corrections yet)"}
+                  </button>
+                  <div className="dim small">{corrections.length===0?"Mark papers, then edit any results — corrections appear here automatically.":corrections.length<50?`${corrections.length} corrections saved. Aim for 50+ before fine-tuning.`:`✓ ${corrections.length} corrections — good amount for fine-tuning!`}</div>
+                </div>
+              </div>
+
+              {/* Stats row */}
+              <div className="g3 gap14">
+                <div className="training-stat">
+                  <div className="training-stat-num" style={{color:"var(--blue)"}}>{corrections.length}</div>
+                  <div className="training-stat-lbl">Total Corrections</div>
+                  <div className="training-progress">
+                    <div className="training-progress-fill" style={{width:`${Math.min(100,(corrections.length/50)*100)}%`}}/>
+                  </div>
+                  <div className="dim small mt4">50+ corrections = strong fine-tune</div>
+                </div>
+                <div className="training-stat">
+                  <div className="training-stat-num" style={{color:"var(--gold)"}}>{corrections.filter(c=>c.type==="marks").length}</div>
+                  <div className="training-stat-lbl">Mark Corrections</div>
+                </div>
+                <div className="training-stat">
+                  <div className="training-stat-num" style={{color:"var(--green)"}}>{corrections.filter(c=>c.type==="feedback").length}</div>
+                  <div className="training-stat-lbl">Feedback Corrections</div>
+                </div>
+              </div>
+
+              {/* How it works */}
+              <div className="card card-pad col gap4">
+                <div className="card-title">How the learning loop works</div>
+                <div className="step-list">
+                  {[
+                    {title:"Mark a paper", desc:"Use Quick Mark or Scan Mode to get an AI result."},
+                    {title:"Correct any mistakes", desc:"Click Edit ✏️ on any result and change the marks or feedback. Every change is automatically recorded as a training example."},
+                    {title:"Corrections build up here", desc:"This page counts every correction. The more you mark and correct, the better the training data gets. Aim for 50+ corrections before your first fine-tune."},
+                    {title:"Export & retrain", desc:"When ready, click Generate Modelfile to download an updated Ollama config with your corrections baked in as examples. Or Export Training Data for full fine-tuning (JSONL format)."},
+                    {title:"Rebuild your local model", desc:"Run the Terminal commands shown below to create an updated NovaVista model that has learned from all your corrections. The model permanently improves."},
+                  ].map((s,i)=>(
+                    <div key={i} className="step-item">
+                      <div className="step-num">{i+1}</div>
+                      <div>
+                        <div className="step-title">{s.title}</div>
+                        <div className="step-desc">{s.desc}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Terminal commands */}
+              <div className="card card-pad col gap12">
+                <div className="card-title">Retrain your local model</div>
+                <div className="muted small">After generating and downloading the Modelfile, run these commands in Terminal:</div>
+
+                <div className="col gap10">
+                  <div>
+                    <div className="field-label" style={{marginBottom:6}}>Step 1 — Move the Modelfile to your Downloads folder (it's probably already there), then run:</div>
+                    <div className="step-code">cd ~/Downloads
+ollama create novavista-marker -f novavista-Modelfile</div>
+                  </div>
+                  <div>
+                    <div className="field-label" style={{marginBottom:6}}>Step 2 — Verify the new model exists:</div>
+                    <div className="step-code">ollama list</div>
+                    <div className="dim small mt4">You should see <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>novavista-marker</code> in the list.</div>
+                  </div>
+                  <div>
+                    <div className="field-label" style={{marginBottom:6}}>Step 3 — Update NovaVista to use it:</div>
+                    <div className="dim small">Go to Privacy & Data → Local Ollama → set Model Name to <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>novavista-marker</code></div>
+                  </div>
+                </div>
+
+                <div className="info-box mt4">
+                  You can repeat this process as often as you like. Every time you collect more corrections, generate a new Modelfile and rebuild — the model keeps improving with your own marking style.
+                </div>
+
+                {corrections.length===0&&(
+                  <div className="warn-box">No corrections recorded yet. Start marking papers in Quick Mark — whenever you click Edit ✏️ and change a mark or rewrite feedback, it's automatically saved here as a training example.</div>
+                )}
+              </div>
+
+              {/* For deeper fine-tuning */}
+              <div className="card card-pad col gap12">
+                <div className="card-title">Full Fine-Tuning (advanced)</div>
+                <div className="muted small">The Modelfile approach above bakes examples into the system prompt. For deeper learning — where the model's actual weights are updated — use the JSONL export with Unsloth on your Mac.</div>
+                <div className="col gap10">
+                  <div>
+                    <div className="field-label" style={{marginBottom:6}}>Install Unsloth (requires Python):</div>
+                    <div className="step-code">pip install unsloth</div>
+                  </div>
+                  <div>
+                    <div className="field-label" style={{marginBottom:6}}>Download your training data (click Export Training Data above), then fine-tune:</div>
+                    <div className="step-code">python -m unsloth.finetune \
+  --model {localModel||"llava"} \
+  --data novavista_training_YYYY-MM-DD.jsonl \
+  --output novavista-finetuned \
+  --epochs 3</div>
+                  </div>
+                  <div>
+                    <div className="field-label" style={{marginBottom:6}}>Convert and load into Ollama:</div>
+                    <div className="step-code">ollama create novavista-finetuned -f ./novavista-finetuned/Modelfile</div>
+                  </div>
+                </div>
+                <div className="warn-box">Fine-tuning requires at least 50 corrections for meaningful improvement and 200+ for strong results. It takes 1–4 hours on an M2/M3 Mac and needs 16GB+ RAM.</div>
+              </div>
+
+              {/* Correction log */}
+              {corrections.length>0&&(
+                <div className="card card-pad col gap12">
+                  <div className="row-between">
+                    <div className="card-title" style={{marginBottom:0}}>Correction Log ({corrections.length})</div>
+                    <button className="btn btn-ghost btn-sm" style={{color:"var(--red)"}} onClick={()=>{if(window.confirm("Delete all corrections? This cannot be undone.")){setCorrections([]);}}}>
+                      <Ic d={I.trash} size={13}/> Clear
+                    </button>
+                  </div>
+                  <div className="col gap10">
+                    {corrections.slice(0,20).map((c,i)=>(
+                      <div key={c.id} className="correction-card">
+                        <div className="correction-header">
+                          <span className={`correction-badge ${c.type==="ocr"?"badge-correction":c.type==="marks"?"badge-correction":"badge-correction"}`}>
+                            {c.type==="ocr"?"✍️ Handwriting":c.type==="marks"?"📊 Marks":c.type==="feedback"?"💬 Feedback":"📝 Full"}
+                          </span>
+                          {c.subject&&<span className="pill pill-ghost small">{c.subject}</span>}
+                          <span className="dim small" style={{marginLeft:"auto"}}>{new Date(c.timestamp).toLocaleDateString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span>
+                        </div>
+                        <div className="correction-body">
+                          {c.question&&<div className="dim small">Q: {c.question.slice(0,100)}{c.question.length>100?"…":""}</div>}
+                          <div className="diff-row">
+                            <div className="diff-before">
+                              <div className="diff-label">AI said</div>
+                              <div className="diff-value">{String(c.aiVal).slice(0,200)}{String(c.aiVal).length>200?"…":""}</div>
+                            </div>
+                            <div className="diff-after">
+                              <div className="diff-label">Teacher corrected to</div>
+                              <div className="diff-value">{String(c.humanVal).slice(0,200)}{String(c.humanVal).length>200?"…":""}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {corrections.length>20&&<div className="dim small center">{corrections.length-20} more corrections not shown — all included in export.</div>}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </>
+        )}
+
+        {/* ─────────────────────────
             PRIVACY & DATA
         ───────────────────────── */}
         {tab==="privacy"&&(
@@ -3054,6 +3603,7 @@ function NovaVista() {
                     {icon:"📁", num:Object.keys(classes).length, label:"Class folders", note:"Results and feedback"},
                     {icon:"✅", num:Object.values(classes).reduce((s,p)=>s+p.students.length,0), label:"Marked papers archived", note:"Marks, grades, feedback — images are session-only"},
                     {icon:"⚡", num:saved.length, label:"Quick mark results", note:"From this and previous sessions"},
+                    {icon:"🧠", num:corrections.length, label:"AI training corrections", note:"Corrections you've made — used to improve the model"},
                   ].map((row,i)=>(
                     <div key={i} className="data-stat-row">
                       <div className="data-stat-num" style={{color:row.num>0?"var(--text)":"var(--text4)"}}>{row.num}</div>
@@ -3100,7 +3650,7 @@ function NovaVista() {
               <div className="modal-sub">This will permanently delete your class roster, all archived results, mark logs and preferences from this browser. Scanned images (session-only) are not affected.</div>
               <div className="danger-zone" style={{marginBottom:0}}>
                 <div className="danger-desc" style={{marginBottom:0}}>
-                  <strong>Will be deleted:</strong> {classRoster.length} roster entries · {Object.keys(classes).length} class folders · {Object.values(classes).reduce((s,p)=>s+p.students.length,0)} student records · {saved.length} mark log entries
+                  <strong>Will be deleted:</strong> {classRoster.length} roster entries · {Object.keys(classes).length} class folders · {Object.values(classes).reduce((s,p)=>s+p.students.length,0)} student records · {saved.length} mark log entries · {corrections.length} training corrections
                 </div>
               </div>
               <div className="modal-actions">
@@ -3166,6 +3716,59 @@ function NovaVista() {
                 <Ic d={I.shield} size={14}/> Full Privacy Settings
               </button>
               <button className="btn btn-ghost" onClick={()=>setShowKeyModal(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════
+          QUICK MARK → SAVE TO CLASS MODAL
+      ═══════════════════════════ */}
+      {showQmSaveModal&&(
+        <div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)setShowQmSaveModal(false);}}>
+          <div className="modal">
+            <div className="modal-title">Save to Class Folder 📁</div>
+            <div className="modal-sub">Saves the original question image, annotated marked paper, and personalised feedback into a class folder. Access everything under <strong>Class Folders</strong>.</div>
+            <div className="col gap14">
+              <div className="field">
+                <div className="field-label">Paper / Class Name</div>
+                <input value={qmSavePaper} onChange={e=>setQmSavePaper(e.target.value)} placeholder="e.g. Maths Paper 1 · Biology Q5 · Science Test"/>
+                <div style={{fontSize:"0.72rem",color:"var(--text3)",marginTop:4}}>Use the same name for all students in this paper — becomes the folder name.</div>
+              </div>
+              <div className="field roster-select-wrap">
+                <div className="field-label">Student Name</div>
+                <input value={qmSaveStudent}
+                  onChange={e=>{setQmSaveStudent(e.target.value);setShowQmRosterDrop(true);}}
+                  onFocus={()=>setShowQmRosterDrop(true)}
+                  onBlur={()=>setTimeout(()=>setShowQmRosterDrop(false),150)}
+                  placeholder={classRoster.length>0?"Type or select from roster…":"e.g. Emma Johnson"}/>
+                {showQmRosterDrop&&classRoster.length>0&&(
+                  <div className="roster-dropdown">
+                    {classRoster.filter(r=>!qmSaveStudent||r.name.toLowerCase().includes(qmSaveStudent.toLowerCase())).slice(0,10).map((r,i)=>(
+                      <div key={i} className={`roster-option ${r.name===qmSaveStudent?"highlight":""}`} onMouseDown={()=>setQmSaveStudent(r.name)}>
+                        <Ic d={I.users} size={13} color="var(--text3)"/> {r.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Preview what will be saved */}
+              <div className="inset" style={{padding:"12px 14px"}}>
+                <div className="field-label" style={{marginBottom:8}}>What gets saved:</div>
+                <div className="col gap6" style={{fontSize:"0.8rem",color:"var(--text2)"}}>
+                  <div className="row gap8"><span style={{color:qmImageB64?"var(--green)":"var(--text4)"}}>📷</span> <span style={{color:qmImageB64?"var(--text)":"var(--text4)"}}>{qmImageB64?"Original question photo":"No image (text-only mark)"}</span></div>
+                  <div className="row gap8"><span style={{color:qmAnnotReady?"var(--green)":"var(--text4)"}}>📝</span> <span style={{color:qmAnnotReady?"var(--text)":"var(--text4)"}}>{qmAnnotReady?"Annotated paper with B/M/A marks":"No annotated image (no photo uploaded)"}</span></div>
+                  <div className="row gap8"><span style={{color:"var(--blue)"}}>📄</span> <span>Personalised feedback document (HTML)</span></div>
+                  <div className="row gap8"><span style={{color:"var(--gold)"}}>📊</span> <span>Score: {qmResult?.marksAwarded}{qmResult?.marksAvailable!=null?"/"+qmResult.marksAvailable:""} ({qmResult?.percentage||0}%)</span></div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={()=>setShowQmSaveModal(false)}>Cancel</button>
+              <button className="btn btn-blue" disabled={!qmSavePaper.trim()||!qmSaveStudent.trim()} onClick={saveQmToClass}>
+                <Ic d={I.folderplus} size={15}/> Save to Folder
+              </button>
             </div>
           </div>
         </div>
