@@ -1,0 +1,16 @@
+# NovaVista — Netlify Configuration
+# Upload this file alongside index.html
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Allow camera and microphone access
+    Permissions-Policy = "camera=*, microphone=*"
+
+    # Basic security headers (no CSP — would block Babel's in-browser JSX transform)
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+    # Allow cross-origin isolation needed for some browser APIs
+    Cross-Origin-Opener-Policy = "same-origin-allow-popups"

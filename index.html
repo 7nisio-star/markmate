@@ -3,11 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>MarkMate — AI Paper Marking</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<title>NovaVista — AI Paper Marking</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
@@ -1226,7 +1222,102 @@ input::placeholder, textarea::placeholder { color: var(--text4); }
 </style>
 </head>
 <body>
+
+<!-- This shows immediately, before any scripts load -->
+<div id="boot-screen" style="
+  position:fixed;inset:0;background:#0b0c0f;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;z-index:9999;font-family:'Inter',system-ui,sans-serif;
+">
+  <div style="font-size:2rem;font-weight:900;
+    background:linear-gradient(135deg,#e8473f,#f0956b);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    background-clip:text;letter-spacing:-0.5px;">
+    Nova<span style="background:linear-gradient(135deg,#eeedf0,#9b9aaa);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      background-clip:text;">Vista</span>
+  </div>
+  <div id="boot-status" style="color:#555468;font-size:0.82rem;letter-spacing:1px;text-transform:uppercase;">
+    Loading…
+  </div>
+  <div style="width:160px;height:3px;background:#1d2028;border-radius:99px;overflow:hidden;">
+    <div id="boot-bar" style="height:100%;width:0%;background:#e8473f;border-radius:99px;transition:width 0.4s ease;"></div>
+  </div>
+  <div id="boot-error" style="display:none;max-width:420px;text-align:center;padding:16px 20px;
+    background:rgba(232,71,63,0.08);border:1px solid rgba(232,71,63,0.25);border-radius:12px;
+    color:#f08080;font-size:0.82rem;line-height:1.7;margin-top:8px;">
+  </div>
+</div>
+
+<noscript>
+  <div style="position:fixed;inset:0;background:#0b0c0f;display:flex;align-items:center;
+    justify-content:center;font-family:system-ui,sans-serif;color:#9b9aaa;text-align:center;padding:40px;">
+    <div>
+      <div style="font-size:1.5rem;font-weight:700;color:#eeedf0;margin-bottom:12px;">NovaVista requires JavaScript</div>
+      <p>Please enable JavaScript in your browser to use this app.</p>
+    </div>
+  </div>
+</noscript>
+
 <div id="root"></div>
+
+<script>
+// Progress boot bar as scripts load
+(function(){
+  var bar = document.getElementById('boot-bar');
+  var status = document.getElementById('boot-status');
+  var pct = 10;
+  function step(p, msg) { bar.style.width = p+'%'; if(msg) status.textContent = msg; }
+  step(10, 'Loading scripts…');
+  window._novavistaBootStep = step;
+
+  // If React hasn't mounted after 12 seconds, show an error
+  setTimeout(function(){
+    if(document.getElementById('boot-screen') && document.getElementById('boot-screen').style.display !== 'none'){
+      var err = document.getElementById('boot-error');
+      err.style.display = 'block';
+      err.innerHTML = [
+        '<strong style="color:#e8473f">Something went wrong loading NovaVista.</strong><br><br>',
+        'Possible causes:<br>',
+        '• Ad blocker or browser extension blocking scripts<br>',
+        '• Slow internet connection — try refreshing<br>',
+        '• Browser compatibility — try Chrome or Edge<br><br>',
+        '<strong>Open browser DevTools (F12) → Console tab to see the exact error.</strong>'
+      ].join('');
+      status.textContent = 'Failed to load';
+      bar.style.background = '#e8473f';
+    }
+  }, 12000);
+})();
+</script>
+
+<script>
+// Track when each CDN script loads
+document.querySelectorAll('script[src]').forEach(function(s){
+  s.addEventListener('load', function(){
+    var p = window._novavistaBootStep;
+    if(p){
+      if(s.src.includes('react.')) p(30, 'React loaded…');
+      else if(s.src.includes('react-dom')) p(55, 'React DOM loaded…');
+      else if(s.src.includes('babel')) p(75, 'Babel loaded…');
+      else if(s.src.includes('xlsx')) p(88, 'Starting app…');
+    }
+  });
+  s.addEventListener('error', function(){
+    var err = document.getElementById('boot-error');
+    if(err){
+      err.style.display = 'block';
+      err.innerHTML = '<strong style="color:#e8473f">Failed to load: ' + s.src.split('/').pop() + '</strong><br><br>This script is served from cdnjs.cloudflare.com. If it is being blocked, check your network or try a different browser.';
+    }
+  });
+});
+</script>
+
+<!-- CDN scripts loaded here (at end of body so page renders first) -->
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 
 <script type="text/babel">
 const { useState, useRef, useEffect, useCallback } = React;
@@ -1282,7 +1373,7 @@ function getAllQIds(students){const ids=new Set();students.forEach(st=>(st.resul
 
 /* ── Main component ────────────────────────────────────── */
 const STABLE_NEEDED = 1400; // ms still before auto-capture triggers
-function MarkMate() {
+function NovaVista() {
   /* state */
   const [apiKey,setApiKey]     = useState("");
   const [showKey,setShowKey]   = useState(false);
@@ -1353,12 +1444,12 @@ function MarkMate() {
   // ── Persist roster + class data to localStorage ──────────────────────────
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("mm_roster");
+      const raw = localStorage.getItem("nv_roster");
       if (raw) setClassRoster(JSON.parse(raw));
     } catch {}
     try {
       // Load classes — without image blobs (too large); images are session-only
-      const raw = localStorage.getItem("mm_classes");
+      const raw = localStorage.getItem("nv_classes");
       if (raw) {
         const parsed = JSON.parse(raw);
         // Strip out image data that was saved (legacy); keep only results metadata
@@ -1369,17 +1460,17 @@ function MarkMate() {
       }
     } catch {}
     try {
-      const raw = localStorage.getItem("mm_saved");
+      const raw = localStorage.getItem("nv_saved");
       if (raw) setSaved(JSON.parse(raw));
     } catch {}
     try {
-      const raw = localStorage.getItem("mm_prefs");
+      const raw = localStorage.getItem("nv_prefs");
       if (raw) { const p=JSON.parse(raw); if(p.apiMode)setApiMode(p.apiMode); if(p.localEndpoint)setLocalEndpoint(p.localEndpoint); if(p.localModel)setLocalModel(p.localModel); }
     } catch {}
   }, []);
 
   useEffect(() => {
-    try { localStorage.setItem("mm_roster", JSON.stringify(classRoster)); } catch {}
+    try { localStorage.setItem("nv_roster", JSON.stringify(classRoster)); } catch {}
   }, [classRoster]);
 
   useEffect(() => {
@@ -1392,16 +1483,16 @@ function MarkMate() {
           hasFeedback:!!st.feedbackHTML, hasMarkedImage:!!st.markedImage
         }))};
       });
-      localStorage.setItem("mm_classes", JSON.stringify(slim));
+      localStorage.setItem("nv_classes", JSON.stringify(slim));
     } catch {}
   }, [classes]);
 
   useEffect(() => {
-    try { localStorage.setItem("mm_saved", JSON.stringify(saved.slice(0,50))); } catch {}
+    try { localStorage.setItem("nv_saved", JSON.stringify(saved.slice(0,50))); } catch {}
   }, [saved]);
 
   useEffect(() => {
-    try { localStorage.setItem("mm_prefs", JSON.stringify({apiMode,localEndpoint,localModel})); } catch {}
+    try { localStorage.setItem("nv_prefs", JSON.stringify({apiMode,localEndpoint,localModel})); } catch {}
   }, [apiMode,localEndpoint,localModel]);
 
   /* ── callAPI — routes to Anthropic cloud or local Ollama ── */
@@ -1472,7 +1563,7 @@ function MarkMate() {
 
   /* ── Clear all local data ── */
   const clearAllData = useCallback(() => {
-    ["mm_roster","mm_classes","mm_saved","mm_prefs"].forEach(k => localStorage.removeItem(k));
+    ["nv_roster","nv_classes","nv_saved","nv_prefs"].forEach(k => localStorage.removeItem(k));
     setClassRoster([]); setClasses({}); setSaved([]);
     setResults(null); setScannedPages([]);
     setShowClearConfirm(false);
@@ -1608,7 +1699,7 @@ function MarkMate() {
     const date=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
     const pct=res.percentage??0,gc=res.grade==="A"?"#3dd68c":res.grade==="B"?"#f5c842":res.grade==="C"?"#f0956b":"#e8473f";
     const wrongs=(res.questions||[]).filter(q=>!q.correct);
-    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${wrongs.length?`<h2>🎯 What You Need to Do</h2><div class="todo"><h3>Focus on these areas:</h3>${wrongs.map(q=>`<div class="tdi">• <strong>${escHtml(q.id||'')}:</strong> ${escHtml(q.feedback||'')}</div>`).join("")}</div>`:""}${(res.improvements||[]).length?`<div style="margin-top:10px">${res.improvements.map(s=>`<span class="tag tr">${escHtml(s)}</span>`).join("")}</div>`:""}<div class="footer">Generated by MarkMate AI · ${date}</div></div></body></html>`;
+    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${wrongs.length?`<h2>🎯 What You Need to Do</h2><div class="todo"><h3>Focus on these areas:</h3>${wrongs.map(q=>`<div class="tdi">• <strong>${escHtml(q.id||'')}:</strong> ${escHtml(q.feedback||'')}</div>`).join("")}</div>`:""}${(res.improvements||[]).length?`<div style="margin-top:10px">${res.improvements.map(s=>`<span class="tag tr">${escHtml(s)}</span>`).join("")}</div>`:""}<div class="footer">Generated by NovaVista AI · ${date}</div></div></body></html>`;
   },[]);
 
   const genCollectiveHTML=useCallback((paper)=>{
@@ -1616,7 +1707,7 @@ function MarkMate() {
     const sts=paper.students||[],avgPct=sts.length?Math.round(sts.reduce((s,st)=>s+(st.results.percentage||0),0)/sts.length):0;
     const sorted=[...sts].sort((a,b)=>(b.results.percentage||0)-(a.results.percentage||0));
     const qIds=getAllQIds(sts);
-    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Class Summary — ${escHtml(paper.name)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:960px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;margin:0;font-size:.9rem}.stats{display:flex;gap:14px;margin-top:18px;flex-wrap:wrap}.stat{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 18px;text-align:center}.stat-big{font-size:1.8rem;font-weight:700}.stat-lbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}table{width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-top:12px}th{padding:10px 12px;text-align:left;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888;border-bottom:2px solid #e8e8f0;white-space:nowrap}td{padding:10px 12px;border-bottom:1px solid #f0f0f8;font-size:.84rem}tr:last-child td{border:none}tr:hover td{background:#fafafa}.bar{height:5px;background:#e8e8f0;border-radius:3px;margin-top:3px}.barf{height:100%;border-radius:3px}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📊 ${escHtml(paper.name)}</h1><p>Class Summary Report — ${date}</p><div class="stats"><div class="stat"><div class="stat-big">${sts.length}</div><div class="stat-lbl">Students</div></div><div class="stat"><div class="stat-big">${avgPct}%</div><div class="stat-lbl">Class Average</div></div><div class="stat"><div class="stat-big">${sorted[0]?(sorted[0].results.percentage||0)+"%":"—"}</div><div class="stat-lbl">Top Score</div></div></div></div><h2>Class Results</h2><table><thead><tr><th>Student</th><th>Score</th><th>%</th><th>Grade</th>${qIds.map(id=>`<th>${escHtml(id)}</th>`).join("")}</tr></thead><tbody>${sorted.map(st=>{const qMap={};(st.results.questions||[]).forEach(q=>{qMap[q.id]=q;});const pct=st.results.percentage||0,col=pct>=70?"#3dd68c":pct>=50?"#f5c842":"#e8473f";return`<tr><td><strong>${escHtml(st.name)}</strong></td><td>${st.results.totalScore??'—'}/${st.results.maxScore??'?'}</td><td><div style="font-weight:700;color:${col}">${pct}%</div><div class="bar"><div class="barf" style="width:${pct}%;background:${col}"></div></div></td><td style="font-weight:700;color:${col}">${st.results.grade??'—'}</td>${qIds.map(id=>{const q=qMap[id];if(!q)return`<td style="color:#ccc">—</td>`;const c=q.correct?"#3dd68c":q.marksAwarded>0?"#f5c842":"#e8473f";return`<td style="color:${c};font-weight:700;text-align:center">${q.marksAwarded}/${q.marksAvailable}</td>`;}).join("")}</tr>`;}).join("")}</tbody></table><div class="footer">Generated by MarkMate AI · ${date}</div></div></body></html>`;
+    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Class Summary — ${escHtml(paper.name)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:960px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;margin:0;font-size:.9rem}.stats{display:flex;gap:14px;margin-top:18px;flex-wrap:wrap}.stat{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 18px;text-align:center}.stat-big{font-size:1.8rem;font-weight:700}.stat-lbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}table{width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-top:12px}th{padding:10px 12px;text-align:left;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888;border-bottom:2px solid #e8e8f0;white-space:nowrap}td{padding:10px 12px;border-bottom:1px solid #f0f0f8;font-size:.84rem}tr:last-child td{border:none}tr:hover td{background:#fafafa}.bar{height:5px;background:#e8e8f0;border-radius:3px;margin-top:3px}.barf{height:100%;border-radius:3px}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📊 ${escHtml(paper.name)}</h1><p>Class Summary Report — ${date}</p><div class="stats"><div class="stat"><div class="stat-big">${sts.length}</div><div class="stat-lbl">Students</div></div><div class="stat"><div class="stat-big">${avgPct}%</div><div class="stat-lbl">Class Average</div></div><div class="stat"><div class="stat-big">${sorted[0]?(sorted[0].results.percentage||0)+"%":"—"}</div><div class="stat-lbl">Top Score</div></div></div></div><h2>Class Results</h2><table><thead><tr><th>Student</th><th>Score</th><th>%</th><th>Grade</th>${qIds.map(id=>`<th>${escHtml(id)}</th>`).join("")}</tr></thead><tbody>${sorted.map(st=>{const qMap={};(st.results.questions||[]).forEach(q=>{qMap[q.id]=q;});const pct=st.results.percentage||0,col=pct>=70?"#3dd68c":pct>=50?"#f5c842":"#e8473f";return`<tr><td><strong>${escHtml(st.name)}</strong></td><td>${st.results.totalScore??'—'}/${st.results.maxScore??'?'}</td><td><div style="font-weight:700;color:${col}">${pct}%</div><div class="bar"><div class="barf" style="width:${pct}%;background:${col}"></div></div></td><td style="font-weight:700;color:${col}">${st.results.grade??'—'}</td>${qIds.map(id=>{const q=qMap[id];if(!q)return`<td style="color:#ccc">—</td>`;const c=q.correct?"#3dd68c":q.marksAwarded>0?"#f5c842":"#e8473f";return`<td style="color:${c};font-weight:700;text-align:center">${q.marksAwarded}/${q.marksAvailable}</td>`;}).join("")}</tr>`;}).join("")}</tbody></table><div class="footer">Generated by NovaVista AI · ${date}</div></div></body></html>`;
   },[]);
 
   const saveStudentToClass=useCallback(()=>{
@@ -1658,7 +1749,34 @@ function MarkMate() {
   const dlMarked=st=>{if(!st.markedImage)return;const a=document.createElement("a");a.href=st.markedImage;a.download=`${st.name.replace(/\s+/g,"_")}_marked.jpg`;a.click();};
 
   /* ── camera ── */
-  const startCamera=useCallback(async()=>{try{setError("");const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}});streamRef.current=s;if(videoRef.current)videoRef.current.srcObject=s;setCameraActive(true);}catch{setError("Camera access denied. Check browser permissions.");}  },[]);
+  const startCamera=useCallback(async()=>{
+    try{
+      setError("");
+      const s=await navigator.mediaDevices.getUserMedia({
+        video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}
+      });
+      streamRef.current=s;
+      setCameraActive(true);
+      // NOTE: srcObject is set in the useEffect below, after the
+      // <video> element has been rendered into the DOM
+    }catch(e){
+      const msg = e.name==="NotAllowedError"
+        ? "Camera access denied — please allow camera in your browser/OS settings and reload."
+        : e.name==="NotFoundError"
+        ? "No camera found on this device."
+        : "Could not start camera: "+e.message;
+      setError(msg);
+    }
+  },[]);
+
+  // Assign the stream to the video element once it exists in the DOM
+  useEffect(()=>{
+    if(cameraActive && videoRef.current && streamRef.current){
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(()=>{});
+    }
+  },[cameraActive]);
+
   const stopCamera=useCallback(()=>{streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;setCameraActive(false);setAutoActive(false);},[]);
   useEffect(()=>()=>stopCamera(),[stopCamera]);
   const captureFrame=useCallback(()=>{const v=videoRef.current,c=canvasRef.current;if(!v||!c)return null;c.width=v.videoWidth||1280;c.height=v.videoHeight||720;c.getContext("2d").drawImage(v,0,0);return c.toDataURL("image/jpeg",0.92);},[]);
@@ -1743,7 +1861,7 @@ function MarkMate() {
     img.src=results.image;
   },[results]);
 
-  const downloadAnnotated=()=>{const link=document.createElement("a");const n=results?.studentName||studentName||"student";link.download=`MarkMate_${n.replace(/\s+/g,"_")}_marked.jpg`;link.href=annotRef.current.toDataURL("image/jpeg",0.95);link.click();};
+  const downloadAnnotated=()=>{const link=document.createElement("a");const n=results?.studentName||studentName||"student";link.download=`NovaVista_${n.replace(/\s+/g,"_")}_marked.jpg`;link.href=annotRef.current.toDataURL("image/jpeg",0.95);link.click();};
 
   /* ── derived ── */
   const gradeClass=g=>`grade-${["A","B","C","D","F"].includes(g)?g:"D"}`;
@@ -1762,7 +1880,7 @@ function MarkMate() {
       {(marking||qmLoading)&&(
         <div className="loading-overlay">
           <div className="spinner-lg"/>
-          <div className="loading-text">{qmLoading?"Marking answer…":"MarkMate is marking…"}</div>
+          <div className="loading-text">{qmLoading?"Marking answer…":"NovaVista is marking…"}</div>
           {markingStep&&<div className="loading-sub">{markingStep}</div>}
         </div>
       )}
@@ -1780,7 +1898,7 @@ function MarkMate() {
       ═══════════════════════════ */}
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <div className="logo-mark">Mark<span>Mate</span></div>
+          <div className="logo-mark">Nova<span>Vista</span></div>
           <div className="logo-sub">AI Paper Marking</div>
         </div>
 
@@ -2816,7 +2934,7 @@ function MarkMate() {
               <div className="page-header">
                 <div>
                   <div className="page-title">Privacy & Data</div>
-                  <div className="page-sub">Control how MarkMate processes papers and stores student information</div>
+                  <div className="page-sub">Control how NovaVista processes papers and stores student information</div>
                 </div>
                 <span className={`pill ${apiMode==="local"?"pill-green":"pill-blue"}`}>
                   <Ic d={apiMode==="local"?I.wifioff:I.cloud} size={13}/>
@@ -2882,7 +3000,7 @@ function MarkMate() {
                       <input value={localModel} onChange={e=>setLocalModel(e.target.value)} placeholder="e.g. llava, llama3.2-vision, moondream"/>
                     </div>
                     <div className="blue-box">
-                      <strong>Setup instructions:</strong> Install <a href="https://ollama.com" target="_blank" style={{color:"var(--blue)"}}>Ollama</a>, then run <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:4,fontSize:"0.8rem"}}>ollama pull llava</code> (or any vision model). Start Ollama — MarkMate will connect automatically. Enable CORS with <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:4,fontSize:"0.8rem"}}>OLLAMA_ORIGINS=* ollama serve</code>.
+                      <strong>Setup instructions:</strong> Install <a href="https://ollama.com" target="_blank" style={{color:"var(--blue)"}}>Ollama</a>, then run <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:4,fontSize:"0.8rem"}}>ollama pull llava</code> (or any vision model). Start Ollama — NovaVista will connect automatically. Enable CORS with <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:4,fontSize:"0.8rem"}}>OLLAMA_ORIGINS=* ollama serve</code>.
                     </div>
                     <div className="warn-box" style={{marginTop:0}}>
                       ⚠ Local models have lower OCR accuracy than Claude. Complex handwriting or multi-page booklets may produce less reliable results. PDF marking scheme extraction also requires cloud mode.
@@ -3129,7 +3247,21 @@ function MarkMate() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<MarkMate/>);
+ReactDOM.createRoot(document.getElementById("root")).render(<NovaVista/>);
+
+// Hide the boot screen now that React has mounted
+(function(){
+  var boot = document.getElementById('boot-screen');
+  if(boot){
+    var bar = document.getElementById('boot-bar');
+    if(bar) bar.style.width = '100%';
+    setTimeout(function(){
+      boot.style.transition = 'opacity 0.4s ease';
+      boot.style.opacity = '0';
+      setTimeout(function(){ boot.style.display = 'none'; }, 400);
+    }, 200);
+  }
+})();
 </script>
 </body>
 </html>
