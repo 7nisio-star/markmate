@@ -1278,6 +1278,316 @@ input::placeholder, textarea::placeholder { color: var(--text4); }
 }
 
 /* ═══════════════════════════════════════════════════════════
+   ACCOUNTS & SCHOOL SYNC
+═══════════════════════════════════════════════════════════ */
+.account-setup-card {
+  background: linear-gradient(135deg, var(--card) 0%, #1a1d28 100%);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-xl);
+  padding: 32px;
+  text-align: center;
+}
+.account-avatar-large {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; font-weight: 800; color: white;
+  margin: 0 auto 16px;
+  box-shadow: 0 4px 20px rgba(108,143,245,0.3);
+}
+.account-name-big {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.4rem; font-weight: 700;
+  color: var(--text); margin-bottom: 4px;
+}
+.account-dept { font-size: 0.82rem; color: var(--text3); margin-bottom: 16px; }
+.account-pill-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+.sync-step-card {
+  background: var(--inset);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: flex; gap: 14px; align-items: flex-start;
+}
+.sync-step-num {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--blue-dim); border: 1px solid rgba(108,143,245,0.25);
+  color: var(--blue); font-size: 0.85rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.sync-step-body { flex: 1; }
+.sync-step-title { font-size: 0.9rem; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+.sync-step-desc  { font-size: 0.8rem; color: var(--text2); line-height: 1.6; }
+
+.school-stat-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+}
+.school-stat-card {
+  background: var(--inset); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px; text-align: center;
+}
+.school-stat-num { font-family: 'Playfair Display', serif; font-size: 1.8rem; font-weight: 700; line-height: 1; }
+.school-stat-lbl { font-size: 0.67rem; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+
+.dept-row {
+  background: var(--inset); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 13px 16px;
+  display: flex; align-items: center; gap: 14px;
+  transition: border-color 0.15s;
+}
+.dept-row:hover { border-color: var(--border-md); }
+.dept-name { font-weight: 600; font-size: 0.88rem; color: var(--text); flex: 1; }
+.dept-bar-wrap { flex: 2; min-width: 80px; }
+.dept-bar { height: 6px; background: var(--border-md); border-radius: 99px; overflow: hidden; margin-top: 4px; }
+.dept-bar-fill { height: 100%; border-radius: 99px; }
+
+.teacher-file-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 0.82rem;
+}
+.teacher-file-ok   { color: var(--green); }
+.teacher-file-warn { color: var(--gold); }
+.teacher-file-err  { color: var(--red); }
+
+.pin-input {
+  font-family: monospace !important;
+  font-size: 1.4rem !important;
+  letter-spacing: 8px !important;
+  text-align: center;
+}
+.pin-lock-overlay {
+  position: fixed; inset: 0;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 300; flex-direction: column; gap: 20px;
+  padding: 40px;
+}
+.pin-lock-logo {
+  font-family: 'Playfair Display', serif; font-size: 2.2rem; font-weight: 900;
+  background: linear-gradient(135deg, var(--red), var(--orange));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PIN LOCK SCREEN
+═══════════════════════════════════════════════════════════ */
+.pin-screen {
+  position: fixed; inset: 0;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 500; gap: 0;
+}
+.pin-school { font-size: 0.72rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
+.pin-logo { font-family: 'Playfair Display', serif; font-size: 2.4rem; font-weight: 900; margin-bottom: 6px;
+  background: linear-gradient(135deg, var(--red) 0%, var(--orange) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.pin-logo span { background: linear-gradient(135deg, #dddce8 0%, var(--text2) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.pin-who { font-size: 1rem; font-weight: 600; color: var(--text2); margin-top: 4px; margin-bottom: 32px; }
+.pin-dots { display: flex; gap: 14px; margin-bottom: 28px; }
+.pin-dot {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--border-md);
+  transition: all 0.15s;
+}
+.pin-dot.filled { background: var(--red); border-color: var(--red); box-shadow: 0 0 8px var(--red-glow); }
+.pin-dot.error  { background: var(--red); border-color: var(--red); animation: shake 0.4s ease; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-6px)} 40%,80%{transform:translateX(6px)} }
+.pin-pad { display: grid; grid-template-columns: repeat(3, 72px); gap: 10px; }
+.pin-key {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: var(--card); border: 1px solid var(--border-md);
+  color: var(--text); font-size: 1.4rem; font-weight: 600;
+  cursor: pointer; transition: all 0.12s;
+  font-family: 'Playfair Display', serif;
+  display: flex; align-items: center; justify-content: center;
+}
+.pin-key:hover { background: var(--card-hover); border-color: var(--border-lg); transform: scale(1.04); }
+.pin-key:active { transform: scale(0.96); }
+.pin-key.del { font-family: 'Inter', sans-serif; font-size: 0.9rem; color: var(--text3); }
+.pin-key.zero { grid-column: 2; }
+.pin-error-msg { font-size: 0.8rem; color: var(--red); height: 18px; margin-top: 12px; text-align: center; }
+.pin-hint { font-size: 0.72rem; color: var(--text4); margin-top: 20px; }
+
+/* ═══════════════════════════════════════════════════════════
+   ACCOUNT & SCHOOL SYNC
+═══════════════════════════════════════════════════════════ */
+.profile-card {
+  background: linear-gradient(135deg, var(--card) 0%, #1a1d28 100%);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-xl);
+  padding: 28px;
+  display: flex; align-items: center; gap: 20px;
+  position: relative; overflow: hidden;
+}
+.profile-card::before {
+  content: ''; position: absolute; top: -40px; right: -40px;
+  width: 160px; height: 160px;
+  background: radial-gradient(circle, rgba(232,71,63,0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+.profile-avatar {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--red), var(--orange));
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Playfair Display', serif; font-size: 1.4rem; font-weight: 700;
+  color: white; flex-shrink: 0; box-shadow: 0 4px 16px var(--red-glow);
+}
+.profile-name { font-family: 'Playfair Display', serif; font-size: 1.25rem; font-weight: 700; }
+.profile-meta { font-size: 0.8rem; color: var(--text2); margin-top: 3px; }
+.role-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 99px; font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.5px; text-transform: uppercase; margin-top: 6px;
+}
+.role-teacher { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(108,143,245,0.2); }
+.role-hod     { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(245,200,66,0.25); }
+.role-admin   { background: var(--red-dim);  color: var(--red);  border: 1px solid rgba(232,71,63,0.2); }
+
+.pin-setup-row { display: flex; gap: 8px; align-items: center; }
+.pin-setup-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--inset); border: 1px solid var(--border-md);
+}
+.pin-setup-dot.set { background: var(--green); border-color: var(--green); }
+
+/* ═══════════════════════════════════════════════════════════
+   LICENCE SYSTEM
+═══════════════════════════════════════════════════════════ */
+.licence-gate {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; padding: 52px 32px; gap: 18px;
+}
+.licence-gate-icon { font-size: 3.2rem; }
+.licence-gate-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.4rem; font-weight: 700; color: var(--text);
+}
+.licence-gate-sub {
+  font-size: 0.88rem; color: var(--text2);
+  max-width: 420px; line-height: 1.75;
+}
+.licence-input-row {
+  display: flex; gap: 10px; width: 100%; max-width: 440px;
+}
+.licence-input-row input {
+  flex: 1;
+  font-family: monospace;
+  font-size: 0.92rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.licence-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 18px; border-radius: var(--radius-sm);
+  font-size: 0.83rem; font-weight: 600;
+}
+.licence-badge.active {
+  background: var(--green-dim); color: var(--green);
+  border: 1px solid rgba(61,214,140,0.25);
+}
+.licence-badge.trial {
+  background: var(--gold-dim); color: var(--gold);
+  border: 1px solid rgba(245,200,66,0.25);
+}
+.licence-badge.expired {
+  background: var(--red-dim); color: var(--red);
+  border: 1px solid rgba(232,71,63,0.25);
+}
+.licence-tier-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  width: 100%; max-width: 680px;
+}
+.licence-tier-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 16px;
+  text-align: center;
+  position: relative;
+  transition: border-color 0.15s;
+}
+.licence-tier-card.featured {
+  border-color: var(--red);
+  background: linear-gradient(135deg, var(--card) 0%, #1d1520 100%);
+}
+.licence-tier-card.featured::before {
+  content: 'Most Popular';
+  position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
+  background: var(--red); color: white;
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  padding: 2px 10px; border-radius: 99px;
+}
+.tier-name   { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); margin-bottom: 6px; }
+.tier-price  { font-family: 'Playfair Display', serif; font-size: 1.9rem; font-weight: 900; color: var(--text); line-height: 1; }
+.tier-period { font-size: 0.72rem; color: var(--text3); margin-top: 2px; margin-bottom: 12px; }
+.tier-feature { font-size: 0.78rem; color: var(--text2); padding: 4px 0; border-bottom: 1px solid var(--border); }
+.tier-feature:last-of-type { border-bottom: none; }
+.tier-feature.highlight { color: var(--green); font-weight: 600; }
+
+/* Licence badge in sidebar */
+.sidebar-licence {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 10px; margin-top: 4px;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem; font-weight: 600;
+  cursor: pointer; transition: background 0.15s;
+}
+.sidebar-licence:hover { background: rgba(255,255,255,0.04); }
+.sidebar-licence.active  { color: var(--green); }
+.sidebar-licence.trial   { color: var(--gold); }
+.sidebar-licence.none    { color: var(--text4); }
+
+/* locked nav item */
+.nav-item.locked { opacity: 0.45; cursor: not-allowed; }
+.nav-item.locked:hover { background: transparent; color: var(--text2); }
+.lock-pip {
+  margin-left: auto;
+  font-size: 0.65rem;
+  opacity: 0.6;
+}
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 0.83rem; font-weight: 500;
+}
+.sync-idle    { background: var(--inset); color: var(--text2); border: 1px solid var(--border); }
+.sync-syncing { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(108,143,245,0.2); }
+.sync-done    { background: var(--green-dim); color: var(--green); border: 1px solid rgba(61,214,140,0.2); }
+.sync-error   { background: var(--red-dim); color: var(--red); border: 1px solid rgba(232,71,63,0.2); }
+
+.teacher-result-card {
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  display: flex; align-items: center; gap: 14px;
+  transition: border-color 0.15s;
+}
+.teacher-result-card:hover { border-color: var(--border-md); }
+.teacher-init {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--card); border: 1px solid var(--border-md);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 700; color: var(--text2);
+  flex-shrink: 0;
+}
+
+/* School analysis heatmap */
+.heatmap-cell {
+  padding: 7px 10px; text-align: center; font-weight: 700;
+  font-size: 0.78rem; border-radius: 4px; min-width: 52px;
+}
+.heat-a { background: rgba(61,214,140,0.18); color: var(--green); }
+.heat-b { background: rgba(245,200,66,0.15); color: var(--gold); }
+.heat-c { background: rgba(232,71,63,0.14); color: var(--red); }
+.heat-n { background: var(--border); color: var(--text4); }
+
+/* ═══════════════════════════════════════════════════════════
    QUICK MARK — ANNOTATED IMAGE PREVIEW
 ═══════════════════════════════════════════════════════════ */
 .qm-annotated-wrap {
@@ -1467,6 +1777,11 @@ const I = {
   database:["M12 2a9 3 0 019 3c0 1.66-4.03 3-9 3s-9-1.34-9-3 4.03-3 9-3z","M3 5v4c0 1.66 4.03 3 9 3s9-1.34 9-3V5","M3 9v4c0 1.66 4.03 3 9 3s9-1.34 9-3V9","M3 13v4c0 1.66 4.03 3 9 3s9-1.34 9-3v-4"],
   cloud:["M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"],
   alerttri:["M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z","M12 9v4","M12 17h.01"],
+  user:["M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2","M12 3a4 4 0 100 8 4 4 0 000-8z"],
+  lock:["M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2z","M7 11V7a5 5 0 0110 0v4"],
+  unlock:["M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2z","M7 11V7a5 5 0 019.9-1"],
+  globe:["M12 2a10 10 0 100 20A10 10 0 0012 2z","M2 12h20","M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"],
+  barChart:["M18 20V10","M12 20V4","M6 20v-6"],
 };
 
 /* ── Helpers ───────────────────────────────────────────── */
@@ -1551,6 +1866,32 @@ function NovaVista() {
   // }
   const [corrections,setCorrections]       = useState([]);
 
+  // Teacher account (stored locally in localStorage)
+  const [teacherName,setTeacherName]       = useState("");
+  const [teacherDept,setTeacherDept]       = useState("");
+  const [teacherSchool,setTeacherSchool]   = useState("");
+  const [teacherPin,setTeacherPin]         = useState("");   // 4-digit PIN
+  const [teacherRole,setTeacherRole]       = useState("teacher"); // "teacher"|"hod"|"admin"
+  const [pinUnlocked,setPinUnlocked]       = useState(false);
+  const [pinEntry,setPinEntry]             = useState("");
+  const [pinError,setPinError]             = useState(false);
+  const [showAccountModal,setShowAccountModal] = useState(false);
+
+  // School sync — reading/writing JSON files in a shared folder
+  const [syncStatus,setSyncStatus]         = useState("idle"); // "idle"|"syncing"|"done"|"error"
+  const [syncMsg,setSyncMsg]               = useState("");
+  const [schoolData,setSchoolData]         = useState(null);  // combined school analysis
+  const [loadedTeachers,setLoadedTeachers] = useState([]);    // parsed teacher files
+
+  // Licence system
+  const [licenceKey,setLicenceKey]         = useState("");
+  const [licenceStatus,setLicenceStatus]   = useState("none"); // "none"|"trial"|"active"|"expired"
+  const [licenceTier,setLicenceTier]       = useState("");     // "teacher"|"department"|"school"
+  const [licenceExpiry,setLicenceExpiry]   = useState("");
+  const [licenceSchool,setLicenceSchool]   = useState("");
+  const [licenceInput,setLicenceInput]     = useState("");
+  const [licenceError,setLicenceError]     = useState("");
+
   const videoRef=useRef(null),canvasRef=useRef(null),annotRef=useRef(null),streamRef=useRef(null);
   const qmAnnotRef = useRef(null); // canvas for Quick Mark annotated image
   const [qmAnnotReady,setQmAnnotReady] = useState(false); // true once annotation drawn
@@ -1587,10 +1928,38 @@ function NovaVista() {
       if (raw) setCorrections(JSON.parse(raw));
     } catch {}
     try {
+      const raw = localStorage.getItem("nv_licence");
+      if (raw) {
+        const l = JSON.parse(raw);
+        setLicenceKey(l.key||""); setLicenceStatus(l.status||"none");
+        setLicenceTier(l.tier||""); setLicenceExpiry(l.expiry||"");
+        setLicenceSchool(l.school||"");
+      }
+    } catch {}
+    try {
+      const acc = localStorage.getItem("nv_account");
+      if (acc) {
+        const a = JSON.parse(acc);
+        setTeacherName(a.name||""); setTeacherDept(a.dept||"");
+        setTeacherSchool(a.school||""); setTeacherPin(a.pin||"");
+        setTeacherRole(a.role||"teacher");
+        // If no PIN set, unlock immediately
+        if (!a.pin) setPinUnlocked(true);
+      } else {
+        setPinUnlocked(true); // new user, no PIN yet
+      }
+    } catch { setPinUnlocked(true); }
+    try {
       const raw = localStorage.getItem("nv_prefs");
       if (raw) { const p=JSON.parse(raw); if(p.apiMode)setApiMode(p.apiMode); if(p.localEndpoint)setLocalEndpoint(p.localEndpoint); if(p.localModel)setLocalModel(p.localModel); }
     } catch {}
   }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem("nv_licence", JSON.stringify({
+      key:licenceKey, status:licenceStatus, tier:licenceTier, expiry:licenceExpiry, school:licenceSchool
+    })); } catch {}
+  }, [licenceKey,licenceStatus,licenceTier,licenceExpiry,licenceSchool]);
 
   useEffect(() => {
     try { localStorage.setItem("nv_roster", JSON.stringify(classRoster)); } catch {}
@@ -1619,10 +1988,233 @@ function NovaVista() {
   }, [corrections]);
 
   useEffect(() => {
+    if (!teacherName) return; // don't save empty account
+    try { localStorage.setItem("nv_account", JSON.stringify({
+      name:teacherName, dept:teacherDept, school:teacherSchool,
+      pin:teacherPin, role:teacherRole
+    })); } catch {}
+  }, [teacherName,teacherDept,teacherSchool,teacherPin,teacherRole]);
+
+  useEffect(() => {
     try { localStorage.setItem("nv_prefs", JSON.stringify({apiMode,localEndpoint,localModel})); } catch {}
   }, [apiMode,localEndpoint,localModel]);
 
-  /* ── callAPI — routes to Anthropic cloud or local Ollama ── */
+  const schoolFolderRef = useRef(null); // FileSystem API directory handle
+
+  // ── PIN helpers ──────────────────────────────────────────────────────────
+  const handlePinKey = useCallback((key) => {
+    if (pinError) { setPinError(false); setPinEntry(""); }
+    if (key === "del") { setPinEntry(p => p.slice(0,-1)); return; }
+    const next = pinEntry + key;
+    setPinEntry(next);
+    if (next.length === 4) {
+      if (next === teacherPin) {
+        setPinUnlocked(true); setPinEntry(""); setPinError(false);
+      } else {
+        setPinError(true);
+        setTimeout(() => { setPinEntry(""); setPinError(false); }, 900);
+      }
+    }
+  }, [pinEntry, teacherPin, pinError]);
+
+  const saveAccount = useCallback((name, dept, school, pin, role) => {
+    setTeacherName(name); setTeacherDept(dept);
+    setTeacherSchool(school); setTeacherPin(pin); setTeacherRole(role);
+    if (!pin) setPinUnlocked(true);
+  }, []);
+
+  // ── Licence validation ────────────────────────────────────────────────────
+  // Key format: NV-[TIER]-[YYYY]-[MM]-[SCHOOLCODE]-[CHECKSUM]
+  // Example:    NV-SCH-2026-12-STMARY-K7
+  // Tiers: TCH=teacher, DEP=department, SCH=school
+  // The checksum is a simple sum of char codes mod 99 formatted as 2 digits
+  // This runs entirely offline — no server call needed.
+  const VALID_TIERS = { TCH:"teacher", DEP:"department", SCH:"school" };
+
+  const computeChecksum = (parts) => {
+    const str = parts.join("-");
+    let sum = 0;
+    for (let i=0; i<str.length; i++) sum += str.charCodeAt(i);
+    return String(sum % 99).padStart(2,"0");
+  };
+
+  const validateLicence = useCallback((raw) => {
+    setLicenceError("");
+    const key = raw.trim().toUpperCase().replace(/\s+/g,"");
+    if (!key) { setLicenceError("Please enter a licence key."); return; }
+
+    const parts = key.split("-");
+    // Minimum: NV-TIER-YYYY-MM-SCHOOL-CS = 6 parts
+    if (parts.length < 6 || parts[0] !== "NV") {
+      setLicenceError("Invalid key format. Keys look like: NV-SCH-2026-12-SCHOOL-XX");
+      return;
+    }
+
+    const [prefix, tier, year, month, school, checksum] = parts;
+    const mainParts = [prefix, tier, year, month, school];
+    const expectedCs = computeChecksum(mainParts);
+
+    if (checksum !== expectedCs) {
+      setLicenceError("Key is invalid or has been altered. Contact hello@novavista.ai for a new key.");
+      return;
+    }
+
+    const tierName = VALID_TIERS[tier];
+    if (!tierName) {
+      setLicenceError("Unknown licence tier. Valid tiers: TCH, DEP, SCH.");
+      return;
+    }
+
+    // Check expiry
+    const expYear  = parseInt(year, 10);
+    const expMonth = parseInt(month, 10);
+    const now = new Date();
+    const expiryDate = new Date(expYear, expMonth, 0); // last day of expiry month
+    const expired = now > expiryDate;
+
+    // All valid — save
+    setLicenceKey(key);
+    setLicenceTier(tierName);
+    setLicenceSchool(school);
+    setLicenceExpiry(`${expMonth.toString().padStart(2,"0")}/${year}`);
+    setLicenceStatus(expired ? "expired" : "active");
+    setLicenceInput("");
+
+    if (expired) {
+      setLicenceError(`This licence expired ${expMonth.toString().padStart(2,"0")}/${year}. Renew at novavista.ai`);
+    }
+  }, []);
+
+  // Convenience: is School Sync unlocked?
+  const syncUnlocked = licenceStatus === "active" && (licenceTier==="department"||licenceTier==="school");
+  const anyLicence   = licenceStatus === "active";
+
+  // ── Generate a licence key (admin/you only — for issuing to schools) ──────
+  const generateKey = useCallback((tier, year, month, school) => {
+    const parts = ["NV", tier.toUpperCase(), String(year), String(month).padStart(2,"0"), school.toUpperCase().replace(/\s+/g,"").slice(0,8)];
+    const cs = computeChecksum(parts);
+    return [...parts, cs].join("-");
+  }, []);
+
+  // ── School folder sync ────────────────────────────────────────────────────
+  const connectSchoolFolder = useCallback(async () => {
+    if (!window.showDirectoryPicker) {
+      setError("School folder sync requires Chrome or Edge browser.");
+      return;
+    }
+    try {
+      const dir = await window.showDirectoryPicker({ mode: "readwrite" });
+      schoolFolderRef.current = dir;
+      setSyncStatus("done");
+      setSyncMsg(`Connected to: ${dir.name}`);
+      // Auto-sync immediately
+      await syncMyData(dir);
+    } catch(e) {
+      if (e.name !== "AbortError") { setSyncStatus("error"); setSyncMsg("Could not connect: " + e.message); }
+    }
+  }, []);
+
+  const syncMyData = useCallback(async (dir) => {
+    const handle = dir || schoolFolderRef.current;
+    if (!handle || !teacherName) return;
+    setSyncStatus("syncing"); setSyncMsg("Saving your data…");
+    try {
+      // Build teacher's data payload (no images — too large)
+      const payload = {
+        teacher: { name: teacherName, dept: teacherDept, school: teacherSchool, role: teacherRole },
+        lastSync: new Date().toISOString(),
+        classes: Object.fromEntries(Object.entries(classes).map(([k,v]) => [k, {
+          ...v, students: v.students.map(st => ({
+            id: st.id, name: st.name, timestamp: st.timestamp, results: st.results,
+          }))
+        }])),
+        saved: saved.slice(0, 100),
+      };
+      const safeName = teacherName.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9-]/g,"");
+      const fh = await handle.getFileHandle(`${safeName}.json`, { create: true });
+      const w = await fh.createWritable();
+      await w.write(JSON.stringify(payload, null, 2));
+      await w.close();
+      setSyncStatus("done"); setSyncMsg(`Saved at ${new Date().toLocaleTimeString()}`);
+    } catch(e) { setSyncStatus("error"); setSyncMsg("Save failed: " + e.message); }
+  }, [teacherName, teacherDept, teacherSchool, teacherRole, classes, saved]);
+
+  const loadAllTeacherData = useCallback(async () => {
+    const handle = schoolFolderRef.current;
+    if (!handle) { setError("Connect a school folder first."); return; }
+    setSyncStatus("syncing"); setSyncMsg("Reading teacher files…");
+    const teachers = [];
+    try {
+      for await (const [name, entry] of handle.entries()) {
+        if (entry.kind === "file" && name.endsWith(".json") && name !== "accounts.json") {
+          try {
+            const file = await entry.getFile();
+            const data = JSON.parse(await file.text());
+            if (data.teacher) teachers.push(data);
+          } catch {}
+        }
+      }
+      setLoadedTeachers(teachers);
+      setSyncStatus("done"); setSyncMsg(`Loaded ${teachers.length} teacher file${teachers.length!==1?"s":""}`);
+    } catch(e) { setSyncStatus("error"); setSyncMsg("Load failed: " + e.message); }
+  }, []);
+
+  // ── Build combined school analysis from loaded teacher data ───────────────
+  const buildSchoolAnalysis = useCallback(() => {
+    if (!loadedTeachers.length) return null;
+    const allPapers = {};
+    loadedTeachers.forEach(td => {
+      const tname = td.teacher?.name || "Unknown";
+      const tdept = td.teacher?.dept  || "Unknown";
+      Object.entries(td.classes||{}).forEach(([pid, paper]) => {
+        if (!allPapers[pid]) allPapers[pid] = { name: paper.name, subject: paper.subject, dept: tdept, students: [] };
+        (paper.students||[]).forEach(st => {
+          allPapers[pid].students.push({ ...st, teacherName: tname, dept: tdept });
+        });
+      });
+    });
+
+    // Build dept breakdown
+    const depts = {};
+    Object.values(allPapers).forEach(paper => {
+      const d = paper.dept || "Unknown";
+      if (!depts[d]) depts[d] = { name: d, students: 0, avgPct: 0, papers: 0 };
+      depts[d].students += paper.students.length;
+      depts[d].papers++;
+      const pcts = paper.students.map(s => s.results?.percentage||0);
+      depts[d].avgPct = pcts.length ? Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length) : 0;
+    });
+
+    return { papers: allPapers, depts, totalTeachers: loadedTeachers.length,
+      totalStudents: Object.values(allPapers).reduce((s,p)=>s+p.students.length,0),
+      totalDepts: Object.keys(depts).length };
+  }, [loadedTeachers]);
+
+  // Export combined school Excel
+  const exportSchoolExcel = useCallback(() => {
+    const analysis = buildSchoolAnalysis();
+    if (!analysis) return;
+    const wb = XLSX.utils.book_new();
+    // Summary sheet
+    const summaryRows = Object.values(analysis.depts).map(d => ({
+      Department: d.name, Papers: d.papers, Students: d.students, "Avg %": d.avgPct,
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "School Summary");
+    // Per-paper sheets
+    Object.values(analysis.papers).forEach(paper => {
+      const qIds = getAllQIds(paper.students);
+      const rows = paper.students.map(st => {
+        const qMap = {}; (st.results?.questions||[]).forEach(q => { qMap[q.id]=q; });
+        const row = { "Student": st.name, "Teacher": st.teacherName||"", "Dept": st.dept||"",
+          "Score": st.results?.totalScore||"", "Max": st.results?.maxScore||"",
+          "%": st.results?.percentage||"", "Grade": st.results?.grade||"" };
+        qIds.forEach(id => { const q=qMap[id]; row[id]=q?`${q.marksAwarded}/${q.marksAvailable}`:"—"; });
+        return row;
+      });
+      if (rows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), paper.name.slice(0,28));
+    });
+    XLSX.writeFile(wb, `NovaVista_School_Analysis_${new Date().toISOString().slice(0,10)}.xlsx`);
+  }, [buildSchoolAnalysis]);
   const callAPI = useCallback(async(messages, system, maxTokens=1500) => {
 
     if (apiMode === "local") {
@@ -1778,9 +2370,10 @@ function NovaVista() {
     setExpandedPaper(pid); setTab("classes");
   },[qmResult,qmSavePaper,qmSaveStudent,qmQuestion,qmScheme,globalScheme,qmImageB64,qmAnnotReady,subject]);
   const clearAllData = useCallback(() => {
-    ["nv_roster","nv_classes","nv_saved","nv_prefs","nv_corrections"].forEach(k => localStorage.removeItem(k));
+    ["nv_roster","nv_classes","nv_saved","nv_prefs","nv_corrections","nv_licence"].forEach(k => localStorage.removeItem(k));
     setClassRoster([]); setClasses({}); setSaved([]); setCorrections([]);
     setResults(null); setScannedPages([]);
+    setLicenceKey(""); setLicenceStatus("none"); setLicenceTier(""); setLicenceExpiry(""); setLicenceSchool("");
     setShowClearConfirm(false);
     setError("");
   }, []);
@@ -2192,6 +2785,31 @@ function NovaVista() {
   return (
     <div className="shell">
 
+      {/* ═══════════════════════════
+          PIN LOCK SCREEN
+      ═══════════════════════════ */}
+      {!pinUnlocked&&teacherPin&&(
+        <div className="pin-screen">
+          {teacherSchool&&<div className="pin-school">{teacherSchool}</div>}
+          <div className="pin-logo">Nova<span>Vista</span></div>
+          <div className="pin-who">{teacherName||"Enter PIN to continue"}</div>
+          <div className="pin-dots">
+            {[0,1,2,3].map(i=>(
+              <div key={i} className={`pin-dot ${i<pinEntry.length?(pinError?"error":"filled"):""}`}/>
+            ))}
+          </div>
+          <div className="pin-pad">
+            {[1,2,3,4,5,6,7,8,9].map(n=>(
+              <div key={n} className="pin-key" onClick={()=>handlePinKey(String(n))}>{n}</div>
+            ))}
+            <div className="pin-key del" onClick={()=>handlePinKey("del")}>⌫</div>
+            <div className="pin-key zero" onClick={()=>handlePinKey("0")}>0</div>
+          </div>
+          <div className="pin-error-msg">{pinError?"Incorrect PIN — try again":""}</div>
+          <div className="pin-hint">Forgot your PIN? Clear browser data to reset.</div>
+        </div>
+      )}
+
       {/* ── Loading overlay ── */}
       {(marking||qmLoading)&&(
         <div className="loading-overlay">
@@ -2264,6 +2882,22 @@ function NovaVista() {
             <span className="nav-icon"><Ic d={I.zap} size={16}/></span> AI Training
             {corrections.length>0&&<span className="nav-badge blue">{corrections.length}</span>}
           </button>
+
+          <div className="nav-divider"/>
+          <div className="nav-label">Your Account</div>
+          <button className={`nav-item ${tab==="account"?"active":""}`} onClick={()=>setTab("account")}>
+            <span className="nav-icon"><Ic d={I.users} size={16}/></span>
+            {teacherName||"Set up profile"}
+          </button>
+          <button
+            className={`nav-item ${tab==="school"?"active":""} ${!syncUnlocked?"locked":""}`}
+            onClick={()=>syncUnlocked?setTab("school"):setTab("account")}
+            title={!syncUnlocked?"Requires Department or School licence":"School Sync"}>
+            <span className="nav-icon"><Ic d={I.database} size={16}/></span> School Sync
+            {!syncUnlocked
+              ? <span className="lock-pip">🔒</span>
+              : syncStatus==="done"&&loadedTeachers.length>0&&<span className="nav-badge">{loadedTeachers.length}</span>}
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -2277,6 +2911,12 @@ function NovaVista() {
           <div className={`privacy-badge ${apiMode==="local"?"local":"cloud"}`} onClick={()=>setTab("privacy")}>
             <Ic d={apiMode==="local"?I.wifioff:I.cloud} size={12}/>
             {apiMode==="local"?"🛡 Data stays on device":"☁ Using Anthropic cloud"}
+          </div>
+          <div className={`sidebar-licence ${licenceStatus==="active"?"active":licenceStatus==="trial"?"trial":"none"}`}
+            onClick={()=>setTab("account")}>
+            {licenceStatus==="active"
+              ? <><span>✓</span> {licenceTier==="school"?"School":licenceTier==="department"?"Department":"Teacher"} Licence</>
+              : <><span>⚠</span> No licence — <u>activate</u></>}
           </div>
         </div>
       </aside>
@@ -3278,6 +3918,440 @@ function NovaVista() {
           </>
         )}
       </main>
+
+        {/* ─────────────────────────
+            ACCOUNT
+        ───────────────────────── */}
+        {tab==="account"&&(
+          <>
+            <div className="topbar">
+              <div className="page-header">
+                <div>
+                  <div className="page-title">Your Account</div>
+                  <div className="page-sub">Your profile, PIN lock, and department — stored only on this device</div>
+                </div>
+              </div>
+            </div>
+            <div className="content col gap16">
+
+              {/* Profile card */}
+              {teacherName?(
+                <div className="profile-card">
+                  <div className="profile-avatar">{initials(teacherName)}</div>
+                  <div style={{flex:1}}>
+                    <div className="profile-name">{teacherName}</div>
+                    <div className="profile-meta">{[teacherDept,teacherSchool].filter(Boolean).join(" · ") || "No department set"}</div>
+                    <div className={`role-badge role-${teacherRole}`}>
+                      {teacherRole==="hod"?"👑 Head of Department":teacherRole==="admin"?"🏫 School Admin":"👤 Teacher"}
+                    </div>
+                  </div>
+                  <div className="col gap8" style={{alignItems:"flex-end"}}>
+                    <div className="pin-setup-row">
+                      {[0,1,2,3].map(i=><div key={i} className={`pin-setup-dot ${teacherPin&&i<teacherPin.length?"set":""}`}/>)}
+                    </div>
+                    <div className="dim small">{teacherPin?"PIN set":"No PIN"}</div>
+                  </div>
+                </div>
+              ):(
+                <div className="info-box">Fill in your profile below — your name identifies your marking files when syncing with the school folder.</div>
+              )}
+
+              {/* Edit profile */}
+              <div className="card card-pad col gap14">
+                <div className="card-title">Profile Details</div>
+                <div className="g2 gap12">
+                  <div className="field">
+                    <div className="field-label">Your Name</div>
+                    <input defaultValue={teacherName} id="acc-name" placeholder="e.g. Emma Johnson"/>
+                  </div>
+                  <div className="field">
+                    <div className="field-label">Role</div>
+                    <select defaultValue={teacherRole} id="acc-role">
+                      <option value="teacher">Teacher</option>
+                      <option value="hod">Head of Department</option>
+                      <option value="admin">School Admin</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <div className="field-label">Department</div>
+                    <input defaultValue={teacherDept} id="acc-dept" placeholder="e.g. Mathematics, Science"/>
+                  </div>
+                  <div className="field">
+                    <div className="field-label">School</div>
+                    <input defaultValue={teacherSchool} id="acc-school" placeholder="e.g. St Mary's Academy"/>
+                  </div>
+                </div>
+                <div className="sep"/>
+                <div className="card-title" style={{marginBottom:4}}>PIN Lock</div>
+                <div className="muted small">Set a 4-digit PIN to lock NovaVista when you're away from your computer. Leave blank for no lock.</div>
+                <div className="g2 gap12">
+                  <div className="field">
+                    <div className="field-label">New PIN (4 digits, or blank)</div>
+                    <input id="acc-pin" type="password" maxLength={4} placeholder="••••" className="pin-input" style={{maxWidth:120}}/>
+                  </div>
+                </div>
+                <div className="row gap10">
+                  <button className="btn btn-red btn-lg" onClick={()=>{
+                    const n=document.getElementById("acc-name").value.trim();
+                    const d=document.getElementById("acc-dept").value.trim();
+                    const s=document.getElementById("acc-school").value.trim();
+                    const p=document.getElementById("acc-pin").value.trim();
+                    const r=document.getElementById("acc-role").value;
+                    if(!n){setError("Please enter your name.");return;}
+                    saveAccount(n,d,s,p,r);
+                    setPinUnlocked(true);
+                  }}>
+                    Save Profile
+                  </button>
+                  {teacherPin&&<button className="btn btn-ghost" onClick={()=>{
+                    setPinUnlocked(false);
+                    // Re-trigger lock screen
+                  }}>🔒 Lock Now</button>}
+                </div>
+              </div>
+
+              <div className="info-box">
+                🔒 Your profile, PIN, and all marking data are stored only in <strong>this browser on this device</strong>. Nothing is sent to any server. To move to another computer, use the School Sync folder feature.
+              </div>
+
+              {/* ── Licence section ── */}
+              <div className="card card-pad col gap16">
+                <div className="row-between">
+                  <div className="card-title" style={{marginBottom:0}}>Licence</div>
+                  {licenceStatus==="active"&&(
+                    <span className="licence-badge active">
+                      ✓ {licenceTier==="school"?"School":licenceTier==="department"?"Department":"Teacher"} Licence · expires {licenceExpiry}
+                    </span>
+                  )}
+                  {licenceStatus==="expired"&&<span className="licence-badge expired">⚠ Expired {licenceExpiry}</span>}
+                  {licenceStatus==="none"&&<span className="licence-badge trial" style={{background:"rgba(255,255,255,0.05)",color:"var(--text3)",border:"1px solid var(--border)"}}>No licence</span>}
+                </div>
+
+                {licenceStatus==="active"?(
+                  <div className="col gap10">
+                    <div className="inset" style={{padding:"14px 16px"}}>
+                      <div className="g2 gap12" style={{fontSize:"0.84rem"}}>
+                        <div className="row-between"><span className="dim">Tier</span><strong style={{color:"var(--text)",textTransform:"capitalize"}}>{licenceTier}</strong></div>
+                        <div className="row-between"><span className="dim">School code</span><strong style={{color:"var(--text)",fontFamily:"monospace"}}>{licenceSchool}</strong></div>
+                        <div className="row-between"><span className="dim">Expires</span><strong style={{color:"var(--text)"}}>{licenceExpiry}</strong></div>
+                        <div className="row-between"><span className="dim">School Sync</span><strong style={{color:syncUnlocked?"var(--green)":"var(--text3)"}}>{syncUnlocked?"✓ Unlocked":"Requires DEP or SCH tier"}</strong></div>
+                      </div>
+                    </div>
+                    <div className="row gap8">
+                      <button className="btn btn-ghost btn-sm" onClick={()=>{setLicenceKey("");setLicenceStatus("none");setLicenceTier("");setLicenceExpiry("");setLicenceSchool("");localStorage.removeItem("nv_licence");}}>
+                        <Ic d={I.trash} size={13}/> Remove Licence
+                      </button>
+                    </div>
+                  </div>
+                ):(
+                  <div className="col gap12">
+                    <div className="muted small">
+                      Enter your NovaVista licence key to unlock School Sync and combined school analysis. No internet connection required — the key is validated entirely on your device.
+                    </div>
+                    {licenceError&&<div className="error-box">{licenceError}</div>}
+                    <div className="licence-input-row">
+                      <input
+                        value={licenceInput}
+                        onChange={e=>{setLicenceInput(e.target.value.toUpperCase());setLicenceError("");}}
+                        placeholder="NV-SCH-2026-12-SCHOOL-XX"
+                        onKeyDown={e=>{if(e.key==="Enter")validateLicence(licenceInput);}}
+                      />
+                      <button className="btn btn-red" onClick={()=>validateLicence(licenceInput)} disabled={!licenceInput.trim()}>
+                        Activate
+                      </button>
+                    </div>
+                    <div className="dim small">Don't have a key? <a href="mailto:hello@novavista.ai" style={{color:"var(--blue)"}}>Contact us</a> or visit <a href="https://novavista.ai" target="_blank" style={{color:"var(--blue)"}}>novavista.ai</a> to purchase.</div>
+
+                    {/* Pricing tiers */}
+                    <div className="licence-tier-grid">
+                      {[
+                        {name:"Teacher", code:"TCH", price:"£49", period:"/year", features:["Individual teacher","All marking features","Class folders","AI Training","Quick Mark","Scan Mode"], cta:"Buy Teacher"},
+                        {name:"Department", code:"DEP", price:"£149", period:"/year", featured:true, features:["Up to 10 teachers","Everything in Teacher","School Sync unlocked","Department analysis","Combined Excel export","HOD dashboard"], cta:"Buy Department"},
+                        {name:"School", code:"SCH", price:"£349", period:"/year", features:["Unlimited teachers","Everything in Department","Whole-school analysis","SLT dashboard","Cross-dept heatmaps","Priority support"], cta:"Buy School"},
+                      ].map((t,i)=>(
+                        <div key={i} className={`licence-tier-card ${t.featured?"featured":""}`}>
+                          <div className="tier-name">{t.name}</div>
+                          <div className="tier-price">{t.price}</div>
+                          <div className="tier-period">{t.period}</div>
+                          {t.features.map((f,j)=>(
+                            <div key={j} className={`tier-feature ${j<2?"highlight":""}`}>{j<2?"✓ ":""}{f}</div>
+                          ))}
+                          <button className="btn btn-red btn-sm mt12" style={{width:"100%",justifyContent:"center",marginTop:12}}
+                            onClick={()=>window.open(`mailto:hello@novavista.ai?subject=${encodeURIComponent(t.cta+" Licence")}&body=${encodeURIComponent(`Hi,\n\nI'd like to purchase a ${t.name} licence for NovaVista.\n\nSchool name: ${teacherSchool||"[Your school]"}\n\nThanks`)}`)}>
+                            {t.cta} →
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Secret admin section — key generator (only visible if you know the URL) ── */}
+              {window.location.hash==="#admin-keygen"&&(
+                <div className="card card-pad col gap14" style={{borderColor:"rgba(163,131,250,0.3)",background:"rgba(163,131,250,0.04)"}}>
+                  <div className="card-title" style={{color:"var(--purple)"}}>🔑 Key Generator (Admin Only)</div>
+                  <div className="dim small">Generate licence keys to issue to schools. Visit <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>#admin-keygen</code> to access this panel.</div>
+                  <div className="g2 gap12">
+                    <div className="field"><div className="field-label">Tier</div>
+                      <select id="kg-tier"><option value="TCH">Teacher (TCH)</option><option value="DEP">Department (DEP)</option><option value="SCH">School (SCH)</option></select>
+                    </div>
+                    <div className="field"><div className="field-label">School code (no spaces, 8 chars max)</div>
+                      <input id="kg-school" placeholder="e.g. STMARY" style={{textTransform:"uppercase"}}/>
+                    </div>
+                    <div className="field"><div className="field-label">Expiry Year</div>
+                      <input id="kg-year" type="number" defaultValue={new Date().getFullYear()+1} min="2025" max="2040"/>
+                    </div>
+                    <div className="field"><div className="field-label">Expiry Month</div>
+                      <select id="kg-month">
+                        {["01","02","03","04","05","06","07","08","09","10","11","12"].map(m=><option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <button className="btn btn-ghost" style={{borderColor:"rgba(163,131,250,0.3)",color:"var(--purple)"}} onClick={()=>{
+                    const tier   = document.getElementById("kg-tier").value;
+                    const school = document.getElementById("kg-school").value.trim().toUpperCase().replace(/\s+/g,"").slice(0,8);
+                    const year   = document.getElementById("kg-year").value;
+                    const month  = document.getElementById("kg-month").value;
+                    if(!school){alert("Enter a school code.");return;}
+                    const key = generateKey(tier,year,month,school);
+                    navigator.clipboard.writeText(key).then(()=>alert(`Key copied to clipboard:\n\n${key}`)).catch(()=>alert(`Generated key:\n\n${key}`));
+                  }}>Generate & Copy Key</button>
+                  <div className="dim small">Share the generated key with the school. They enter it in the Account → Licence section. It validates offline — no server call needed.</div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ─────────────────────────
+            SCHOOL SYNC
+        ───────────────────────── */}
+        {tab==="school"&&(
+          <>
+            <div className="topbar">
+              <div className="page-header">
+                <div>
+                  <div className="page-title">School Sync</div>
+                  <div className="page-sub">Share marking data via a local folder — no internet, no database</div>
+                </div>
+                <div className="row gap8">
+                  {syncUnlocked&&<div className={`sync-status sync-${syncStatus}`} style={{padding:"8px 14px"}}>
+                    {syncStatus==="syncing"&&<span className="spinner-sm"/>}
+                    {syncStatus==="idle"   &&"📂 No folder connected"}
+                    {syncStatus==="syncing"&&" "+syncMsg}
+                    {syncStatus==="done"   &&"✓ "+syncMsg}
+                    {syncStatus==="error"  &&"✗ "+syncMsg}
+                  </div>}
+                </div>
+              </div>
+            </div>
+
+            {/* Locked gate */}
+            {!syncUnlocked?(
+              <div className="content">
+                <div className="card">
+                  <div className="licence-gate">
+                    <div className="licence-gate-icon">🔒</div>
+                    <div className="licence-gate-title">School Sync requires a licence</div>
+                    <div className="licence-gate-sub">
+                      School Sync lets teachers in a department share marking data via a local network folder — no internet or database required. It's unlocked with a <strong>Department</strong> or <strong>School</strong> licence.
+                    </div>
+                    {licenceStatus==="active"&&licenceTier==="teacher"&&(
+                      <div className="warn-box" style={{maxWidth:420}}>You have a Teacher licence. Upgrade to a Department or School licence to unlock School Sync.</div>
+                    )}
+                    {licenceStatus==="expired"&&(
+                      <div className="error-box" style={{maxWidth:420}}>Your licence expired {licenceExpiry}. Renew to re-enable School Sync.</div>
+                    )}
+                    <div className="licence-tier-grid" style={{maxWidth:560}}>
+                      {[
+                        {name:"Department", code:"DEP", price:"£149/yr", desc:"Up to 10 teachers, HOD dashboard"},
+                        {name:"School",     code:"SCH", price:"£349/yr", desc:"Unlimited teachers, SLT analytics"},
+                      ].map((t,i)=>(
+                        <div key={i} className={`licence-tier-card ${i===1?"featured":""}`}>
+                          <div className="tier-name">{t.name}</div>
+                          <div className="tier-price">{t.price.split("/")[0]}</div>
+                          <div className="tier-period">/{t.price.split("/")[1]}</div>
+                          <div className="tier-feature">{t.desc}</div>
+                          <button className="btn btn-red btn-sm" style={{width:"100%",marginTop:10}}
+                            onClick={()=>window.open(`mailto:hello@novavista.ai?subject=${encodeURIComponent("Buy "+t.name+" Licence")}&body=${encodeURIComponent(`Hi,\n\nI'd like a ${t.name} licence.\n\nSchool: ${teacherSchool||"[school]"}\n\nThanks`)}`)}>
+                            Buy {t.name} →
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button className="btn btn-ghost" onClick={()=>setTab("account")}>
+                      Enter licence key in Account tab →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="content col gap16">
+
+              {/* How it works */}
+              <div className="card card-pad col gap12">
+                <div className="card-title">How shared folders work</div>
+                <div className="col gap10">
+                  {[
+                    {n:1, title:"School creates one shared folder", desc:"IT department creates a folder on the school network drive, SharePoint, or OneDrive that all teachers can access. e.g. S:\\NovaVista\\ or OneDrive\\NovaVista\\"},
+                    {n:2, title:"Each teacher connects their copy of NovaVista", desc:"Every teacher clicks Connect School Folder and picks that shared folder. Chrome remembers the permission — they only need to do this once."},
+                    {n:3, title:"Marking saves automatically", desc:"After marking papers, clicking Sync saves your data as yourname.json in the shared folder. Only your own file — other teachers' data isn't visible to you."},
+                    {n:4, title:"HOD / Admin loads all files", desc:"The Head of Department or Admin opens School Sync, connects the same folder, and clicks Load All Teachers. NovaVista reads all .json files and builds the full school analysis."},
+                  ].map(s=>(
+                    <div key={s.n} className="sync-step-card">
+                      <div className="sync-step-num">{s.n}</div>
+                      <div className="sync-step-body">
+                        <div className="sync-step-title">{s.title}</div>
+                        <div className="sync-step-desc">{s.desc}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="warn-box mt4">Requires Chrome or Edge browser — the File System Access API is not available in Firefox or Safari.</div>
+              </div>
+
+              {/* Connection + sync */}
+              <div className="card card-pad col gap14">
+                <div className="card-title">Connect & Sync</div>
+                {!teacherName&&<div className="warn-box">Set up your profile in the Account tab first — your name is used as your file name.</div>}
+                <div className="row gap10 wrap">
+                  <button className="btn btn-blue" disabled={!teacherName} onClick={connectSchoolFolder}>
+                    <Ic d={I.folder} size={16}/> Connect School Folder
+                  </button>
+                  <button className="btn btn-green" disabled={!teacherName||!schoolFolderRef.current} onClick={()=>syncMyData()}>
+                    <Ic d={I.dl} size={16}/> Sync My Marking Now
+                  </button>
+                </div>
+                <div className="dim small">Once connected, your marking automatically saves whenever you save a result to a class folder. Click Sync to force an immediate update.</div>
+              </div>
+
+              {/* HOD/Admin — load all */}
+              {(teacherRole==="hod"||teacherRole==="admin")&&(
+                <div className="card card-pad col gap14" style={{borderColor:"rgba(245,200,66,0.25)"}}>
+                  <div className="row gap10">
+                    <div className="role-badge role-hod" style={{marginTop:0}}>{teacherRole==="admin"?"🏫 Admin":"👑 HOD"}</div>
+                    <div className="card-title" style={{marginBottom:0}}>Department / School Analysis</div>
+                  </div>
+
+                  <div className="row gap10 wrap">
+                    <button className="btn btn-gold" disabled={!schoolFolderRef.current} onClick={loadAllTeacherData}>
+                      <Ic d={I.users} size={16}/> Load All Teacher Files
+                    </button>
+                    {loadedTeachers.length>0&&(
+                      <button className="btn btn-green" onClick={exportSchoolExcel}>
+                        <Ic d={I.xlsx} size={16}/> Export School Excel
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Loaded teacher file list */}
+                  {loadedTeachers.length>0&&(
+                    <div className="col gap8">
+                      <div className="field-label">Files loaded ({loadedTeachers.length})</div>
+                      {loadedTeachers.map((td,i)=>(
+                        <div key={i} className="teacher-file-row">
+                          <span className="teacher-file-ok">✓</span>
+                          <strong style={{flex:1}}>{td.teacher?.name||"Unknown"}</strong>
+                          <span className="dim small">{td.teacher?.dept||""}</span>
+                          <span className="dim small">{Object.keys(td.classes||{}).length} paper{Object.keys(td.classes||{}).length!==1?"s":""} · {Object.values(td.classes||{}).reduce((s,p)=>s+(p.students||[]).length,0)} students</span>
+                          <span className="dim small">{td.lastSync?new Date(td.lastSync).toLocaleDateString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):""}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* School analysis dashboard */}
+                  {loadedTeachers.length>0&&(()=>{
+                    const analysis = buildSchoolAnalysis();
+                    if (!analysis) return null;
+                    return (
+                      <div className="col gap14">
+                        {/* Stats */}
+                        <div className="school-stat-grid">
+                          {[
+                            {num:analysis.totalTeachers, lbl:"Teachers", col:"var(--blue)"},
+                            {num:analysis.totalStudents, lbl:"Students marked", col:"var(--green)"},
+                            {num:Object.keys(analysis.papers).length, lbl:"Papers", col:"var(--gold)"},
+                            {num:analysis.totalDepts, lbl:"Departments", col:"var(--purple)"},
+                          ].map((s,i)=>(
+                            <div key={i} className="school-stat-card">
+                              <div className="school-stat-num" style={{color:s.col}}>{s.num}</div>
+                              <div className="school-stat-lbl">{s.lbl}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Department breakdown */}
+                        <div>
+                          <div className="field-label mb8">Department Breakdown</div>
+                          <div className="col gap8">
+                            {Object.values(analysis.depts).sort((a,b)=>b.avgPct-a.avgPct).map((d,i)=>(
+                              <div key={i} className="dept-row">
+                                <div className="dept-name">{d.name}</div>
+                                <div className="dim small">{d.students} students</div>
+                                <div className="dept-bar-wrap">
+                                  <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.72rem"}}>
+                                    <span className="dim">{d.papers} paper{d.papers!==1?"s":""}</span>
+                                    <span style={{fontWeight:700,color:pctColor(d.avgPct)}}>{d.avgPct}%</span>
+                                  </div>
+                                  <div className="dept-bar">
+                                    <div className="dept-bar-fill" style={{width:`${d.avgPct}%`,background:pctColor(d.avgPct)}}/>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Paper-by-paper heatmap */}
+                        <div>
+                          <div className="field-label mb8">Paper Results</div>
+                          <div className="topic-table-wrap">
+                            <table className="topic-table">
+                              <thead><tr>
+                                <th>Paper</th><th>Dept</th><th style={{textAlign:"center"}}>Students</th>
+                                <th style={{textAlign:"center"}}>Avg %</th><th style={{textAlign:"center"}}>Top</th><th style={{textAlign:"center"}}>Bottom</th>
+                              </tr></thead>
+                              <tbody>
+                                {Object.values(analysis.papers).sort((a,b)=>a.name.localeCompare(b.name)).map((paper,i)=>{
+                                  const pcts=paper.students.map(s=>s.results?.percentage||0);
+                                  const avg=pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):0;
+                                  const top=pcts.length?Math.max(...pcts):0;
+                                  const bot=pcts.length?Math.min(...pcts):0;
+                                  const heatClass=avg>=70?"heat-a":avg>=50?"heat-b":"heat-c";
+                                  return(
+                                    <tr key={i}>
+                                      <td><strong>{paper.name}</strong></td>
+                                      <td><span className="dim small">{paper.dept||"—"}</span></td>
+                                      <td style={{textAlign:"center"}}>{paper.students.length}</td>
+                                      <td style={{textAlign:"center"}}><div className={`heatmap-cell ${heatClass}`}>{avg}%</div></td>
+                                      <td style={{textAlign:"center",color:"var(--green)",fontWeight:700}}>{top}%</td>
+                                      <td style={{textAlign:"center",color:"var(--red)",fontWeight:700}}>{bot}%</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Regular teachers — only see their own sync status */}
+              {teacherRole==="teacher"&&(
+                <div className="info-box">
+                  Your marking data syncs to the shared folder. Your Head of Department or Admin can load the combined analysis from there. You can only see your own data — other teachers' files are not visible to you.
+                </div>
+              )}
+
+            </div>
+            )}
+          </>
+        )}
 
         {/* ─────────────────────────
             AI TRAINING
