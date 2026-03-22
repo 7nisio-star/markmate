@@ -1,16 +1,39 @@
 # NovaVista — Netlify Configuration
-# Upload this file alongside index.html
 
+# ── Main app files ──────────────────────────────────────────────────────────
 [[headers]]
   for = "/*"
   [headers.values]
-    # Allow camera and microphone access
     Permissions-Policy = "camera=*, microphone=*"
-
-    # Basic security headers (no CSP — would block Babel's in-browser JSX transform)
     X-Frame-Options = "SAMEORIGIN"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-
-    # Allow cross-origin isolation needed for some browser APIs
     Cross-Origin-Opener-Policy = "same-origin-allow-popups"
+
+# ── Service worker — must not be cached by browser ──────────────────────────
+[[headers]]
+  for = "/service-worker.js"
+  [headers.values]
+    Content-Type = "application/javascript"
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Pragma = "no-cache"
+    Expires = "0"
+
+# ── Manifest ─────────────────────────────────────────────────────────────────
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Content-Type = "application/manifest+json"
+    Cache-Control = "no-cache"
+
+# ── Icons — long cache ────────────────────────────────────────────────────────
+[[headers]]
+  for = "/icons/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# ── Main HTML — always fresh ──────────────────────────────────────────────────
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
