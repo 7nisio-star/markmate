@@ -274,7 +274,7 @@ body {
 
   .main { margin-left: 0; }
   .topbar { padding: 16px 20px 0; }
-  .content { padding: 0 20px 48px; }
+  .content { padding: 0 20px 68px; }
   .page-header { max-width: 100%; padding-left: 0; }
 
   /* Sidebar slides in from left */
@@ -313,7 +313,7 @@ body {
 
   .main { margin-left: 0; }
   .topbar { padding: 12px 16px 0; }
-  .content { padding: 0 16px 40px; }
+  .content { padding: 0 16px 64px; }
   .page-header {
     padding-top: 52px;
     flex-direction: column;
@@ -377,7 +377,7 @@ body {
    RESPONSIVE — SMALL MOBILE (≤400px)
 ═══════════════════════════════════════════════════════════ */
 @media (max-width: 400px) {
-  .content { padding: 0 12px 32px; }
+  .content { padding: 0 12px 60px; }
   .pin-pad { grid-template-columns: repeat(3, 70px); }
   .pin-key { width: 70px; height: 70px; font-size: 1.2rem; }
   .g3 { grid-template-columns: 1fr; }
@@ -412,7 +412,7 @@ body {
   font-weight: 400;
 }
 .content {
-  padding: 0 28px 56px;
+  padding: 0 28px 80px;
   width: 100%;
 }
 
@@ -1804,6 +1804,107 @@ input::placeholder, textarea::placeholder { color: var(--text4); }
 .annot-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
 /* ═══════════════════════════════════════════════════════════
+   REVIEW & MANUAL ASSIST
+═══════════════════════════════════════════════════════════ */
+.review-mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.review-mode-card {
+  border: 2px solid var(--border-md);
+  border-radius: var(--radius-lg);
+  padding: 20px 18px;
+  cursor: pointer;
+  transition: all 0.18s;
+  background: var(--card);
+  position: relative;
+  user-select: none;
+}
+.review-mode-card:hover { border-color: var(--blue); background: var(--blue-dim); }
+.review-mode-card.selected-green { border-color: var(--green); background: var(--green-dim); }
+.review-mode-card.selected-blue  { border-color: var(--blue);  background: var(--blue-dim); }
+.review-mode-icon  { font-size: 1.8rem; margin-bottom: 10px; }
+.review-mode-title { font-size: 0.95rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.review-mode-desc  { font-size: 0.78rem; color: var(--text3); line-height: 1.55; }
+
+/* Uncertain question card (manual assist) */
+.uncertain-card {
+  background: var(--card);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.uncertain-header {
+  padding: 11px 14px;
+  background: var(--inset);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.uncertain-badge {
+  font-size: 0.68rem; font-weight: 700; padding: 2px 8px;
+  border-radius: 99px; letter-spacing: 0.5px;
+  background: var(--gold-dim); color: var(--gold);
+  border: 1px solid rgba(245,200,66,0.25);
+}
+.uncertain-body { padding: 13px 14px; display: flex; flex-direction: column; gap: 9px; }
+.uncertain-ocr {
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 0.82rem; color: var(--text2);
+  font-style: italic; line-height: 1.5;
+}
+.uncertain-ocr-label {
+  font-size: 0.65rem; font-weight: 700; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;
+}
+
+/* Per-question override in results */
+.q-row { position: relative; }
+.q-override-btn {
+  position: absolute; top: 10px; right: 10px;
+  background: transparent; border: 1px solid var(--border-md);
+  border-radius: var(--radius-sm); color: var(--text3);
+  font-size: 0.7rem; font-weight: 600; padding: 3px 8px;
+  cursor: pointer; transition: all 0.15s; font-family: 'Inter', sans-serif;
+}
+.q-override-btn:hover { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); }
+.q-override-panel {
+  background: var(--inset);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 8px;
+  margin-top: 6px;
+  animation: fadeUp 0.18s ease;
+}
+.q-override-panel .row { flex-wrap: wrap; }
+.q-mark-input {
+  width: 64px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 6px 8px;
+}
+
+/* Stitched preview in review screen */
+.stitched-preview {
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border-md);
+  background: var(--inset);
+  max-height: 420px;
+  overflow-y: auto;
+}
+.stitched-preview img {
+  display: block;
+  width: 100%;
+}
+
+/* ═══════════════════════════════════════════════════════════
    UTILITY
 ═══════════════════════════════════════════════════════════ */
 .sep { height: 1px; background: var(--border); margin: 14px 0; }
@@ -1978,7 +2079,13 @@ const I = {
 
 /* ── Helpers ───────────────────────────────────────────── */
 function rrect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();}
-const parseJSON = t=>JSON.parse(t.replace(/```json|```/g,"").trim());
+const parseJSON = t => {
+  const s = t.replace(/```json\s*/gi,"").replace(/```\s*/g,"").trim();
+  const first = Math.min(...['[','{'].map(c=>s.indexOf(c)<0?Infinity:s.indexOf(c)));
+  const last  = Math.max(s.lastIndexOf('}'), s.lastIndexOf(']'));
+  if(first===Infinity||last===-1) throw new Error("No JSON found in response");
+  return JSON.parse(s.slice(first,last+1));
+};
 const pctColor  = p=>p>=70?"var(--green)":p>=50?"var(--gold)":"var(--red)";
 const initials  = n=>n.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2);
 function escHtml(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
@@ -1986,6 +2093,83 @@ function getAllQIds(students){const ids=new Set();students.forEach(st=>(st.resul
 
 /* ── Main component ────────────────────────────────────── */
 const STABLE_NEEDED = 1400; // ms still before auto-capture triggers
+/* ── SchoolAnalysis: extracted to avoid IIFE brace issues ── */
+function SchoolAnalysis({ analysis, pctColor }) {
+  if (!analysis) return null;
+  return (
+    <div className="col gap14">
+      <div className="school-stat-grid">
+        {[
+          {num:analysis.totalTeachers, lbl:"Teachers", col:"var(--blue)"},
+          {num:analysis.totalStudents, lbl:"Students marked", col:"var(--green)"},
+          {num:Object.keys(analysis.papers).length, lbl:"Papers", col:"var(--gold)"},
+          {num:analysis.totalDepts, lbl:"Departments", col:"var(--purple)"},
+        ].map((s,i)=>(
+          <div key={i} className="school-stat-card">
+            <div className="school-stat-num" style={{color:s.col}}>{s.num}</div>
+            <div className="school-stat-lbl">{s.lbl}</div>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <div className="field-label mb8">Department Breakdown</div>
+        <div className="col gap8">
+          {Object.values(analysis.depts).sort((a,b)=>b.avgPct-a.avgPct).map((d,i)=>(
+            <div key={i} className="dept-row">
+              <div className="dept-name">{d.name}</div>
+              <div className="dim small">{d.students} students</div>
+              <div className="dept-bar-wrap">
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.72rem"}}>
+                  <span className="dim">{d.papers} paper{d.papers!==1?"s":""}</span>
+                  <span style={{fontWeight:700,color:pctColor(d.avgPct)}}>{d.avgPct}%</span>
+                </div>
+                <div className="dept-bar">
+                  <div className="dept-bar-fill" style={{width:`${d.avgPct}%`,background:pctColor(d.avgPct)}}/>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="field-label mb8">Paper Results</div>
+        <div className="topic-table-wrap">
+          <table className="topic-table">
+            <thead><tr>
+              <th>Paper</th><th>Dept</th>
+              <th style={{textAlign:"center"}}>Students</th>
+              <th style={{textAlign:"center"}}>Avg %</th>
+              <th style={{textAlign:"center"}}>Top</th>
+              <th style={{textAlign:"center"}}>Bottom</th>
+            </tr></thead>
+            <tbody>
+              {Object.values(analysis.papers).sort((a,b)=>a.name.localeCompare(b.name)).map((paper,i)=>{
+                const pcts=paper.students.map(s=>s.results?.percentage||0);
+                const avg=pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):0;
+                const top=pcts.length?Math.max(...pcts):0;
+                const bot=pcts.length?Math.min(...pcts):0;
+                const heatClass=avg>=70?"heat-a":avg>=50?"heat-b":"heat-c";
+                return (
+                  <tr key={i}>
+                    <td><strong>{paper.name}</strong></td>
+                    <td><span className="dim small">{paper.dept||"—"}</span></td>
+                    <td style={{textAlign:"center"}}>{paper.students.length}</td>
+                    <td style={{textAlign:"center"}}><div className={`heatmap-cell ${heatClass}`}>{avg}%</div></td>
+                    <td style={{textAlign:"center",color:"var(--green)",fontWeight:700}}>{top}%</td>
+                    <td style={{textAlign:"center",color:"var(--red)",fontWeight:700}}>{bot}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NovaVista() {
   /* state */
   const [apiKey,setApiKey]     = useState("");
@@ -2002,6 +2186,13 @@ function NovaVista() {
   const [marking,setMarking]   = useState(false);
   const [markingStep,setMarkingStep] = useState("");
   const [results,setResults]   = useState(null);
+
+  // Review / manual assist state
+  const [stitchedImage,setStitchedImage]       = useState(null);  // base64 of joined pages
+  const [reviewMode,setReviewMode]             = useState(null);  // null | "review" | "manual"
+  const [uncertainQs,setUncertainQs]           = useState([]);    // questions AI couldn't read
+  const [manualAnswers,setManualAnswers]        = useState({});    // {id: answerText}
+  const [overridingQ,setOverridingQ]           = useState(null);  // question id being overridden
   const [qmMode,setQmMode]     = useState("image");
   const [qmImageB64,setQmImageB64] = useState(null);
   const [qmImageURL,setQmImageURL] = useState(null);
@@ -2162,16 +2353,35 @@ function NovaVista() {
 
   useEffect(() => {
     try {
-      // Save classes WITHOUT image data (too large for localStorage)
+      // Save classes — strip only raw image blobs (too large), keep feedbackHTML (text only)
       const slim = {};
       Object.entries(classes).forEach(([k,v]) => {
         slim[k] = { ...v, students: (v.students||[]).map(st => ({
           id:st.id, name:st.name, timestamp:st.timestamp, results:st.results,
-          hasFeedback:!!st.feedbackHTML, hasMarkedImage:!!st.markedImage
+          feedbackHTML: st.feedbackHTML || null,  // keep HTML — it's text, not a blob
+          hasFeedback:!!st.feedbackHTML,
+          hasMarkedImage:!!st.markedImage,
+          hasOriginalImage:!!st.originalImage,
+          // Strip base64 images — too large for localStorage
+          markedImage: null,
+          originalImage: null,
         }))};
       });
       localStorage.setItem("nv_classes", JSON.stringify(slim));
-    } catch {}
+    } catch(e) {
+      // If quota exceeded, try saving without feedbackHTML
+      try {
+        const slim = {};
+        Object.entries(classes).forEach(([k,v]) => {
+          slim[k] = { ...v, students: (v.students||[]).map(st => ({
+            id:st.id, name:st.name, timestamp:st.timestamp, results:st.results,
+            hasFeedback:!!st.feedbackHTML, hasMarkedImage:!!st.markedImage,
+            markedImage:null, originalImage:null, feedbackHTML:null,
+          }))};
+        });
+        localStorage.setItem("nv_classes", JSON.stringify(slim));
+      } catch {}
+    }
   }, [classes]);
 
   useEffect(() => {
@@ -2281,8 +2491,9 @@ function NovaVista() {
   }, []);
 
   // Convenience: is School Sync unlocked?
-  const syncUnlocked = licenceStatus === "active" && (licenceTier==="department"||licenceTier==="school");
-  const anyLicence   = licenceStatus === "active";
+  // DEMO MODE — licence checks disabled
+  const syncUnlocked = true;
+  const anyLicence   = true;
 
   // ── Generate a licence key (admin/you only — for issuing to schools) ──────
   const generateKey = useCallback((tier, year, month, school) => {
@@ -2546,7 +2757,7 @@ function NovaVista() {
     const date=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
     const pct=qmResult.percentage||0;
     const gc=pct>=70?"#3dd68c":pct>=50?"#f5c842":"#e8473f";
-    const feedbackHTML=`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(qmSaveStudent)} — ${escHtml(qmSavePaper)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:720px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:28px;margin-bottom:24px}.hdr h1{font-size:1.5rem;margin:0 0 4px}.sub{opacity:.65;font-size:.85rem}.scores{display:flex;gap:14px;margin-top:16px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:10px 16px;text-align:center}.sbig{font-size:1.8rem;font-weight:700}.slbl{font-size:.65rem;text-transform:uppercase;letter-spacing:1px;opacity:.6}.gp{padding:4px 14px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1rem;margin:20px 0 8px;border-bottom:2px solid #e8e8f0;padding-bottom:6px}.bk{background:white;border-radius:8px;padding:12px;margin-bottom:6px;border-left:4px solid}.bk.c{border-left-color:#3dd68c}.bk.w{border-left-color:#e8473f;background:#fff8f8}.bk.p{border-left-color:#f5c842}.bkh{display:flex;justify-content:space-between;margin-bottom:4px}.code{font-size:.72rem;font-weight:700;letter-spacing:1px;padding:2px 8px;border-radius:99px}.code-c{background:#e8fdf2;color:#3dd68c}.code-w{background:#fde8e8;color:#e8473f}.pt{font-size:.84rem;margin-bottom:3px}.cm{font-size:.8rem;color:#666;font-style:italic}.fb{background:white;border:1px solid #e0e0ef;border-radius:8px;padding:14px;font-size:.85rem;line-height:1.7;color:#444}.qbox{background:#f0f0f8;border-radius:8px;padding:12px;font-size:.84rem;margin-bottom:14px}.footer{text-align:center;font-size:.7rem;color:#bbb;margin-top:24px;padding-top:12px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>${escHtml(qmSavePaper)}</h1><p class="sub">Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${qmResult.marksAwarded}${qmResult.marksAvailable!=null?"/"+qmResult.marksAvailable:""}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Score</div></div><div class="sbox"><div class="gp">${pct>=70?"A":pct>=60?"B":pct>=50?"C":pct>=40?"D":"F"}</div></div></div></div><p>Hello <strong>${escHtml(qmSaveStudent)}</strong>, here is your detailed feedback for this question.</p>${qmQuestion?`<div class="qbox"><strong>Question:</strong> ${escHtml(qmQuestion)}</div>`:""}<h2>Mark Scheme Breakdown</h2>${(qmResult.breakdown||[]).map(pt=>`<div class="bk ${pt.awarded?"c":"w"}"><div class="bkh"><span class="pt"><strong>${escHtml(pt.point)}</strong></span><span class="code ${pt.awarded?"code-c":"code-w"}">${pt.code||""} ${pt.awarded?"✓":"✗"}</span></div>${pt.comment?`<div class="cm">${escHtml(pt.comment)}</div>`:""}</div>`).join("")}<h2>Feedback</h2><div class="fb">${escHtml(qmResult.feedback)}</div>${(qmResult.misconceptions||[]).length?`<h2>Misconceptions</h2><ul>${qmResult.misconceptions.map(m=>`<li>${escHtml(m)}</li>`).join("")}</ul>`:""}<div class="footer">Generated by NovaVista AI · ${date}</div></div></body></html>`;
+    const feedbackHTML=`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(qmSaveStudent)} — ${escHtml(qmSavePaper)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:720px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:28px;margin-bottom:24px}.hdr h1{font-size:1.5rem;margin:0 0 4px}.sub{opacity:.65;font-size:.85rem}.scores{display:flex;gap:14px;margin-top:16px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:10px 16px;text-align:center}.sbig{font-size:1.8rem;font-weight:700}.slbl{font-size:.65rem;text-transform:uppercase;letter-spacing:1px;opacity:.6}.gp{padding:4px 14px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1rem;margin:20px 0 8px;border-bottom:2px solid #e8e8f0;padding-bottom:6px}.bk{background:white;border-radius:8px;padding:12px;margin-bottom:6px;border-left:4px solid}.bk.c{border-left-color:#3dd68c}.bk.w{border-left-color:#e8473f;background:#fff8f8}.bk.p{border-left-color:#f5c842}.bkh{display:flex;justify-content:space-between;margin-bottom:4px}.code{font-size:.72rem;font-weight:700;letter-spacing:1px;padding:2px 8px;border-radius:99px}.code-c{background:#e8fdf2;color:#3dd68c}.code-w{background:#fde8e8;color:#e8473f}.pt{font-size:.84rem;margin-bottom:3px}.cm{font-size:.8rem;color:#666;font-style:italic}.fb{background:white;border:1px solid #e0e0ef;border-radius:8px;padding:14px;font-size:.85rem;line-height:1.7;color:#444}.qbox{background:#f0f0f8;border-radius:8px;padding:12px;font-size:.84rem;margin-bottom:14px}.footer{text-align:center;font-size:.7rem;color:#bbb;margin-top:24px;padding-top:12px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>${escHtml(qmSavePaper)}</h1><p class="sub">Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${qmResult.marksAwarded}${qmResult.marksAvailable!=null?"/"+qmResult.marksAvailable:""}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Score</div></div><div class="sbox"><div class="gp">${pct>=70?"A":pct>=60?"B":pct>=50?"C":pct>=40?"D":"F"}</div></div></div></div><p>Hello <strong>${escHtml(qmSaveStudent)}</strong>, here is your detailed feedback for this question.</p>${qmQuestion?`<div class="qbox"><strong>Question:</strong> ${escHtml(qmQuestion)}</div>`:""}<h2>Mark Scheme Breakdown</h2>${(qmResult.breakdown||[]).map(pt=>`<div class="bk ${pt.awarded?"c":"w"}"><div class="bkh"><span class="pt"><strong>${escHtml(pt.point)}</strong></span><span class="code ${pt.awarded?"code-c":"code-w"}">${pt.code||""} ${pt.awarded?"✓":"✗"}</span></div>${pt.comment?`<div class="cm">${escHtml(pt.comment)}</div>`:""}</div>`).join("")}<h2>Feedback</h2><div class="fb">${escHtml(qmResult.feedback)}</div>${(qmResult.misconceptions||[]).length?`<h2>Misconceptions</h2><ul>${qmResult.misconceptions.map(m=>`<li>${escHtml(m)}</li>`).join("")}</ul>`:""}<div class="footer">© DMA 2026 · NovaVista AI Paper Marking · ${date}</div></div></body></html>`;
 
     const rec={
       id:Date.now(), name:qmSaveStudent.trim(),
@@ -2669,9 +2880,14 @@ function NovaVista() {
   }, [autoActive, autoScanTick]);
 
   const startAutoScan = useCallback(async () => {
-    if (!cameraActive) await startCamera();
+    // Access streamRef directly to avoid stale cameraActive closure
+    if (!streamRef.current) {
+      await startCamera();
+      // Wait briefly for camera to initialise before starting auto-scan
+      await new Promise(r => setTimeout(r, 400));
+    }
     setAutoActive(true);
-  }, [cameraActive]);
+  }, [startCamera]);
 
   const stopAutoScan = useCallback(() => {
     setAutoActive(false);
@@ -2696,13 +2912,14 @@ function NovaVista() {
   },[callAPI]);
 
   /* ── class helpers ── */
+  // getMarkedImg only uses a ref (annotRef) so empty dep array is correct
   const getMarkedImg=useCallback(()=>annotRef.current?annotRef.current.toDataURL("image/jpeg",0.92):null,[]);
 
   const genFeedbackHTML=useCallback((sName,pName,res)=>{
     const date=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
     const pct=res.percentage??0,gc=res.grade==="A"?"#3dd68c":res.grade==="B"?"#f5c842":res.grade==="C"?"#f0956b":"#e8473f";
     const wrongs=(res.questions||[]).filter(q=>!q.correct);
-    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${wrongs.length?`<h2>🎯 What You Need to Do</h2><div class="todo"><h3>Focus on these areas:</h3>${wrongs.map(q=>`<div class="tdi">• <strong>${escHtml(q.id||'')}:</strong> ${escHtml(q.feedback||'')}</div>`).join("")}</div>`:""}${(res.improvements||[]).length?`<div style="margin-top:10px">${res.improvements.map(s=>`<span class="tag tr">${escHtml(s)}</span>`).join("")}</div>`:""}<div class="footer">Generated by NovaVista AI · ${date}</div></div></body></html>`;
+    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${wrongs.length?`<h2>🎯 What You Need to Do</h2><div class="todo"><h3>Focus on these areas:</h3>${wrongs.map(q=>`<div class="tdi">• <strong>${escHtml(q.id||'')}:</strong> ${escHtml(q.feedback||'')}</div>`).join("")}</div>`:""}${(res.improvements||[]).length?`<div style="margin-top:10px">${res.improvements.map(s=>`<span class="tag tr">${escHtml(s)}</span>`).join("")}</div>`:""}<div class="footer">© DMA 2026 · NovaVista AI Paper Marking · ${date}</div></div></body></html>`;
   },[]);
 
   const genCollectiveHTML=useCallback((paper)=>{
@@ -2710,22 +2927,62 @@ function NovaVista() {
     const sts=paper.students||[],avgPct=sts.length?Math.round(sts.reduce((s,st)=>s+(st.results.percentage||0),0)/sts.length):0;
     const sorted=[...sts].sort((a,b)=>(b.results.percentage||0)-(a.results.percentage||0));
     const qIds=getAllQIds(sts);
-    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Class Summary — ${escHtml(paper.name)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:960px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;margin:0;font-size:.9rem}.stats{display:flex;gap:14px;margin-top:18px;flex-wrap:wrap}.stat{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 18px;text-align:center}.stat-big{font-size:1.8rem;font-weight:700}.stat-lbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}table{width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-top:12px}th{padding:10px 12px;text-align:left;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888;border-bottom:2px solid #e8e8f0;white-space:nowrap}td{padding:10px 12px;border-bottom:1px solid #f0f0f8;font-size:.84rem}tr:last-child td{border:none}tr:hover td{background:#fafafa}.bar{height:5px;background:#e8e8f0;border-radius:3px;margin-top:3px}.barf{height:100%;border-radius:3px}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📊 ${escHtml(paper.name)}</h1><p>Class Summary Report — ${date}</p><div class="stats"><div class="stat"><div class="stat-big">${sts.length}</div><div class="stat-lbl">Students</div></div><div class="stat"><div class="stat-big">${avgPct}%</div><div class="stat-lbl">Class Average</div></div><div class="stat"><div class="stat-big">${sorted[0]?(sorted[0].results.percentage||0)+"%":"—"}</div><div class="stat-lbl">Top Score</div></div></div></div><h2>Class Results</h2><table><thead><tr><th>Student</th><th>Score</th><th>%</th><th>Grade</th>${qIds.map(id=>`<th>${escHtml(id)}</th>`).join("")}</tr></thead><tbody>${sorted.map(st=>{const qMap={};(st.results.questions||[]).forEach(q=>{qMap[q.id]=q;});const pct=st.results.percentage||0,col=pct>=70?"#3dd68c":pct>=50?"#f5c842":"#e8473f";return`<tr><td><strong>${escHtml(st.name)}</strong></td><td>${st.results.totalScore??'—'}/${st.results.maxScore??'?'}</td><td><div style="font-weight:700;color:${col}">${pct}%</div><div class="bar"><div class="barf" style="width:${pct}%;background:${col}"></div></div></td><td style="font-weight:700;color:${col}">${st.results.grade??'—'}</td>${qIds.map(id=>{const q=qMap[id];if(!q)return`<td style="color:#ccc">—</td>`;const c=q.correct?"#3dd68c":q.marksAwarded>0?"#f5c842":"#e8473f";return`<td style="color:${c};font-weight:700;text-align:center">${q.marksAwarded}/${q.marksAvailable}</td>`;}).join("")}</tr>`;}).join("")}</tbody></table><div class="footer">Generated by NovaVista AI · ${date}</div></div></body></html>`;
+    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Class Summary — ${escHtml(paper.name)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:960px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;margin:0;font-size:.9rem}.stats{display:flex;gap:14px;margin-top:18px;flex-wrap:wrap}.stat{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 18px;text-align:center}.stat-big{font-size:1.8rem;font-weight:700}.stat-lbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}table{width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-top:12px}th{padding:10px 12px;text-align:left;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888;border-bottom:2px solid #e8e8f0;white-space:nowrap}td{padding:10px 12px;border-bottom:1px solid #f0f0f8;font-size:.84rem}tr:last-child td{border:none}tr:hover td{background:#fafafa}.bar{height:5px;background:#e8e8f0;border-radius:3px;margin-top:3px}.barf{height:100%;border-radius:3px}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📊 ${escHtml(paper.name)}</h1><p>Class Summary Report — ${date}</p><div class="stats"><div class="stat"><div class="stat-big">${sts.length}</div><div class="stat-lbl">Students</div></div><div class="stat"><div class="stat-big">${avgPct}%</div><div class="stat-lbl">Class Average</div></div><div class="stat"><div class="stat-big">${sorted[0]?(sorted[0].results.percentage||0)+"%":"—"}</div><div class="stat-lbl">Top Score</div></div></div></div><h2>Class Results</h2><table><thead><tr><th>Student</th><th>Score</th><th>%</th><th>Grade</th>${qIds.map(id=>`<th>${escHtml(id)}</th>`).join("")}</tr></thead><tbody>${sorted.map(st=>{const qMap={};(st.results.questions||[]).forEach(q=>{qMap[q.id]=q;});const pct=st.results.percentage||0,col=pct>=70?"#3dd68c":pct>=50?"#f5c842":"#e8473f";return`<tr><td><strong>${escHtml(st.name)}</strong></td><td>${st.results.totalScore??'—'}/${st.results.maxScore??'?'}</td><td><div style="font-weight:700;color:${col}">${pct}%</div><div class="bar"><div class="barf" style="width:${pct}%;background:${col}"></div></div></td><td style="font-weight:700;color:${col}">${st.results.grade??'—'}</td>${qIds.map(id=>{const q=qMap[id];if(!q)return`<td style="color:#ccc">—</td>`;const c=q.correct?"#3dd68c":q.marksAwarded>0?"#f5c842":"#e8473f";return`<td style="color:${c};font-weight:700;text-align:center">${q.marksAwarded}/${q.marksAvailable}</td>`;}).join("")}</tr>`;}).join("")}</tbody></table><div class="footer">© DMA 2026 · NovaVista AI Paper Marking · ${date}</div></div></body></html>`;
   },[]);
 
   const saveStudentToClass=useCallback(()=>{
     if(!savePaperName.trim()||!saveStudentName.trim()||!results)return;
     const pid=savePaperName.trim().toLowerCase().replace(/\s+/g,"-");
     const markedImg=getMarkedImg();
-    const rec={id:Date.now(),name:saveStudentName.trim(),timestamp:new Date().toISOString(),originalImage:results.image,markedImage:markedImg,results,feedbackHTML:genFeedbackHTML(saveStudentName.trim(),savePaperName.trim(),results)};
-    setClasses(prev=>({...prev,[pid]:{name:savePaperName.trim(),subject:subject||"",date:new Date().toLocaleDateString("en-GB"),students:[...(prev[pid]?.students||[]).filter(s=>s.name!==saveStudentName.trim()),rec]}}));
-    setShowSaveModal(false);setSavePaperName("");setSaveStudentName("");setExpandedPaper(pid);setTab("classes");
+    // Always generate fresh feedbackHTML from results
+    const feedbackHTML=genFeedbackHTML(saveStudentName.trim(),savePaperName.trim(),results);
+    const rec={
+      id:Date.now(), name:saveStudentName.trim(),
+      timestamp:new Date().toISOString(),
+      originalImage:results.image||null,
+      markedImage:markedImg||null,
+      results,
+      feedbackHTML,
+    };
+    setClasses(prev=>({...prev,[pid]:{
+      name:savePaperName.trim(), subject:subject||"",
+      date:new Date().toLocaleDateString("en-GB"),
+      students:[...(prev[pid]?.students||[]).filter(s=>s.name!==saveStudentName.trim()),rec]
+    }}));
+    setShowSaveModal(false);setSavePaperName("");setSaveStudentName("");
+    setExpandedPaper(pid);setTab("classes");
   },[savePaperName,saveStudentName,results,subject,getMarkedImg,genFeedbackHTML]);
 
   const exportToExcel=useCallback((paper)=>{
-    const sts=paper.students||[],qIds=getAllQIds(sts);
-    const rows=sts.map(st=>{const qMap={};(st.results.questions||[]).forEach(q=>{qMap[q.id]=q;});const row={"Student Name":st.name,"Total Score":st.results.totalScore??"","Max Score":st.results.maxScore??"","Percentage %":st.results.percentage??""," Grade":st.results.grade??""};qIds.forEach(id=>{const q=qMap[id];row[`${id} Marks`]=q?`${q.marksAwarded}/${q.marksAvailable}`:"—";row[`${id} Topic`]=q?(q.description||""):"";});row["Strengths"]=(st.results.strengths||[]).join("; ");row["Improvements"]=(st.results.improvements||[]).join("; ");row["Overall Feedback"]=st.results.overallFeedback||"";return row;});
-    const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Results");ws["!cols"]=Object.keys(rows[0]||{}).map(k=>({wch:Math.max(k.length,16)}));XLSX.writeFile(wb,`${paper.name.replace(/\s+/g,"_")}_Results.xlsx`);
+    const sts=paper.students||[];
+    if(!sts.length){setError("No students in this folder to export.");return;}
+    const qIds=getAllQIds(sts);
+    const rows=sts.map(st=>{
+      const res=st.results||{};
+      const qMap={};(res.questions||[]).forEach(q=>{qMap[q.id]=q;});
+      const row={
+        "Student Name":st.name,
+        "Total Score":res.totalScore??"",
+        "Max Score":res.maxScore??"",
+        "Percentage %":res.percentage??"",
+        "Grade":res.grade??"",
+      };
+      qIds.forEach(id=>{
+        const q=qMap[id];
+        row[`${id} Marks`]=q?`${q.marksAwarded}/${q.marksAvailable}`:"—";
+        row[`${id} Feedback`]=q?(q.feedback||""):"";
+      });
+      row["Strengths"]=(res.strengths||[]).join("; ");
+      row["Improvements"]=(res.improvements||[]).join("; ");
+      row["Overall Feedback"]=res.overallFeedback||"";
+      return row;
+    });
+    try{
+      const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,ws,"Results");
+      ws["!cols"]=Object.keys(rows[0]||{}).map(k=>({wch:Math.max(k.length,18)}));
+      XLSX.writeFile(wb,`${paper.name.replace(/\s+/g,"_")}_Results.xlsx`);
+    }catch(e){setError("Export failed: "+e.message);}
   },[]);
 
   const saveToFolder=useCallback(async(paper)=>{
@@ -2734,22 +2991,96 @@ function NovaVista() {
     try{
       const rootDir=await window.showDirectoryPicker({mode:"readwrite"});
       const paperDir=await rootDir.getDirectoryHandle(paper.name,{create:true});
-      const writeF=async(dir,name,content,isImg=false)=>{const fh=await dir.getFileHandle(name,{create:true});const w=await fh.createWritable();if(isImg){const b=await(await fetch(content)).blob();await w.write(b);}else{await w.write(new Blob([content],{type:"text/html"}));}await w.close();};
-      for(const st of paper.students){setSavingStep(`Saving ${st.name}…`);const sd=await paperDir.getDirectoryHandle(st.name,{create:true});if(st.originalImage)await writeF(sd,"original_scan.jpg",st.originalImage,true);if(st.markedImage)await writeF(sd,"marked_paper.jpg",st.markedImage,true);if(st.feedbackHTML)await writeF(sd,"personalised_feedback.html",st.feedbackHTML);}
+
+      const writeText=async(dir,name,content)=>{
+        const fh=await dir.getFileHandle(name,{create:true});
+        const w=await fh.createWritable();
+        await w.write(new Blob([content],{type:"text/html"}));
+        await w.close();
+      };
+      const writeImg=async(dir,name,dataUrl)=>{
+        if(!dataUrl)return; // skip if image not available
+        const res=await fetch(dataUrl);
+        const blob=await res.blob();
+        const fh=await dir.getFileHandle(name,{create:true});
+        const w=await fh.createWritable();
+        await w.write(blob);
+        await w.close();
+      };
+
+      for(const st of paper.students){
+        setSavingStep(`Saving ${st.name}…`);
+        const sd=await paperDir.getDirectoryHandle(st.name.replace(/[/\\:*?"<>|]/g,"_"),{create:true});
+        // Images only available in-session — save if present
+        if(st.originalImage) await writeImg(sd,"original_scan.jpg",st.originalImage);
+        if(st.markedImage)   await writeImg(sd,"marked_paper.jpg",st.markedImage);
+        // Feedback HTML — use stored or regenerate
+        const html=st.feedbackHTML || genFeedbackHTML(st.name,paper.name,st.results);
+        if(html) await writeText(sd,"personalised_feedback.html",html);
+      }
+
       setSavingStep("Writing class summary…");
       const sumDir=await paperDir.getDirectoryHandle("_Class Summary",{create:true});
-      await writeF(sumDir,"collective_feedback.html",genCollectiveHTML(paper));
+      await writeText(sumDir,"collective_feedback.html",genCollectiveHTML(paper));
+
       setSavingStep("Exporting Excel…");
       const sts=paper.students||[],qIds=getAllQIds(sts);
-      const rows=sts.map(st=>{const qMap={};(st.results.questions||[]).forEach(q=>{qMap[q.id]=q;});const row={"Student Name":st.name,"Total Score":st.results.totalScore??"","Max Score":st.results.maxScore??"","Percentage":st.results.percentage??"","Grade":st.results.grade??""};qIds.forEach(id=>{const q=qMap[id];row[`${id} Marks`]=q?`${q.marksAwarded}/${q.marksAvailable}`:"—";row[`${id} Topic`]=q?(q.description||""):"";});return row;});
-      const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Results");const buf=XLSX.write(wb,{type:"array",bookType:"xlsx"});const xfh=await sumDir.getFileHandle("class_results.xlsx",{create:true});const xw=await xfh.createWritable();await xw.write(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));await xw.close();
-      setSavingStep("✓ Everything saved!");setTimeout(()=>setSavingStep(""),3500);
-    }catch(e){if(e.name!=="AbortError")setError("Save failed: "+e.message);}
-    finally{setSavingToFolder(false);}
-  },[genCollectiveHTML]);
+      const rows=sts.map(st=>{
+        const qMap={};(st.results?.questions||[]).forEach(q=>{qMap[q.id]=q;});
+        const row={
+          "Student Name":st.name,
+          "Total Score":st.results?.totalScore??"",
+          "Max Score":st.results?.maxScore??"",
+          "Percentage %":st.results?.percentage??"",
+          "Grade":st.results?.grade??""
+        };
+        qIds.forEach(id=>{
+          const q=qMap[id];
+          row[`${id} Marks`]=q?`${q.marksAwarded}/${q.marksAvailable}`:"—";
+          row[`${id} Feedback`]=q?(q.feedback||""):"";
+        });
+        row["Strengths"]=(st.results?.strengths||[]).join("; ");
+        row["Improvements"]=(st.results?.improvements||[]).join("; ");
+        row["Overall Feedback"]=st.results?.overallFeedback||"";
+        return row;
+      });
+      if(rows.length){
+        const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb,ws,"Results");
+        ws["!cols"]=Object.keys(rows[0]).map(k=>({wch:Math.max(k.length,18)}));
+        const buf=XLSX.write(wb,{type:"array",bookType:"xlsx"});
+        const xfh=await sumDir.getFileHandle("class_results.xlsx",{create:true});
+        const xw=await xfh.createWritable();
+        await xw.write(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+        await xw.close();
+      }
+      setSavingStep("✓ Everything saved!");
+      setTimeout(()=>setSavingStep(""),3500);
+    }catch(e){
+      if(e.name!=="AbortError")setError("Save failed: "+e.message);
+    }finally{setSavingToFolder(false);}
+  },[genCollectiveHTML,genFeedbackHTML]);
 
-  const dlFeedback=st=>{const a=document.createElement("a");a.href="data:text/html;charset=utf-8,"+encodeURIComponent(st.feedbackHTML);a.download=`${st.name.replace(/\s+/g,"_")}_feedback.html`;a.click();};
-  const dlMarked=st=>{if(!st.markedImage)return;const a=document.createElement("a");a.href=st.markedImage;a.download=`${st.name.replace(/\s+/g,"_")}_marked.jpg`;a.click();};
+  const dlFeedback=useCallback((st, paperName)=>{
+    // Use stored HTML or regenerate from results
+    const html = st.feedbackHTML || (st.results ? genFeedbackHTML(st.name, paperName||"Paper", st.results) : null);
+    if(!html){setError("Feedback document not available — please re-mark and save this student.");return;}
+    const a=document.createElement("a");
+    a.href="data:text/html;charset=utf-8,"+encodeURIComponent(html);
+    a.download=`${st.name.replace(/\s+/g,"_")}_feedback.html`;
+    a.click();
+  },[genFeedbackHTML]);
+
+  const dlMarked=useCallback((st)=>{
+    if(!st.markedImage){
+      setError("Annotated image not available — images are only kept during the current session. Re-scan and save to get a fresh annotated copy.");
+      return;
+    }
+    const a=document.createElement("a");
+    a.href=st.markedImage;
+    a.download=`${st.name.replace(/\s+/g,"_")}_marked.jpg`;
+    a.click();
+  },[]);
 
   /* ── camera ── */
   const startCamera=useCallback(async()=>{
@@ -2784,29 +3115,83 @@ function NovaVista() {
   useEffect(()=>()=>stopCamera(),[stopCamera]);
   const captureFrame=useCallback(()=>{const v=videoRef.current,c=canvasRef.current;if(!v||!c)return null;c.width=v.videoWidth||1280;c.height=v.videoHeight||720;c.getContext("2d").drawImage(v,0,0);return c.toDataURL("image/jpeg",0.92);},[]);
 
-  /* ── whole-paper mark ── */
-  const markWhole=useCallback(async img=>{
+  /* ── markWhole — full AI marking of an image ── */
+  const markWhole=useCallback(async (img, extraAnswers)=>{
     setMarking(true);setMarkingStep("Sending to AI marker…");
     try{
       const b64=img.split(",")[1];
-      const sys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}${studentName?`\nStudent: ${studentName}`:""}\nMARKING SCHEME: ${globalScheme||"Apply standard academic marking."}\n${globalMisconceptions?`MISCONCEPTIONS TO FLAG: ${globalMisconceptions}`:""}\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"feedback":"","correct":<bool>,"misconception":null}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
+      // If teacher provided manual answers for uncertain questions, inject them
+      const answerNote = extraAnswers && Object.keys(extraAnswers).length>0
+        ? `\n\nTEACHER-SUPPLIED ANSWERS FOR UNCLEAR QUESTIONS:\n${Object.entries(extraAnswers).map(([id,ans])=>`${id}: ${ans}`).join("\n")}\nUse these answers when marking those questions — do not try to re-read them from the image.`
+        : "";
+      const sys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}${studentName?`\nStudent: ${studentName}`:""}\nMARKING SCHEME: ${globalScheme||"Apply standard academic marking."}\n${globalMisconceptions?`MISCONCEPTIONS TO FLAG: ${globalMisconceptions}`:""}\n${answerNote}\nFor each question use B/M/A mark codes matching the marking scheme.\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"<B1|M1|A1 etc>","feedback":"","correct":<bool>,"misconception":null,"uncertain":<bool>}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
       const text=await callAPI([{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:"Mark this paper."}]}],sys,2500);
-      setResults({...parseJSON(text),image:img});setTab("results");
+      setResults({...parseJSON(text),image:img});
+      setReviewMode(null); setUncertainQs([]); setManualAnswers({});
+      setTab("results");
     }catch(e){setError("Marking failed: "+e.message);}
     finally{setMarking(false);setMarkingStep("");}
   },[callAPI,subject,totalMarks,studentName,globalScheme,globalMisconceptions]);
 
-  const stitchAndMark=useCallback(async()=>{
-    if(!scannedPages.length)return;setMarking(true);
-    let img=scannedPages[0];
-    if(scannedPages.length>1){
-      setMarkingStep("Stitching pages…");
-      const imgs=await Promise.all(scannedPages.map(s=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=s;})));
-      const w=Math.max(...imgs.map(i=>i.naturalWidth)),h=imgs.reduce((s,i)=>s+i.naturalHeight,0);
-      const c=document.createElement("canvas");c.width=w;c.height=h;const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);let y=0;imgs.forEach(i=>{ctx.drawImage(i,0,y);y+=i.naturalHeight;});img=c.toDataURL("image/jpeg",0.92);
-    }
-    await markWhole(img);
-  },[scannedPages,markWhole]);
+  /* ── extractAndReview — OCR pass to flag questions AI can't read ── */
+  const extractAndReview=useCallback(async(img)=>{
+    setMarking(true);setMarkingStep("Reading paper — identifying questions…");
+    try{
+      const b64=img.split(",")[1];
+      const sys=`You are an expert at reading student exam papers.\nSubject: ${subject||"General"}\nMARKING SCHEME: ${globalScheme||"No scheme provided — infer questions from the paper."}\n\nRead this paper carefully. For each question you can identify, return the question ID, a brief description, and the student's answer if you can read it confidently. If the handwriting for a question is illegible or ambiguous, set "canRead" to false and leave "studentAnswer" blank — the teacher will supply it.\n\nRespond ONLY with valid JSON:\n{"studentName":"<if visible on paper>","questions":[{"id":"Q1","description":"<question text or topic>","studentAnswer":"<transcribed answer or blank if illegible>","canRead":<true|false>,"confidence":"high|medium|low","readingNote":"<brief note if unclear>"}]}`;
+      const text=await callAPI([{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:"Extract the questions and student answers from this paper."}]}],sys,1500);
+      const parsed=parseJSON(text);
+      // Auto-fill student name if found
+      if(parsed.studentName&&!studentName) setStudentName(parsed.studentName);
+      const uncertain=(parsed.questions||[]).filter(q=>!q.canRead||q.confidence==="low");
+      if(uncertain.length===0){
+        // All readable — go straight to marking
+        setMarkingStep("All questions readable — marking now…");
+        await markWhole(img);
+      } else {
+        // Some questions need teacher input
+        setUncertainQs(parsed.questions||[]);
+        setManualAnswers({});
+        setReviewMode("manual");
+        setMarking(false);setMarkingStep("");
+      }
+    }catch(e){setError("Reading failed: "+e.message);setMarking(false);setMarkingStep("");}
+  },[callAPI,subject,globalScheme,studentName,markWhole]);
+
+  /* ── stitchPages — joins scanned pages into one image, returns base64 ── */
+  const stitchPages=useCallback(async()=>{
+    if(!scannedPages.length)return null;
+    if(scannedPages.length===1)return scannedPages[0];
+    setMarkingStep("Stitching pages…");
+    const imgs=await Promise.all(scannedPages.map(s=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=s;})));
+    const w=Math.max(...imgs.map(i=>i.naturalWidth)),h=imgs.reduce((s,i)=>s+i.naturalHeight,0);
+    const c=document.createElement("canvas");c.width=w;c.height=h;
+    const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);
+    let y=0;imgs.forEach(i=>{ctx.drawImage(i,0,y);y+=i.naturalHeight;});
+    return c.toDataURL("image/jpeg",0.92);
+  },[scannedPages]);
+
+  /* ── stitchAndReview — stitch then show review screen ── */
+  const stitchAndReview=useCallback(async()=>{
+    if(!scannedPages.length)return;
+    if(autoActive)setAutoActive(false);
+    setMarking(true);setMarkingStep("Stitching pages…");
+    try{
+      const img=await stitchPages();
+      setStitchedImage(img);
+      setReviewMode("review");
+    }catch(e){setError("Stitch failed: "+e.message);}
+    finally{setMarking(false);setMarkingStep("");}
+  },[scannedPages,autoActive,stitchPages]);
+
+  /* ── Recalculate totals after manual question override ── */
+  const recalcResults=useCallback((updatedQs)=>{
+    const total=updatedQs.reduce((s,q)=>s+(q.marksAwarded||0),0);
+    const max=updatedQs.reduce((s,q)=>s+(q.marksAvailable||0),0);
+    const pct=max>0?Math.round(total/max*100):0;
+    const grade=pct>=80?"A":pct>=65?"B":pct>=50?"C":pct>=40?"D":"F";
+    setResults(prev=>({...prev,questions:updatedQs,totalScore:total,maxScore:max,percentage:pct,grade}));
+  },[]);
 
   /* ── quick mark ── */
   const handleImageUpload=useCallback(async file=>{
@@ -3095,13 +3480,10 @@ function NovaVista() {
             {teacherName||"Set up profile"}
           </button>
           <button
-            className={`nav-item ${tab==="school"?"active":""} ${!syncUnlocked?"locked":""}`}
-            onClick={()=>syncUnlocked?setTab("school"):setTab("account")}
-            title={!syncUnlocked?"Requires Department or School licence":"School Sync"}>
+            className={`nav-item ${tab==="school"?"active":""}`}
+            onClick={()=>{setTab("school");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.database} size={16}/></span> School Sync
-            {!syncUnlocked
-              ? <span className="lock-pip">🔒</span>
-              : syncStatus==="done"&&loadedTeachers.length>0&&<span className="nav-badge">{loadedTeachers.length}</span>}
+            {syncStatus==="done"&&loadedTeachers.length>0&&<span className="nav-badge">{loadedTeachers.length}</span>}
           </button>
         </nav>
 
@@ -3117,11 +3499,8 @@ function NovaVista() {
             <Ic d={apiMode==="local"?I.wifioff:I.cloud} size={12}/>
             {apiMode==="local"?"🛡 Data stays on device":"☁ Using Anthropic cloud"}
           </div>
-          <div className={`sidebar-licence ${licenceStatus==="active"?"active":licenceStatus==="trial"?"trial":"none"}`}
-            onClick={()=>{setTab("account");setSidebarOpen(false);}}>
-            {licenceStatus==="active"
-              ? <><span>✓</span> {licenceTier==="school"?"School":licenceTier==="department"?"Department":"Teacher"} Licence</>
-              : <><span>⚠</span> No licence — <u>activate</u></>}
+          <div className="sidebar-licence active" onClick={()=>{setTab("account");setSidebarOpen(false);}}>
+            <span>✓</span> Demo Mode — All features unlocked
           </div>
         </div>
       </aside>
@@ -3546,8 +3925,10 @@ function NovaVista() {
                       {!cameraActive
                         ?<button className="btn btn-red" onClick={startCamera}><Ic d={I.camera} size={15}/> Start Camera</button>
                         :<><button className="btn btn-ghost" onClick={stopCamera}>Stop</button>
-                           <div className="capture-ring" onClick={async()=>{const img=captureFrame();if(img)await markWhole(img);}}>
-                             <div className="capture-core"><Ic d={I.circle} size={20} color="white" fill="white"/></div>
+                           <div className="capture-ring" onClick={async()=>{
+                             const img=captureFrame();
+                             if(img){setStitchedImage(img);setScannedPages([img]);setReviewMode("review");}
+                           }}>                             <div className="capture-core"><Ic d={I.circle} size={20} color="white" fill="white"/></div>
                            </div>
                            <span style={{fontSize:"0.75rem",color:"var(--text3)"}}>Capture & Mark</span></>}
                     </div>
@@ -3799,17 +4180,173 @@ function NovaVista() {
                     className="btn btn-green btn-lg"
                     style={{width:"100%",justifyContent:"center"}}
                     disabled={scannedPages.length===0}
-                    onClick={()=>{if(autoActive)setAutoActive(false);stitchAndMark();}}>
+                    onClick={stitchAndReview}>
                     <Ic d={I.checksq} size={17}/>
                     {scannedPages.length===0
-                      ? "Stitch & Mark"
-                      : `Stitch & Mark ${scannedPages.length} Page${scannedPages.length>1?"s":""}`}
+                      ? "Stitch & Review"
+                      : `Stitch & Review ${scannedPages.length} Page${scannedPages.length>1?"s":""}`}
                   </button>
 
                   {scannedPages.length>0&&(
                     <div className="blue-box">
                       Pages will be joined top-to-bottom and sent to the AI as one complete paper. The result will be saved with the student name above.
                     </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ─────────────────────────
+            REVIEW & MANUAL ASSIST
+            Shows after stitching / live capture
+        ───────────────────────── */}
+        {reviewMode&&stitchedImage&&(
+          <>
+            <div className="topbar">
+              <div className="page-header">
+                <div>
+                  <div className="page-title">
+                    {reviewMode==="manual"?"Manual Assist — Fill In Unclear Questions":"Review & Mark"}
+                  </div>
+                  <div className="page-sub">
+                    {reviewMode==="manual"
+                      ?"The AI could not confidently read some answers — fill them in below, then mark"
+                      :"Choose how to mark this paper"}
+                  </div>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={()=>{setReviewMode(null);setStitchedImage(null);setUncertainQs([]);setManualAnswers({});}}>
+                  ← Back to Scan
+                </button>
+              </div>
+            </div>
+            <div className="content">
+              <div className="g2 gap16" style={{alignItems:"start"}}>
+
+                {/* Left: Image preview */}
+                <div className="col gap14">
+                  <div className="card" style={{padding:0,overflow:"hidden"}}>
+                    <div style={{padding:"12px 16px",borderBottom:"1px solid var(--border)"}} className="row-between">
+                      <div className="card-title" style={{marginBottom:0}}>Scanned Paper</div>
+                      <span className="pill pill-ghost small">{scannedPages.length} page{scannedPages.length!==1?"s":""}</span>
+                    </div>
+                    <div className="stitched-preview">
+                      <img src={stitchedImage} alt="Stitched paper"/>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: mode choice OR manual input */}
+                <div className="col gap14">
+
+                  {/* ── Mode selection ── */}
+                  {reviewMode==="review"&&(
+                    <>
+                      <div className="review-mode-grid">
+                        <div className="review-mode-card selected-green" onClick={()=>markWhole(stitchedImage)}>
+                          <div className="review-mode-icon">⚡</div>
+                          <div className="review-mode-title">Auto-Mark with Scheme</div>
+                          <div className="review-mode-desc">AI reads the paper and marks every question against your marking scheme. Best when handwriting is clear.</div>
+                        </div>
+                        <div className="review-mode-card selected-blue" onClick={()=>extractAndReview(stitchedImage)}>
+                          <div className="review-mode-icon">✍️</div>
+                          <div className="review-mode-title">Manual Assist</div>
+                          <div className="review-mode-desc">AI reads what it can, then flags any questions it's unsure about. You fill those in — then AI marks everything.</div>
+                        </div>
+                      </div>
+
+                      {!globalScheme&&(
+                        <div className="warn-box">No marking scheme set — Auto-Mark will use general academic standards. Add one in Setup for accurate marking.</div>
+                      )}
+
+                      <div className="card card-pad col gap10">
+                        <div className="card-title">Before you mark</div>
+                        <div className="col gap8" style={{fontSize:"0.84rem",color:"var(--text2)"}}>
+                          <div className="row gap8">
+                            <span style={{color:subject?"var(--green)":"var(--text4)"}}>●</span>
+                            <span>Subject: <strong style={{color:"var(--text)"}}>{subject||"Not set — go to Setup"}</strong></span>
+                          </div>
+                          <div className="row gap8">
+                            <span style={{color:globalScheme?"var(--green)":"var(--text4)"}}>●</span>
+                            <span>Mark scheme: <strong style={{color:"var(--text)"}}>{globalScheme?`${globalScheme.slice(0,60)}${globalScheme.length>60?"…":""}` :"Not set"}</strong></span>
+                          </div>
+                          <div className="row gap8">
+                            <span style={{color:studentName?"var(--green)":"var(--text4)"}}>●</span>
+                            <span>Student: <strong style={{color:"var(--text)"}}>{studentName||"Not identified yet — AI will try to read from paper"}</strong></span>
+                          </div>
+                        </div>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>{setReviewMode(null);setStitchedImage(null);setTab("setup");setSidebarOpen(false);}}>
+                          Edit Setup →
+                        </button>
+                      </div>
+
+                      <button className="btn btn-green btn-lg" style={{width:"100%",justifyContent:"center"}} onClick={()=>markWhole(stitchedImage)}>
+                        <Ic d={I.checksq} size={17}/> Auto-Mark Now
+                      </button>
+                    </>
+                  )}
+
+                  {/* ── Manual Assist: fill in unclear questions ── */}
+                  {reviewMode==="manual"&&(
+                    <>
+                      <div className="card card-pad col gap10">
+                        <div className="card-title">Questions the AI flagged</div>
+                        <div className="dim small">The AI read the paper but wasn't confident about the answers below. Fill them in so the marking is accurate.</div>
+                      </div>
+
+                      {uncertainQs.length===0&&(
+                        <div className="info-box">All questions were read successfully — proceeding to mark.</div>
+                      )}
+
+                      <div className="col gap10">
+                        {uncertainQs.map((q,i)=>(
+                          <div key={i} className="uncertain-card">
+                            <div className="uncertain-header">
+                              <span style={{fontWeight:700,fontSize:"0.88rem",color:"var(--text)",flex:1}}>{q.id} — {q.description}</span>
+                              {!q.canRead
+                                ?<span className="uncertain-badge">⚠ Illegible</span>
+                                :<span className="uncertain-badge" style={{background:"rgba(108,143,245,0.1)",color:"var(--blue)",borderColor:"rgba(108,143,245,0.25)"}}>Low confidence</span>}
+                            </div>
+                            <div className="uncertain-body">
+                              {q.studentAnswer&&(
+                                <div>
+                                  <div className="uncertain-ocr-label">AI read</div>
+                                  <div className="uncertain-ocr">"{q.studentAnswer}"</div>
+                                  {q.readingNote&&<div className="dim small mt4">Note: {q.readingNote}</div>}
+                                </div>
+                              )}
+                              <div className="field">
+                                <div className="field-label">{q.canRead?"Correct or amend the answer":"Type the student's answer"}</div>
+                                <textarea
+                                  value={manualAnswers[q.id]??q.studentAnswer??""}
+                                  onChange={e=>setManualAnswers(p=>({...p,[q.id]:e.target.value}))}
+                                  placeholder={`Type what the student wrote for ${q.id}…`}
+                                  style={{minHeight:72}}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Also let teacher add any question AI missed */}
+                      <div className="card card-pad col gap10">
+                        <div className="card-subtitle">All other questions</div>
+                        <div className="dim small">Questions the AI read confidently will be marked automatically. Only the ones above need your input.</div>
+                      </div>
+
+                      <button
+                        className="btn btn-green btn-lg"
+                        style={{width:"100%",justifyContent:"center"}}
+                        onClick={()=>markWhole(stitchedImage, manualAnswers)}>
+                        <Ic d={I.checksq} size={17}/> Mark with My Answers
+                      </button>
+
+                      <button className="btn btn-ghost" style={{width:"100%",justifyContent:"center"}} onClick={()=>markWhole(stitchedImage)}>
+                        Skip — Auto-Mark Anyway
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -3869,16 +4406,61 @@ function NovaVista() {
 
                   {/* Q breakdown */}
                   <div className="card card-pad col gap10">
-                    <div className="card-title">Question Breakdown</div>
+                    <div className="row-between">
+                      <div className="card-title" style={{marginBottom:0}}>Question Breakdown</div>
+                      <div className="dim small">Click ✏️ on any question to adjust</div>
+                    </div>
                     {(results.questions||[]).map((q,i)=>(
-                      <div key={i} className="q-row">
-                        <div className={`q-mark ${mClass(q.marksAwarded,q.marksAvailable)}`}>{q.marksAwarded}/{q.marksAvailable}</div>
-                        <div style={{flex:1}}>
-                          <div className="q-id">{q.id}</div>
-                          <div className="q-desc">{q.description}</div>
-                          <div className="q-feedback">{q.feedback}</div>
-                          {q.misconception&&<span className="misconception-tag">⚠ {q.misconception}</span>}
+                      <div key={i} className="q-row" style={{flexDirection:"column",gap:0,padding:0,background:"none",border:"none"}}>
+                        <div style={{display:"flex",gap:14,alignItems:"flex-start",padding:"13px 15px",background:"var(--inset)",border:"1px solid var(--border)",borderRadius:"var(--radius-sm)",position:"relative"}}>
+                          <div className={`q-mark ${mClass(q.marksAwarded,q.marksAvailable)}`}>{q.marksAwarded}/{q.marksAvailable}</div>
+                          <div style={{flex:1,paddingRight:32}}>
+                            <div className="q-id" style={{display:"flex",alignItems:"center",gap:6}}>
+                              {q.id}
+                              {q.code&&<span style={{fontSize:"0.65rem",fontWeight:800,padding:"1px 6px",borderRadius:99,background:q.correct?"rgba(61,214,140,0.12)":"rgba(232,71,63,0.1)",color:q.correct?"var(--green)":"var(--red)",border:`1px solid ${q.correct?"rgba(61,214,140,0.25)":"rgba(232,71,63,0.2)"}`}}>{q.code}</span>}
+                              {q.uncertain&&<span style={{fontSize:"0.65rem",fontWeight:700,padding:"1px 6px",borderRadius:99,background:"var(--gold-dim)",color:"var(--gold)",border:"1px solid rgba(245,200,66,0.25)"}}>⚠ Low confidence</span>}
+                            </div>
+                            <div className="q-desc">{q.description}</div>
+                            <div className="q-feedback">{q.feedback}</div>
+                            {q.misconception&&<span className="misconception-tag">⚠ {q.misconception}</span>}
+                          </div>
+                          <button className="q-override-btn" onClick={()=>setOverridingQ(overridingQ===q.id?null:q.id)}>
+                            {overridingQ===q.id?"✓ Done":"✏️"}
+                          </button>
                         </div>
+
+                        {/* Inline override panel */}
+                        {overridingQ===q.id&&(
+                          <div className="q-override-panel">
+                            <div className="field-label">Adjust marks for {q.id}</div>
+                            <div className="row gap10" style={{flexWrap:"wrap",alignItems:"flex-end"}}>
+                              <div className="field" style={{flex:"0 0 auto"}}>
+                                <div className="field-label">Awarded</div>
+                                <input type="number" className="q-mark-input" min={0} max={q.marksAvailable||99}
+                                  defaultValue={q.marksAwarded}
+                                  onChange={e=>{
+                                    const v=parseInt(e.target.value)||0;
+                                    const updated=results.questions.map((qq,ii)=>ii===i?{...qq,marksAwarded:v,correct:v>0,percentage:q.marksAvailable?Math.round(v/q.marksAvailable*100):0}:qq);
+                                    recalcResults(updated);
+                                  }}
+                                />
+                              </div>
+                              <div style={{color:"var(--text3)",fontWeight:700,marginBottom:8}}>/ {q.marksAvailable}</div>
+                              <div className="field" style={{flex:1,minWidth:200}}>
+                                <div className="field-label">Override feedback (optional)</div>
+                                <input
+                                  defaultValue={q.feedback}
+                                  placeholder="Leave blank to keep AI feedback…"
+                                  onChange={e=>{
+                                    const updated=results.questions.map((qq,ii)=>ii===i?{...qq,feedback:e.target.value||qq.feedback}:qq);
+                                    setResults(p=>({...p,questions:updated}));
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            <div className="dim small">Changes are applied immediately and update the total score above.</div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -4042,8 +4624,19 @@ function NovaVista() {
                                       )}
                                     </div>
                                     <div className="student-actions">
-                                      <button className="btn btn-ghost btn-sm" onClick={()=>dlMarked(st)} title="Download marked paper"><Ic d={I.dl} size={13}/></button>
-                                      <button className="btn btn-blue btn-sm" onClick={()=>dlFeedback(st)} title="Download feedback"><Ic d={I.filetext} size={13}/> Feedback</button>
+                                      <button
+                                        className={`btn btn-sm ${st.markedImage?"btn-ghost":"btn-ghost"}`}
+                                        onClick={()=>dlMarked(st)}
+                                        title={st.markedImage?"Download annotated paper":"Annotated image only available in-session"}
+                                        style={{opacity:st.markedImage?1:0.4}}>
+                                        <Ic d={I.dl} size={13}/>
+                                      </button>
+                                      <button
+                                        className="btn btn-blue btn-sm"
+                                        onClick={()=>dlFeedback(st,paper.name)}
+                                        title="Download personalised feedback">
+                                        <Ic d={I.filetext} size={13}/> Feedback
+                                      </button>
                                       <button className="btn btn-ghost btn-sm" style={{color:"var(--red)"}} onClick={()=>setClasses(prev=>({...prev,[pid]:{...prev[pid],students:prev[pid].students.filter(s=>s.id!==st.id)}}))}>✕</button>
                                     </div>
                                   </div>
@@ -4097,10 +4690,11 @@ function NovaVista() {
                                       <td style={{textAlign:"center",fontWeight:700,color:pctColor(avgPct)}}>{avgPct}%</td>
                                       <td style={{textAlign:"center",color:"var(--text3)"}}>—</td>
                                       {qIds.map(id=>{
-                                        const marks=sts.map(st=>{const q=(st.results.questions||[]).find(q=>q.id===id);return q?q.marksAwarded:null;}).filter(v=>v!=null);
-                                        const avail=sts.map(st=>{const q=(st.results.questions||[]).find(q=>q.id===id);return q?q.marksAvailable:null;}).find(v=>v!=null)||1;
+                                        const qs=sts.map(st=>(st.results?.questions||[]).find(q=>q.id===id)).filter(Boolean);
+                                        const marks=qs.map(q=>q.marksAwarded||0);
+                                        const avail=qs[0]?.marksAvailable||0;
                                         const avg=marks.length?Math.round(marks.reduce((a,b)=>a+b,0)/marks.length*10)/10:null;
-                                        const cls=avg!=null?(avg/avail>=.8?"cell-c":avg/avail>=.5?"cell-p":"cell-w"):"cell-n";
+                                        const cls=avg!=null&&avail>0?(avg/avail>=.8?"cell-c":avg/avail>=.5?"cell-p":"cell-w"):"cell-n";
                                         return<td key={id} className={cls}>{avg!=null?`${avg}/${avail}`:"—"}</td>;
                                       })}
                                     </tr>
@@ -4219,77 +4813,9 @@ function NovaVista() {
                 🔒 Your profile, PIN, and all marking data are stored only in <strong>this browser on this device</strong>. Nothing is sent to any server. To move to another computer, use the School Sync folder feature.
               </div>
 
-              {/* ── Licence section ── */}
-              <div className="card card-pad col gap16">
-                <div className="row-between">
-                  <div className="card-title" style={{marginBottom:0}}>Licence</div>
-                  {licenceStatus==="active"&&(
-                    <span className="licence-badge active">
-                      ✓ {licenceTier==="school"?"School":licenceTier==="department"?"Department":"Teacher"} Licence · expires {licenceExpiry}
-                    </span>
-                  )}
-                  {licenceStatus==="expired"&&<span className="licence-badge expired">⚠ Expired {licenceExpiry}</span>}
-                  {licenceStatus==="none"&&<span className="licence-badge trial" style={{background:"rgba(255,255,255,0.05)",color:"var(--text3)",border:"1px solid var(--border)"}}>No licence</span>}
-                </div>
-
-                {licenceStatus==="active"?(
-                  <div className="col gap10">
-                    <div className="inset" style={{padding:"14px 16px"}}>
-                      <div className="g2 gap12" style={{fontSize:"0.84rem"}}>
-                        <div className="row-between"><span className="dim">Tier</span><strong style={{color:"var(--text)",textTransform:"capitalize"}}>{licenceTier}</strong></div>
-                        <div className="row-between"><span className="dim">School code</span><strong style={{color:"var(--text)",fontFamily:"monospace"}}>{licenceSchool}</strong></div>
-                        <div className="row-between"><span className="dim">Expires</span><strong style={{color:"var(--text)"}}>{licenceExpiry}</strong></div>
-                        <div className="row-between"><span className="dim">School Sync</span><strong style={{color:syncUnlocked?"var(--green)":"var(--text3)"}}>{syncUnlocked?"✓ Unlocked":"Requires DEP or SCH tier"}</strong></div>
-                      </div>
-                    </div>
-                    <div className="row gap8">
-                      <button className="btn btn-ghost btn-sm" onClick={()=>{setLicenceKey("");setLicenceStatus("none");setLicenceTier("");setLicenceExpiry("");setLicenceSchool("");localStorage.removeItem("nv_licence");}}>
-                        <Ic d={I.trash} size={13}/> Remove Licence
-                      </button>
-                    </div>
-                  </div>
-                ):(
-                  <div className="col gap12">
-                    <div className="muted small">
-                      Enter your NovaVista licence key to unlock School Sync and combined school analysis. No internet connection required — the key is validated entirely on your device.
-                    </div>
-                    {licenceError&&<div className="error-box">{licenceError}</div>}
-                    <div className="licence-input-row">
-                      <input
-                        value={licenceInput}
-                        onChange={e=>{setLicenceInput(e.target.value.toUpperCase());setLicenceError("");}}
-                        placeholder="NV-SCH-2026-12-SCHOOL-XX"
-                        onKeyDown={e=>{if(e.key==="Enter")validateLicence(licenceInput);}}
-                      />
-                      <button className="btn btn-red" onClick={()=>validateLicence(licenceInput)} disabled={!licenceInput.trim()}>
-                        Activate
-                      </button>
-                    </div>
-                    <div className="dim small">Don't have a key? <a href="mailto:hello@novavista.ai" style={{color:"var(--blue)"}}>Contact us</a> or visit <a href="https://novavista.ai" target="_blank" style={{color:"var(--blue)"}}>novavista.ai</a> to purchase.</div>
-
-                    {/* Pricing tiers */}
-                    <div className="licence-tier-grid">
-                      {[
-                        {name:"Teacher", code:"TCH", price:"£49", period:"/year", features:["Individual teacher","All marking features","Class folders","AI Training","Quick Mark","Scan Mode"], cta:"Buy Teacher"},
-                        {name:"Department", code:"DEP", price:"£149", period:"/year", featured:true, features:["Up to 10 teachers","Everything in Teacher","School Sync unlocked","Department analysis","Combined Excel export","HOD dashboard"], cta:"Buy Department"},
-                        {name:"School", code:"SCH", price:"£349", period:"/year", features:["Unlimited teachers","Everything in Department","Whole-school analysis","SLT dashboard","Cross-dept heatmaps","Priority support"], cta:"Buy School"},
-                      ].map((t,i)=>(
-                        <div key={i} className={`licence-tier-card ${t.featured?"featured":""}`}>
-                          <div className="tier-name">{t.name}</div>
-                          <div className="tier-price">{t.price}</div>
-                          <div className="tier-period">{t.period}</div>
-                          {t.features.map((f,j)=>(
-                            <div key={j} className={`tier-feature ${j<2?"highlight":""}`}>{j<2?"✓ ":""}{f}</div>
-                          ))}
-                          <button className="btn btn-red btn-sm mt12" style={{width:"100%",justifyContent:"center",marginTop:12}}
-                            onClick={()=>window.open(`mailto:hello@novavista.ai?subject=${encodeURIComponent(t.cta+" Licence")}&body=${encodeURIComponent(`Hi,\n\nI'd like to purchase a ${t.name} licence for NovaVista.\n\nSchool name: ${teacherSchool||"[Your school]"}\n\nThanks`)}`)}>
-                            {t.cta} →
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              {/* ── Demo Mode Notice ── */}
+              <div className="info-box" style={{borderColor:"rgba(61,214,140,0.3)",background:"rgba(61,214,140,0.06)"}}>
+                🚀 <strong>Demo Mode — All features unlocked.</strong> School Sync, department analysis, and all marking features are fully available. Licence system will be enabled before public launch.
               </div>
 
               {/* ── Secret admin section — key generator (only visible if you know the URL) ── */}
@@ -4352,47 +4878,8 @@ function NovaVista() {
               </div>
             </div>
 
-            {/* Locked gate */}
-            {!syncUnlocked?(
-              <div className="content">
-                <div className="card">
-                  <div className="licence-gate">
-                    <div className="licence-gate-icon">🔒</div>
-                    <div className="licence-gate-title">School Sync requires a licence</div>
-                    <div className="licence-gate-sub">
-                      School Sync lets teachers in a department share marking data via a local network folder — no internet or database required. It's unlocked with a <strong>Department</strong> or <strong>School</strong> licence.
-                    </div>
-                    {licenceStatus==="active"&&licenceTier==="teacher"&&(
-                      <div className="warn-box" style={{maxWidth:420}}>You have a Teacher licence. Upgrade to a Department or School licence to unlock School Sync.</div>
-                    )}
-                    {licenceStatus==="expired"&&(
-                      <div className="error-box" style={{maxWidth:420}}>Your licence expired {licenceExpiry}. Renew to re-enable School Sync.</div>
-                    )}
-                    <div className="licence-tier-grid" style={{maxWidth:560}}>
-                      {[
-                        {name:"Department", code:"DEP", price:"£149/yr", desc:"Up to 10 teachers, HOD dashboard"},
-                        {name:"School",     code:"SCH", price:"£349/yr", desc:"Unlimited teachers, SLT analytics"},
-                      ].map((t,i)=>(
-                        <div key={i} className={`licence-tier-card ${i===1?"featured":""}`}>
-                          <div className="tier-name">{t.name}</div>
-                          <div className="tier-price">{t.price.split("/")[0]}</div>
-                          <div className="tier-period">/{t.price.split("/")[1]}</div>
-                          <div className="tier-feature">{t.desc}</div>
-                          <button className="btn btn-red btn-sm" style={{width:"100%",marginTop:10}}
-                            onClick={()=>window.open(`mailto:hello@novavista.ai?subject=${encodeURIComponent("Buy "+t.name+" Licence")}&body=${encodeURIComponent(`Hi,\n\nI'd like a ${t.name} licence.\n\nSchool: ${teacherSchool||"[school]"}\n\nThanks`)}`)}>
-                            Buy {t.name} →
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <button className="btn btn-ghost" onClick={()=>{setTab("account");setSidebarOpen(false);}}>
-                      Enter licence key in Account tab →
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="content col gap16">
+            {/* School Sync content - always visible in demo mode */}
+            <div className="content col gap16">
 
               {/* How it works */}
               <div className="card card-pad col gap12">
@@ -4467,82 +4954,7 @@ function NovaVista() {
                   )}
 
                   {/* School analysis dashboard */}
-                  {loadedTeachers.length>0&&(()=>{
-                    const analysis = buildSchoolAnalysis();
-                    if (!analysis) return null;
-                    return (
-                      <div className="col gap14">
-                        {/* Stats */}
-                        <div className="school-stat-grid">
-                          {[
-                            {num:analysis.totalTeachers, lbl:"Teachers", col:"var(--blue)"},
-                            {num:analysis.totalStudents, lbl:"Students marked", col:"var(--green)"},
-                            {num:Object.keys(analysis.papers).length, lbl:"Papers", col:"var(--gold)"},
-                            {num:analysis.totalDepts, lbl:"Departments", col:"var(--purple)"},
-                          ].map((s,i)=>(
-                            <div key={i} className="school-stat-card">
-                              <div className="school-stat-num" style={{color:s.col}}>{s.num}</div>
-                              <div className="school-stat-lbl">{s.lbl}</div>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Department breakdown */}
-                        <div>
-                          <div className="field-label mb8">Department Breakdown</div>
-                          <div className="col gap8">
-                            {Object.values(analysis.depts).sort((a,b)=>b.avgPct-a.avgPct).map((d,i)=>(
-                              <div key={i} className="dept-row">
-                                <div className="dept-name">{d.name}</div>
-                                <div className="dim small">{d.students} students</div>
-                                <div className="dept-bar-wrap">
-                                  <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.72rem"}}>
-                                    <span className="dim">{d.papers} paper{d.papers!==1?"s":""}</span>
-                                    <span style={{fontWeight:700,color:pctColor(d.avgPct)}}>{d.avgPct}%</span>
-                                  </div>
-                                  <div className="dept-bar">
-                                    <div className="dept-bar-fill" style={{width:`${d.avgPct}%`,background:pctColor(d.avgPct)}}/>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Paper-by-paper heatmap */}
-                        <div>
-                          <div className="field-label mb8">Paper Results</div>
-                          <div className="topic-table-wrap">
-                            <table className="topic-table">
-                              <thead><tr>
-                                <th>Paper</th><th>Dept</th><th style={{textAlign:"center"}}>Students</th>
-                                <th style={{textAlign:"center"}}>Avg %</th><th style={{textAlign:"center"}}>Top</th><th style={{textAlign:"center"}}>Bottom</th>
-                              </tr></thead>
-                              <tbody>
-                                {Object.values(analysis.papers).sort((a,b)=>a.name.localeCompare(b.name)).map((paper,i)=>{
-                                  const pcts=paper.students.map(s=>s.results?.percentage||0);
-                                  const avg=pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):0;
-                                  const top=pcts.length?Math.max(...pcts):0;
-                                  const bot=pcts.length?Math.min(...pcts):0;
-                                  const heatClass=avg>=70?"heat-a":avg>=50?"heat-b":"heat-c";
-                                  return(
-                                    <tr key={i}>
-                                      <td><strong>{paper.name}</strong></td>
-                                      <td><span className="dim small">{paper.dept||"—"}</span></td>
-                                      <td style={{textAlign:"center"}}>{paper.students.length}</td>
-                                      <td style={{textAlign:"center"}}><div className={`heatmap-cell ${heatClass}`}>{avg}%</div></td>
-                                      <td style={{textAlign:"center",color:"var(--green)",fontWeight:700}}>{top}%</td>
-                                      <td style={{textAlign:"center",color:"var(--red)",fontWeight:700}}>{bot}%</td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
+                  {loadedTeachers.length>0&&<SchoolAnalysis analysis={buildSchoolAnalysis()} pctColor={pctColor}/>}
                 </div>
               )}
 
@@ -4554,7 +4966,6 @@ function NovaVista() {
               )}
 
             </div>
-            )}
           </>
         )}
 
@@ -5125,6 +5536,24 @@ ollama create novavista-marker -f novavista-Modelfile</div>
           </div>
         </div>
       )}
+
+      {/* ── Copyright footer ── */}
+      <div style={{
+        position:"fixed", bottom:0, left:0, right:0, zIndex:10,
+        background:"rgba(11,12,15,0.92)", backdropFilter:"blur(8px)",
+        borderTop:"1px solid rgba(255,255,255,0.06)",
+        padding:"7px 20px",
+        paddingLeft:`calc(var(--sidebar-w) + 20px)`,
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        fontSize:"0.68rem", color:"rgba(255,255,255,0.28)",
+        fontFamily:"'Inter',sans-serif", letterSpacing:"0.3px",
+        pointerEvents:"none", userSelect:"none",
+        flexWrap:"wrap", gap:"4px",
+      }}>
+        <span>© DMA 2026 — NovaVista AI Paper Marking</span>
+        <span style={{color:"rgba(255,255,255,0.15)"}}>All rights reserved · For educational use only</span>
+      </div>
+
     </div>
   );
 }
