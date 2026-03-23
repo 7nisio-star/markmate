@@ -1804,8 +1804,91 @@ input::placeholder, textarea::placeholder { color: var(--text4); }
 .annot-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
 /* ═══════════════════════════════════════════════════════════
-   REVIEW & MANUAL ASSIST
+   BATCH UPLOAD & MARK
 ═══════════════════════════════════════════════════════════ */
+.batch-dropzone {
+  border: 2px dashed var(--border-md);
+  border-radius: var(--radius-lg);
+  padding: 40px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--inset);
+  position: relative;
+}
+.batch-dropzone:hover,
+.batch-dropzone.drag-over {
+  border-color: var(--blue);
+  background: var(--blue-dim);
+}
+.batch-dropzone input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.batch-dz-icon  { font-size: 2.8rem; margin-bottom: 10px; }
+.batch-dz-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.batch-dz-sub   { font-size: 0.8rem; color: var(--text3); }
+
+/* Queue cards */
+.batch-queue { display: flex; flex-direction: column; gap: 8px; }
+.batch-item {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  display: flex; align-items: center; gap: 12px;
+  transition: border-color 0.15s;
+}
+.batch-item.pending  { border-color: var(--border); }
+.batch-item.marking  { border-color: var(--blue); background: var(--blue-dim); }
+.batch-item.done     { border-color: rgba(61,214,140,0.3); }
+.batch-item.failed   { border-color: rgba(232,71,63,0.3); background: var(--red-dim); }
+.batch-thumb {
+  width: 48px; height: 60px; object-fit: cover;
+  border-radius: 4px; border: 1px solid var(--border-md);
+  flex-shrink: 0; background: var(--inset);
+}
+.batch-thumb-placeholder {
+  width: 48px; height: 60px; border-radius: 4px;
+  border: 1px solid var(--border-md); background: var(--inset);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; flex-shrink: 0;
+}
+.batch-item-name  { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+.batch-item-sub   { font-size: 0.75rem; color: var(--text3); margin-top: 2px; }
+.batch-item-score { font-size: 1.1rem; font-weight: 800; flex-shrink: 0; min-width: 52px; text-align: right; }
+.batch-status-pill {
+  font-size: 0.68rem; font-weight: 700; padding: 2px 8px;
+  border-radius: 99px; letter-spacing: 0.5px; flex-shrink: 0;
+}
+.batch-status-pill.pending  { background: var(--inset); color: var(--text3); border: 1px solid var(--border); }
+.batch-status-pill.marking  { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(108,143,245,0.25); }
+.batch-status-pill.done     { background: var(--green-dim); color: var(--green); border: 1px solid rgba(61,214,140,0.25); }
+.batch-status-pill.failed   { background: var(--red-dim); color: var(--red); border: 1px solid rgba(232,71,63,0.25); }
+
+/* Progress bar */
+.batch-progress-bar {
+  height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; margin: 4px 0;
+}
+.batch-progress-fill {
+  height: 100%; border-radius: 99px;
+  background: linear-gradient(90deg, var(--blue), var(--green));
+  transition: width 0.4s ease;
+}
+
+/* Batch results summary */
+.batch-summary-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+}
+.batch-stat-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px 14px; text-align: center;
+}
+.batch-stat-num { font-size: 1.8rem; font-weight: 800; line-height: 1; }
+.batch-stat-lbl { font-size: 0.68rem; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+
+@media (max-width: 600px) {
+  .batch-summary-grid { grid-template-columns: 1fr 1fr; }
+}
 .review-mode-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2027,6 +2110,11 @@ document.querySelectorAll('script[src]').forEach(function(s){
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<!-- PDF.js for rendering PDF pages to canvas -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(typeof pdfjsLib!=='undefined'){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
+<!-- mammoth.js for DOCX → text extraction -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 
 <script type="text/babel">
 const { useState, useRef, useEffect, useCallback } = React;
@@ -2093,6 +2181,96 @@ function getAllQIds(students){const ids=new Set();students.forEach(st=>(st.resul
 
 /* ── Main component ────────────────────────────────────── */
 const STABLE_NEEDED = 1400; // ms still before auto-capture triggers
+/* ── BatchSummary: extracted to avoid IIFE brace issues ── */
+function BatchSummary({ done, batchPaper, subject, pctColor, initials, genFeedbackHTML, exportToExcel, batchSaveAll }) {
+  if (!done.length) return null;
+  const pcts = done.map(i => i.results.percentage || 0);
+  const avg  = pcts.length ? Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length) : 0;
+  const top  = pcts.length ? Math.max(...pcts) : 0;
+  const bot  = pcts.length ? Math.min(...pcts) : 0;
+  const gradeCounts = {A:0,B:0,C:0,D:0,F:0};
+  done.forEach(i => { const g=i.results.grade||"F"; gradeCounts[g]=(gradeCounts[g]||0)+1; });
+
+  return (
+    <div className="card card-pad col gap16">
+      <div className="row-between">
+        <div className="card-title" style={{marginBottom:0}}>📊 Batch Results Summary</div>
+        <div className="row gap8">
+          <button className="btn btn-ghost btn-sm" onClick={()=>{
+            const paperName=batchPaper||subject||"Batch Paper";
+            const sts=done.map(i=>({id:i.id,name:i.name,timestamp:new Date().toISOString(),results:i.results,feedbackHTML:genFeedbackHTML(i.name,paperName,i.results)}));
+            exportToExcel({name:paperName,students:sts});
+          }}>Export Excel</button>
+          <button className="btn btn-green" onClick={batchSaveAll}>
+            Save All to Class
+          </button>
+        </div>
+      </div>
+
+      <div className="batch-summary-grid">
+        {[
+          {num:done.length,  lbl:"Papers marked", col:"var(--blue)"},
+          {num:`${avg}%`,    lbl:"Class average",  col:pctColor(avg)},
+          {num:`${top}%`,    lbl:"Top score",      col:"var(--green)"},
+          {num:`${bot}%`,    lbl:"Lowest score",   col:"var(--red)"},
+        ].map((s,i)=>(
+          <div key={i} className="batch-stat-card">
+            <div className="batch-stat-num" style={{color:s.col}}>{s.num}</div>
+            <div className="batch-stat-lbl">{s.lbl}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="col gap6">
+        <div className="field-label">Grade distribution</div>
+        <div className="row gap8" style={{flexWrap:"wrap"}}>
+          {["A","B","C","D","F"].map(g=>(
+            <div key={g} className="inset" style={{padding:"8px 14px",textAlign:"center",minWidth:56,borderRadius:"var(--radius-sm)"}}>
+              <div style={{fontSize:"1.2rem",fontWeight:800,color:pctColor(g==="A"?90:g==="B"?75:g==="C"?55:g==="D"?42:20)}}>{gradeCounts[g]||0}</div>
+              <div style={{fontSize:"0.68rem",color:"var(--text3)",textTransform:"uppercase",letterSpacing:1}}>Grade {g}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="col gap6">
+        <div className="field-label">Individual results</div>
+        <div className="batch-queue">
+          {[...done].sort((a,b)=>(b.results.percentage||0)-(a.results.percentage||0)).map(item=>(
+            <div key={item.id} className="batch-item done">
+              <div className="batch-thumb-placeholder" style={{fontSize:"0.8rem",fontWeight:700,color:"var(--text2)"}}>
+                {initials(item.name)}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div className="batch-item-name">{item.name}</div>
+                <div className="batch-item-sub">
+                  {item.results.totalScore??'?'}/{item.results.maxScore??'?'} marks · Grade {item.results.grade||'—'}
+                </div>
+                {(item.results.improvements||[]).slice(0,2).map((imp,i)=>(
+                  <span key={i} className="wrong-chip" style={{marginTop:4,marginRight:4}}>△ {imp}</span>
+                ))}
+              </div>
+              <div className="batch-item-score" style={{color:pctColor(item.results.percentage||0)}}>
+                {item.results.percentage||0}%
+              </div>
+              <button className="btn btn-blue btn-sm"
+                onClick={()=>{
+                  const html=genFeedbackHTML(item.name,batchPaper||subject||"Paper",item.results);
+                  const a=document.createElement("a");
+                  a.href="data:text/html;charset=utf-8,"+encodeURIComponent(html);
+                  a.download=`${item.name.replace(/\s+/g,"_")}_feedback.html`;
+                  a.click();
+                }}>
+                Feedback
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── SchoolAnalysis: extracted to avoid IIFE brace issues ── */
 function SchoolAnalysis({ analysis, pctColor }) {
   if (!analysis) return null;
@@ -2193,6 +2371,13 @@ function NovaVista() {
   const [uncertainQs,setUncertainQs]           = useState([]);    // questions AI couldn't read
   const [manualAnswers,setManualAnswers]        = useState({});    // {id: answerText}
   const [overridingQ,setOverridingQ]           = useState(null);  // question id being overridden
+
+  // Batch upload & mark
+  const [batchQueue,setBatchQueue]   = useState([]); // [{id,name,imageB64,status,results,error}]
+  const [batchRunning,setBatchRunning] = useState(false);
+  const [batchPaper,setBatchPaper]   = useState("");
+  const [batchDone,setBatchDone]     = useState(false);
+  const batchStopRef                 = useRef(false);
   const [qmMode,setQmMode]     = useState("image");
   const [qmImageB64,setQmImageB64] = useState(null);
   const [qmImageURL,setQmImageURL] = useState(null);
@@ -3193,6 +3378,229 @@ function NovaVista() {
     setResults(prev=>({...prev,questions:updatedQs,totalScore:total,maxScore:max,percentage:pct,grade}));
   },[]);
 
+  /* ── Load image files into the batch queue ── */
+  /* ── Convert a file to a batch queue item ── */
+  const fileToQueueItem = useCallback(async (file) => {
+    const rawName = file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g," ")
+      .replace(/\b\w/g, c => c.toUpperCase());
+    const base = { id: Date.now()+Math.random(), name: rawName,
+                   status: "pending", results: null, error: null };
+
+    const isPDF  = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+    const isDOCX = /\.(docx|doc)$/i.test(file.name)
+                || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                || file.type === "application/msword";
+    const isImg  = file.type.startsWith("image/");
+
+    // ── IMAGE ──────────────────────────────────────────────────────────────
+    if (isImg) {
+      return new Promise(res => {
+        const r = new FileReader();
+        r.onload = e => res({ ...base, fileType:"image", imageB64: e.target.result, textContent: null });
+        r.readAsDataURL(file);
+      });
+    }
+
+    // ── PDF ────────────────────────────────────────────────────────────────
+    if (isPDF) {
+      try {
+        if (typeof pdfjsLib === "undefined")
+          throw new Error("PDF.js not loaded — check internet connection.");
+
+        const arrayBuf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
+        const numPages = Math.min(pdf.numPages, 6); // cap at 6 pages per paper
+
+        // Render each page to canvas, then stitch vertically
+        const canvases = [];
+        for (let p = 1; p <= numPages; p++) {
+          const page  = await pdf.getPage(p);
+          const scale = 1.8; // ~130 DPI — good balance of quality vs speed
+          const vp    = page.getViewport({ scale });
+          const canvas= document.createElement("canvas");
+          canvas.width  = vp.width;
+          canvas.height = vp.height;
+          await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+          canvases.push(canvas);
+        }
+
+        // Stitch pages vertically
+        const totalW = Math.max(...canvases.map(c => c.width));
+        const totalH = canvases.reduce((s, c) => s + c.height, 0);
+        const stitched = document.createElement("canvas");
+        stitched.width  = totalW;
+        stitched.height = totalH;
+        const ctx = stitched.getContext("2d");
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, totalW, totalH);
+        let y = 0;
+        canvases.forEach(c => { ctx.drawImage(c, 0, y); y += c.height; });
+
+        const imageB64 = stitched.toDataURL("image/jpeg", 0.92);
+        return { ...base, fileType: "pdf", imageB64, textContent: null,
+                 pageCount: numPages };
+      } catch(e) {
+        return { ...base, fileType: "pdf", imageB64: null, textContent: null,
+                 status: "failed", error: "PDF error: " + e.message };
+      }
+    }
+
+    // ── DOCX / DOC ─────────────────────────────────────────────────────────
+    if (isDOCX) {
+      try {
+        if (typeof mammoth === "undefined")
+          throw new Error("mammoth.js not loaded — check internet connection.");
+
+        const arrayBuf = await file.arrayBuffer();
+        let textContent = "";
+
+        if (/\.docx$/i.test(file.name) ||
+            file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+          // DOCX — full text extraction
+          const result = await mammoth.extractRawText({ arrayBuffer: arrayBuf });
+          textContent = result.value.trim();
+        } else {
+          // .doc (old binary format) — mammoth has limited support, try anyway
+          try {
+            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuf });
+            textContent = result.value.trim();
+          } catch {
+            throw new Error(".doc format has limited support. Please save as .docx and re-upload.");
+          }
+        }
+
+        if (!textContent) throw new Error("No text could be extracted from this document.");
+        return { ...base, fileType: "docx", imageB64: null, textContent,
+                 wordCount: textContent.split(/\s+/).length };
+      } catch(e) {
+        return { ...base, fileType: "docx", imageB64: null, textContent: null,
+                 status: "failed", error: "Document error: " + e.message };
+      }
+    }
+
+    // Unsupported
+    return { ...base, fileType: "unknown", imageB64: null, textContent: null,
+             status: "failed", error: `Unsupported file type: ${file.type || file.name.split('.').pop()}` };
+  }, []);
+
+  /* ── Add files to batch queue ── */
+  const batchAddFiles = useCallback(async (files) => {
+    const supported = [...files].filter(f =>
+      f.type.startsWith("image/") ||
+      f.type === "application/pdf" || /\.pdf$/i.test(f.name) ||
+      /\.(docx|doc)$/i.test(f.name) ||
+      f.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      f.type === "application/msword"
+    );
+    if (!supported.length) { setError("No supported files. Upload images (JPG/PNG), PDFs, or Word documents (.docx)."); return; }
+
+    // Show items immediately as "loading" then resolve
+    const placeholders = supported.map(f => ({
+      id: Date.now()+Math.random(), name: f.name, fileType:"loading",
+      status:"pending", imageB64:null, textContent:null, error:null
+    }));
+    setBatchQueue(prev => [...prev, ...placeholders]);
+    setBatchDone(false);
+
+    // Process files and replace placeholders
+    const items = await Promise.all(supported.map(fileToQueueItem));
+    setBatchQueue(prev => {
+      const next = [...prev];
+      let pi = 0;
+      for (let i = next.length - placeholders.length; i < next.length; i++) {
+        next[i] = items[pi++];
+      }
+      return next;
+    });
+  }, [fileToQueueItem]);
+
+  /* ── Mark all queued papers sequentially ── */
+  const batchMark=useCallback(async()=>{
+    if(!batchQueue.length)return;
+    batchStopRef.current=false;
+    setBatchRunning(true);setBatchDone(false);
+
+    const scheme=globalScheme.trim()||"Apply standard UK academic marking.";
+    const baseSys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}\nMARKING SCHEME: ${scheme}\n${globalMisconceptions?`MISCONCEPTIONS: ${globalMisconceptions}`:""}\nFor each question use B/M/A mark codes from the marking scheme.\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"<from paper or blank>","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"","feedback":"","correct":<bool>,"misconception":null}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
+
+    for(let i=0;i<batchQueue.length;i++){
+      if(batchStopRef.current)break;
+      const item=batchQueue[i];
+      if(item.status==="done"||item.status==="failed"&&!item.error?.includes("retry"))continue;
+      if(item.status==="failed")continue; // don't auto-retry failed items
+
+      setBatchQueue(prev=>prev.map((it,idx)=>idx===i?{...it,status:"marking"}:it));
+
+      try{
+        let text="";
+
+        if(item.fileType==="docx"&&item.textContent){
+          // ── Text document: send as text, not image ──────────────────────
+          const wordLimit=3000;
+          const truncated=item.textContent.length>wordLimit
+            ? item.textContent.slice(0,wordLimit)+"…[truncated]"
+            : item.textContent;
+          text=await callAPI(
+            [{role:"user",content:`Student name: ${item.name}\n\nPaper content:\n\n${truncated}`}],
+            baseSys, 2500
+          );
+        } else if(item.imageB64){
+          // ── Image / rendered PDF: send as image ─────────────────────────
+          const b64=item.imageB64.split(",")[1];
+          text=await callAPI(
+            [{role:"user",content:[
+              {type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},
+              {type:"text",text:`Mark this paper. Student name if visible: ${item.name}${item.pageCount?` (${item.pageCount}-page PDF rendered as image)`:""}`}
+            ]}],
+            baseSys, 2500
+          );
+        } else {
+          throw new Error("No content to mark — file may have failed to load.");
+        }
+
+        const parsed=parseJSON(text);
+        const finalName=(parsed.studentName?.trim())||item.name;
+        setBatchQueue(prev=>prev.map((it,idx)=>idx===i?{
+          ...it, status:"done", name:finalName,
+          results:{...parsed, image:item.imageB64||null},
+          error:null
+        }:it));
+      }catch(e){
+        setBatchQueue(prev=>prev.map((it,idx)=>idx===i?{...it,status:"failed",error:e.message}:it));
+      }
+
+      if(i<batchQueue.length-1&&!batchStopRef.current){
+        await new Promise(r=>setTimeout(r,600));
+      }
+    }
+    setBatchRunning(false);setBatchDone(true);
+  },[batchQueue,callAPI,subject,totalMarks,globalScheme,globalMisconceptions]);
+
+  /* ── Save all completed batch results to a class folder ── */
+  const batchSaveAll=useCallback(()=>{
+    const paperName=batchPaper.trim()||subject||"Batch Paper";
+    const pid=paperName.toLowerCase().replace(/\s+/g,"-");
+    const done=batchQueue.filter(it=>it.status==="done"&&it.results);
+    if(!done.length){setError("No completed results to save.");return;}
+
+    const newStudents=done.map(it=>({
+      id:Date.now()+Math.random(),
+      name:it.name,
+      timestamp:new Date().toISOString(),
+      originalImage:it.imageB64||null,
+      markedImage:null, // no canvas annotation in batch mode
+      results:it.results,
+      feedbackHTML:genFeedbackHTML(it.name,paperName,it.results),
+    }));
+
+    setClasses(prev=>({...prev,[pid]:{
+      name:paperName, subject:subject||"",
+      date:new Date().toLocaleDateString("en-GB"),
+      students:[...(prev[pid]?.students||[]).filter(s=>!newStudents.find(n=>n.name===s.name)),...newStudents]
+    }}));
+    setExpandedPaper(pid);setTab("classes");setSidebarOpen(false);
+  },[batchQueue,batchPaper,subject,genFeedbackHTML]);
+
   /* ── quick mark ── */
   const handleImageUpload=useCallback(async file=>{
     if(!file)return;
@@ -3443,6 +3851,10 @@ function NovaVista() {
           <button className={`nav-item ${tab==="scan"?"active":""}`} onClick={()=>{setTab("scan");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.scan} size={16}/></span> Scan Mode
             {scannedPages.length>0&&<span className="nav-badge">{scannedPages.length}</span>}
+          </button>
+          <button className={`nav-item ${tab==="batch"?"active":""}`} onClick={()=>{setTab("batch");setSidebarOpen(false);}}>
+            <span className="nav-icon"><Ic d={I.upload} size={16}/></span> Batch Upload
+            {batchQueue.filter(it=>it.status==="done").length>0&&<span className="nav-badge">{batchQueue.filter(it=>it.status==="done").length}</span>}
           </button>
 
           {(results||saved.length>0)&&<>
@@ -4199,8 +4611,246 @@ function NovaVista() {
         )}
 
         {/* ─────────────────────────
+            BATCH UPLOAD & MARK
+        ───────────────────────── */}
+        {tab==="batch"&&(
+          <>
+            <div className="topbar">
+              <div className="page-header">
+                <div>
+                  <div className="page-title">Batch Upload</div>
+                  <div className="page-sub">Upload scanned papers for multiple students — mark them all in one go</div>
+                </div>
+                <div className="row gap8">
+                  {batchQueue.length>0&&(
+                    <span className="pill pill-blue">
+                      {batchQueue.filter(i=>i.status==="done").length}/{batchQueue.length} marked
+                    </span>
+                  )}
+                  {batchDone&&batchQueue.filter(i=>i.status==="done").length>0&&(
+                    <button className="btn btn-green" onClick={batchSaveAll}>
+                      <Ic d={I.folderplus} size={15}/> Save All to Class
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="content col gap16">
+
+              {/* Step 1 — Configure */}
+              <div className="card card-pad col gap14">
+                <div className="card-title">1. Paper details</div>
+                <div className="g2 gap12">
+                  <div className="field">
+                    <div className="field-label">Paper / Class Name <span className="dim small">(used as folder name)</span></div>
+                    <input
+                      value={batchPaper}
+                      onChange={e=>setBatchPaper(e.target.value)}
+                      placeholder={`e.g. ${subject||"GCSE Maths"} Paper 1 · Y10 Test`}
+                    />
+                  </div>
+                  <div className="field">
+                    <div className="field-label">Mark Scheme</div>
+                    <div className="inset" style={{padding:"10px 12px",fontSize:"0.82rem",color:globalScheme?"var(--text2)":"var(--text3)",minHeight:40,borderRadius:"var(--radius-sm)"}}>
+                      {globalScheme
+                        ? <>{globalScheme.slice(0,120)}{globalScheme.length>120?"…":""}</>
+                        : <span>No mark scheme set — <button className="btn btn-ghost btn-sm" style={{display:"inline",padding:"0 6px"}} onClick={()=>{setTab("setup");setSidebarOpen(false);}}>add one in Setup →</button></span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2 — Upload */}
+              <div className="card card-pad col gap14">
+                <div className="card-title">2. Upload student papers</div>
+                <div className="muted small">Upload one file per student — images (JPG, PNG), PDFs, or Word documents (.docx). Name each file with the student's name for automatic matching.</div>
+
+                {/* File type info */}
+                <div className="row gap8" style={{flexWrap:"wrap"}}>
+                  {[
+                    {icon:"🖼",label:"Images",ext:"JPG · PNG · WEBP",col:"var(--blue)"},
+                    {icon:"📄",label:"PDF",ext:"Single or multi-page",col:"var(--red)"},
+                    {icon:"📝",label:"Word",ext:"DOCX · DOC",col:"#2b579a"},
+                  ].map((t,i)=>(
+                    <div key={i} className="inset" style={{padding:"8px 12px",borderRadius:"var(--radius-sm)",display:"flex",alignItems:"center",gap:8,fontSize:"0.78rem"}}>
+                      <span style={{fontSize:"1.1rem"}}>{t.icon}</span>
+                      <div>
+                        <div style={{fontWeight:600,color:"var(--text)"}}>{t.label}</div>
+                        <div style={{color:"var(--text3)",fontSize:"0.7rem"}}>{t.ext}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Dropzone */}
+                <div
+                  className="batch-dropzone"
+                  onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add("drag-over");}}
+                  onDragLeave={e=>e.currentTarget.classList.remove("drag-over")}
+                  onDrop={e=>{e.preventDefault();e.currentTarget.classList.remove("drag-over");batchAddFiles(e.dataTransfer.files);}}>
+                  <input
+                    type="file"
+                    accept="image/*,.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    multiple
+                    onChange={e=>{batchAddFiles(e.target.files);e.target.value="";}}
+                  />
+                  <div className="batch-dz-icon">📂</div>
+                  <div className="batch-dz-title">Drop files here or click to browse</div>
+                  <div className="batch-dz-sub">Images, PDFs and Word documents — select multiple at once</div>
+                </div>
+
+                {/* Queue */}
+                {batchQueue.length>0&&(
+                  <div className="col gap10">
+                    <div className="row-between">
+                      <div className="field-label">{batchQueue.length} paper{batchQueue.length!==1?"s":""} in queue</div>
+                      <button className="btn btn-ghost btn-sm" style={{color:"var(--red)"}}
+                        onClick={()=>{if(!batchRunning){setBatchQueue([]);setBatchDone(false);}}}
+                        disabled={batchRunning}>
+                        <Ic d={I.trash} size={13}/> Clear all
+                      </button>
+                    </div>
+
+                    {/* Progress bar while running */}
+                    {batchRunning&&(
+                      <div className="col gap4">
+                        <div className="row-between" style={{fontSize:"0.78rem",color:"var(--text3)"}}>
+                          <span>Marking in progress…</span>
+                          <span>{batchQueue.filter(i=>i.status==="done"||i.status==="failed").length} / {batchQueue.length}</span>
+                        </div>
+                        <div className="batch-progress-bar">
+                          <div className="batch-progress-fill" style={{width:`${Math.round(batchQueue.filter(i=>i.status==="done"||i.status==="failed").length/batchQueue.length*100)}%`}}/>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Queue list */}
+                    <div className="batch-queue">
+                      {batchQueue.map((item,idx)=>{
+                        const pct=item.results?.percentage||0;
+                        return(
+                          <div key={item.id} className={`batch-item ${item.status}`}>
+                            {item.fileType==="image"&&item.imageB64
+                              ?<img src={item.imageB64} className="batch-thumb" alt={item.name}/>
+                              :item.fileType==="pdf"&&item.imageB64
+                              ?<img src={item.imageB64} className="batch-thumb" alt={item.name}/>
+                              :<div className="batch-thumb-placeholder" style={{fontSize:"1.4rem"}}>
+                                {item.fileType==="pdf"?"📄":item.fileType==="docx"?"📝":item.fileType==="loading"?"⏳":"📄"}
+                              </div>}
+                            <div style={{flex:1,minWidth:0}}>
+                              {/* Editable name */}
+                              {item.status==="pending"?(
+                                <input
+                                  value={item.name}
+                                  onChange={e=>setBatchQueue(prev=>prev.map((it,i)=>i===idx?{...it,name:e.target.value}:it))}
+                                  style={{fontWeight:600,fontSize:"0.88rem",background:"transparent",border:"none",borderBottom:"1px solid var(--border-md)",width:"100%",color:"var(--text)",padding:"2px 0",outline:"none"}}
+                                  placeholder="Student name…"
+                                />
+                              ):(
+                                <div className="batch-item-name">{item.name}</div>
+                              )}
+                              <div className="batch-item-sub row gap6" style={{marginTop:3}}>
+                                {/* File type badge */}
+                                <span style={{fontSize:"0.65rem",fontWeight:700,padding:"1px 6px",borderRadius:99,
+                                  background:item.fileType==="pdf"?"rgba(232,71,63,0.12)":item.fileType==="docx"?"rgba(43,87,154,0.12)":"rgba(108,143,245,0.10)",
+                                  color:item.fileType==="pdf"?"var(--red)":item.fileType==="docx"?"#5b9bd5":"var(--blue)",
+                                  border:`1px solid ${item.fileType==="pdf"?"rgba(232,71,63,0.2)":item.fileType==="docx"?"rgba(43,87,154,0.2)":"rgba(108,143,245,0.2)"}`
+                                }}>
+                                  {item.fileType==="pdf"?"PDF":item.fileType==="docx"?"DOCX":item.fileType==="image"?"IMG":"…"}
+                                </span>
+                                <span>
+                                  {item.status==="pending"  && (item.fileType==="docx"?`${item.wordCount||"?"} words`:`Ready to mark${item.pageCount?` · ${item.pageCount}pp`:""}`)}
+                                  {item.status==="marking"  && <span style={{color:"var(--blue)"}}>⏳ Marking…</span>}
+                                  {item.status==="done"     && `${item.results?.totalScore??'?'}/${item.results?.maxScore??'?'} · Grade ${item.results?.grade||'—'}`}
+                                  {item.status==="failed"   && <span style={{color:"var(--red)"}}>✗ {item.error?.slice(0,60)}</span>}
+                                </span>
+                              </div>
+                            </div>
+                            {item.status==="done"&&(
+                              <div className="batch-item-score" style={{color:pctColor(pct)}}>{pct}%</div>
+                            )}
+                            <span className={`batch-status-pill ${item.status}`}>
+                              {item.status==="pending" ?"Queued"
+                              :item.status==="marking" ?"Marking…"
+                              :item.status==="done"    ?"✓ Done"
+                              :"✗ Failed"}
+                            </span>
+                            {item.status!=="marking"&&!batchRunning&&(
+                              <button className="btn btn-ghost btn-sm" style={{padding:"4px 6px",flexShrink:0}}
+                                onClick={()=>setBatchQueue(prev=>prev.filter((_,i)=>i!==idx))}>
+                                <Ic d={I.trash} size={12}/>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Step 3 — Mark */}
+              {batchQueue.length>0&&(
+                <div className="card card-pad col gap12">
+                  <div className="card-title">3. Mark all papers</div>
+                  <div className="muted small">
+                    Papers are marked one at a time in order. Each takes 5–15 seconds. You can leave this page open and come back — results stay here until you save or clear.
+                  </div>
+                  {!globalScheme&&(
+                    <div className="warn-box">No mark scheme set — results will use general standards. For accurate marking <button className="btn btn-ghost btn-sm" style={{display:"inline",padding:"0 6px"}} onClick={()=>{setTab("setup");setSidebarOpen(false);}}>add one in Setup →</button></div>
+                  )}
+                  <div className="row gap10" style={{flexWrap:"wrap"}}>
+                    {!batchRunning?(
+                      <>
+                        <button
+                          className="btn btn-red btn-lg"
+                          style={{flex:1,justifyContent:"center"}}
+                          disabled={!batchQueue.filter(i=>i.status==="pending"||i.status==="failed").length}
+                          onClick={batchMark}>
+                          <Ic d={I.checksq} size={17}/>
+                          {batchQueue.every(i=>i.status==="done")
+                            ?"✓ All Marked"
+                            :`Mark ${batchQueue.filter(i=>i.status==="pending"||i.status==="failed").length} Paper${batchQueue.filter(i=>i.status==="pending"||i.status==="failed").length!==1?"s":""}`}
+                        </button>
+                        {batchQueue.some(i=>i.status==="failed")&&(
+                          <button className="btn btn-ghost" onClick={()=>{
+                            setBatchQueue(prev=>prev.map(it=>it.status==="failed"?{...it,status:"pending",error:null}:it));
+                            setBatchDone(false);
+                          }}>
+                            Retry failed
+                          </button>
+                        )}
+                      </>
+                    ):(
+                      <button className="btn btn-ghost btn-lg" style={{flex:1,justifyContent:"center"}}
+                        onClick={()=>{batchStopRef.current=true;setBatchRunning(false);}}>
+                        ⏹ Stop
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 4 — Results summary */}
+              {batchDone&&batchQueue.some(i=>i.status==="done")&&(
+                <BatchSummary
+                  done={batchQueue.filter(i=>i.status==="done"&&i.results)}
+                  batchPaper={batchPaper}
+                  subject={subject}
+                  pctColor={pctColor}
+                  initials={initials}
+                  genFeedbackHTML={genFeedbackHTML}
+                  exportToExcel={exportToExcel}
+                  batchSaveAll={batchSaveAll}
+                />
+              )}
+
+            </div>
+          </>
+        )}
+
+        {/* ─────────────────────────
             REVIEW & MANUAL ASSIST
-            Shows after stitching / live capture
         ───────────────────────── */}
         {reviewMode&&stitchedImage&&(
           <>
