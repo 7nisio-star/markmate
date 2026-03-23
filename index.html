@@ -1803,6 +1803,118 @@ input::placeholder, textarea::placeholder { color: var(--text4); }
 .annot-legend-item { display: flex; align-items: center; gap: 4px; }
 .annot-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
+/* ── Question selector for overlay ── */
+.overlay-q-bar {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  padding: 10px 12px;
+  background: var(--inset);
+  border: 1px solid rgba(61,214,140,0.25);
+  border-radius: var(--radius-sm);
+}
+.overlay-q-bar-label {
+  font-size: 0.72rem; color: var(--text3); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.8px; margin-right: 4px;
+  flex-shrink: 0;
+}
+.overlay-q-btn {
+  padding: 4px 12px; border-radius: 99px;
+  font-size: 0.78rem; font-weight: 700;
+  border: 1.5px solid var(--border-md);
+  background: var(--card); color: var(--text2);
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.overlay-q-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); }
+.overlay-q-btn.active {
+  border-color: var(--green); color: #0b0c0f;
+  background: var(--green); box-shadow: 0 2px 8px rgba(61,214,140,0.35);
+}
+.overlay-q-btn.all { border-color: var(--border-md); }
+.overlay-q-btn.all.active {
+  border-color: var(--text3); background: var(--text2); color: var(--bg);
+}
+
+/* Overlay hint improvements */
+.vf-overlay-hint { transition: opacity 0.2s ease; }
+.vf-overlay-q-label {
+  position: absolute; top: 10px; left: 12px;
+  background: rgba(61,214,140,0.92); color: #0b0c0f;
+  font-size: 0.72rem; font-weight: 800; padding: 3px 10px;
+  border-radius: 99px; letter-spacing: 0.5px;
+}
+.vf-overlay-no-scheme {
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: rgba(232,71,63,0.9); color: white;
+  padding: 6px 14px; border-radius: 8px;
+  font-size: 0.76rem; font-weight: 600; white-space: nowrap;
+}
+.vf-overlay-no-hints {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  background: rgba(11,12,15,0.82); color: rgba(255,255,255,0.6);
+  padding: 10px 18px; border-radius: 8px;
+  font-size: 0.8rem; font-weight: 600; text-align: center;
+  border: 1px solid var(--border-md);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LIVE MARK — ANSWER OVERLAY (continued)
+═══════════════════════════════════════════════════════════ */
+.overlay-toggle {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: var(--inset);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer; transition: all 0.18s; user-select: none;
+}
+.overlay-toggle:hover  { border-color: var(--blue); background: var(--blue-dim); }
+.overlay-toggle.active { border-color: var(--green); background: var(--green-dim); }
+.overlay-toggle-label { font-size: 0.84rem; font-weight: 600; flex: 1; }
+.overlay-toggle-sub   { font-size: 0.72rem; color: var(--text3); margin-top: 2px; }
+.toggle-switch {
+  width: 40px; height: 22px; border-radius: 99px; flex-shrink: 0;
+  background: var(--border-md); position: relative; transition: background 0.2s;
+}
+.toggle-switch.on  { background: var(--green); }
+.toggle-switch::after {
+  content:''; position: absolute; top:3px; left:3px;
+  width:16px; height:16px; border-radius:50%;
+  background: white; transition: transform 0.2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+.toggle-switch.on::after { transform: translateX(18px); }
+
+.vf-overlay-layer {
+  position: absolute; inset: 0; pointer-events: none;
+  overflow: hidden; border-radius: inherit;
+}
+.vf-overlay-hint {
+  position: absolute;
+  background: rgba(11,12,15,0.88);
+  border: 1.5px solid;
+  border-radius: 8px; padding: 7px 11px;
+  font-family: 'Inter', sans-serif;
+  max-width: 200px;
+  backdrop-filter: blur(6px);
+  animation: hintFadeIn 0.35s ease;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+@keyframes hintFadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+.hint-code   { font-size:0.66rem; font-weight:800; letter-spacing:1px; text-transform:uppercase; margin-bottom:3px; }
+.hint-points { font-size:0.78rem; color:rgba(255,255,255,0.9); line-height:1.45; }
+.vf-overlay-badge {
+  position: absolute; top:10px; right:10px;
+  background: rgba(61,214,140,0.92); color:#0b0c0f;
+  font-size:0.7rem; font-weight:800; padding:4px 10px;
+  border-radius:99px; letter-spacing:0.5px;
+  animation: hintFadeIn 0.3s ease;
+}
+.vf-scan-line {
+  position: absolute; left:0; right:0; height:2px;
+  background: linear-gradient(90deg, transparent, rgba(61,214,140,0.7), transparent);
+  animation: scanLine 3s ease-in-out infinite;
+}
+@keyframes scanLine { 0%{top:8%;opacity:0} 10%{opacity:1} 90%{opacity:1} 100%{top:92%;opacity:0} }
+
 /* ═══════════════════════════════════════════════════════════
    BATCH UPLOAD & MARK
 ═══════════════════════════════════════════════════════════ */
@@ -2378,6 +2490,17 @@ function NovaVista() {
   const [batchPaper,setBatchPaper]   = useState("");
   const [batchDone,setBatchDone]     = useState(false);
   const batchStopRef                 = useRef(false);
+
+  // Live Mark — answer overlay
+  const [overlayOn,setOverlayOn]         = useState(false);
+  const [overlayHints,setOverlayHints]   = useState([]);   // unused — kept for compat
+  const [overlayQId,setOverlayQId]       = useState("all"); // selected question id
+  const [parsedSchemeQs,setParsedSchemeQs] = useState([]); // [{id,label,hints[]}]
+
+  // Quick Mark — extended upload modes
+  const [qmDocText,setQmDocText]     = useState(""); // extracted text from PDF/doc
+  const [qmDocName,setQmDocName]     = useState(""); // filename
+  const [qmDocLoading,setQmDocLoading] = useState(false);
   const [qmMode,setQmMode]     = useState("image");
   const [qmImageB64,setQmImageB64] = useState(null);
   const [qmImageURL,setQmImageURL] = useState(null);
@@ -2417,8 +2540,9 @@ function NovaVista() {
   const [captureFlash,setCaptureFlash]     = useState(false);   // green captured flash
 
   // API / Privacy mode
-  const [apiMode,setApiMode]               = useState("cloud"); // "cloud" | "local"
+  const [apiMode,setApiMode]               = useState("cloud"); // "cloud" | "proxy" | "local"
   const [localEndpoint,setLocalEndpoint]   = useState("http://localhost:11434");
+  const [proxyUrl,setProxyUrl]             = useState(""); // Cloudflare Worker URL
   const [localModel,setLocalModel]         = useState("llava");
   const [endpointTestResult,setEndpointTestResult] = useState(null); // null | "ok" | "fail"
   const [endpointTesting,setEndpointTesting] = useState(false);
@@ -2522,7 +2646,7 @@ function NovaVista() {
     } catch { setPinUnlocked(true); }
     try {
       const raw = localStorage.getItem("nv_prefs");
-      if (raw) { const p=JSON.parse(raw); if(p.apiMode)setApiMode(p.apiMode); if(p.localEndpoint)setLocalEndpoint(p.localEndpoint); if(p.localModel)setLocalModel(p.localModel); }
+      if (raw) { const p=JSON.parse(raw); if(p.apiMode)setApiMode(p.apiMode); if(p.localEndpoint)setLocalEndpoint(p.localEndpoint); if(p.localModel)setLocalModel(p.localModel); if(p.proxyUrl)setProxyUrl(p.proxyUrl); }
     } catch {}
   }, []);
 
@@ -2586,8 +2710,8 @@ function NovaVista() {
   }, [teacherName,teacherDept,teacherSchool,teacherPin,teacherRole]);
 
   useEffect(() => {
-    try { localStorage.setItem("nv_prefs", JSON.stringify({apiMode,localEndpoint,localModel})); } catch {}
-  }, [apiMode,localEndpoint,localModel]);
+    try { localStorage.setItem("nv_prefs", JSON.stringify({apiMode,localEndpoint,localModel,proxyUrl})); } catch {}
+  }, [apiMode,localEndpoint,localModel,proxyUrl]);
 
   const schoolFolderRef = useRef(null); // FileSystem API directory handle
 
@@ -2810,14 +2934,12 @@ function NovaVista() {
 
     if (apiMode === "local") {
       // ── Ollama / LocalAI via OpenAI-compatible endpoint ──────────────────
-      // Convert Anthropic-style messages → OpenAI-style
       const oaiMessages = [];
       if (system) oaiMessages.push({ role: "system", content: system });
       for (const m of messages) {
         if (typeof m.content === "string") {
           oaiMessages.push({ role: m.role, content: m.content });
         } else {
-          // Content blocks (text + image)
           const parts = m.content.map(block => {
             if (block.type === "text") return { type:"text", text: block.text };
             if (block.type === "image") {
@@ -2825,7 +2947,6 @@ function NovaVista() {
               const mime = block.source?.media_type || "image/jpeg";
               return { type:"image_url", image_url:{ url:`data:${mime};base64,${b64}` }};
             }
-            // document (PDF) — convert to text placeholder for local
             if (block.type === "document") return { type:"text", text:"[Document attached — PDF analysis requires cloud mode]" };
             return { type:"text", text:"" };
           });
@@ -2845,9 +2966,25 @@ function NovaVista() {
       const d = await res.json();
       return d.choices?.[0]?.message?.content || "";
 
+    } else if (apiMode === "proxy") {
+      // ── Proxy mode — API key lives on Cloudflare, never in browser ────────
+      if (!proxyUrl.trim()) throw new Error("Proxy URL not set — add it in Privacy & Data settings.");
+      const base = proxyUrl.trim().replace(/\/+$/, "");
+      const res = await fetch(`${base}/v1/messages`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:maxTokens, system, messages }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(()=>({}));
+        throw new Error(e?.error || `Proxy error ${res.status}`);
+      }
+      const d = await res.json();
+      return d.content.find(c=>c.type==="text")?.text || "";
+
     } else {
-      // ── Anthropic Cloud ───────────────────────────────────────────────────
-      if (!apiKey.trim()) throw new Error("API key not set — click the key icon in the sidebar.");
+      // ── Anthropic Cloud direct ────────────────────────────────────────────
+      if (!apiKey.trim()) throw new Error("API key not set — click the key icon in the sidebar, or switch to Proxy mode.");
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
         headers:{"Content-Type":"application/json","x-api-key":apiKey.trim(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
@@ -2857,7 +2994,7 @@ function NovaVista() {
       const d = await res.json();
       return d.content.find(c=>c.type==="text")?.text || "";
     }
-  }, [apiKey, apiMode, localEndpoint, localModel]);
+  }, [apiKey, apiMode, proxyUrl, localEndpoint, localModel]);
 
   /* ── Test local endpoint ── */
   const testLocalEndpoint = useCallback(async () => {
@@ -3520,22 +3657,29 @@ function NovaVista() {
     batchStopRef.current=false;
     setBatchRunning(true);setBatchDone(false);
 
+    // BUG-3 FIX: snapshot the queue at call time so we iterate the correct items
+    // even as setBatchQueue updates happen asynchronously during the loop
+    const snapshot=[...batchQueue];
+
     const scheme=globalScheme.trim()||"Apply standard UK academic marking.";
     const baseSys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}\nMARKING SCHEME: ${scheme}\n${globalMisconceptions?`MISCONCEPTIONS: ${globalMisconceptions}`:""}\nFor each question use B/M/A mark codes from the marking scheme.\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"<from paper or blank>","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"","feedback":"","correct":<bool>,"misconception":null}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
 
-    for(let i=0;i<batchQueue.length;i++){
+    for(let i=0;i<snapshot.length;i++){
       if(batchStopRef.current)break;
-      const item=batchQueue[i];
-      if(item.status==="done"||item.status==="failed"&&!item.error?.includes("retry"))continue;
-      if(item.status==="failed")continue; // don't auto-retry failed items
+      const item=snapshot[i];
 
+      // BUG-2 FIX: correct operator precedence — skip done items only,
+      // always retry pending; failed items are skipped (user retries manually)
+      if(item.status==="done")continue;
+      if(item.status==="failed")continue;
+
+      // Mark as in-progress in the live queue (by index)
       setBatchQueue(prev=>prev.map((it,idx)=>idx===i?{...it,status:"marking"}:it));
 
       try{
         let text="";
 
         if(item.fileType==="docx"&&item.textContent){
-          // ── Text document: send as text, not image ──────────────────────
           const wordLimit=3000;
           const truncated=item.textContent.length>wordLimit
             ? item.textContent.slice(0,wordLimit)+"…[truncated]"
@@ -3545,7 +3689,6 @@ function NovaVista() {
             baseSys, 2500
           );
         } else if(item.imageB64){
-          // ── Image / rendered PDF: send as image ─────────────────────────
           const b64=item.imageB64.split(",")[1];
           text=await callAPI(
             [{role:"user",content:[
@@ -3560,16 +3703,19 @@ function NovaVista() {
 
         const parsed=parseJSON(text);
         const finalName=(parsed.studentName?.trim())||item.name;
+        // Update snapshot so later iterations see the correct state
+        snapshot[i]={...item,status:"done",name:finalName,results:{...parsed,image:item.imageB64||null}};
         setBatchQueue(prev=>prev.map((it,idx)=>idx===i?{
-          ...it, status:"done", name:finalName,
-          results:{...parsed, image:item.imageB64||null},
+          ...it,status:"done",name:finalName,
+          results:{...parsed,image:item.imageB64||null},
           error:null
         }:it));
       }catch(e){
+        snapshot[i]={...item,status:"failed",error:e.message};
         setBatchQueue(prev=>prev.map((it,idx)=>idx===i?{...it,status:"failed",error:e.message}:it));
       }
 
-      if(i<batchQueue.length-1&&!batchStopRef.current){
+      if(i<snapshot.length-1&&!batchStopRef.current){
         await new Promise(r=>setTimeout(r,600));
       }
     }
@@ -3609,7 +3755,7 @@ function NovaVista() {
       const b64=e.target.result;setQmImageB64(b64);setQmImageURL(URL.createObjectURL(file));setQmOcr("");setQmResult(null);setQmOcrLoading(true);
       try{const data=b64.split(",")[1];const text=await callAPI([{role:"user",content:[{type:"image",source:{type:"base64",media_type:file.type||"image/jpeg",data}},{type:"text",text:"Transcribe the handwritten student answer. Output only the text, no commentary."}]}],"Expert at reading handwritten student answers.",800);
         setQmOcr(text.trim());
-        setQmOcrOriginal(text.trim()); // save unedited version for correction tracking
+        setQmOcrOriginal(text.trim());
       }
       catch{setQmOcr("(OCR failed — type the answer below)");}
       finally{setQmOcrLoading(false);}
@@ -3617,34 +3763,193 @@ function NovaVista() {
     reader.readAsDataURL(file);
   },[callAPI]);
 
+  /* ── Quick Mark — PDF / DOCX upload ── */
+  const handleQmDocUpload=useCallback(async(file)=>{
+    if(!file)return;
+    setQmDocLoading(true); setQmDocText(""); setQmDocName(file.name); setQmResult(null);
+    try{
+      const item = await fileToQueueItem(file);
+      if(item.status==="failed") throw new Error(item.error||"Could not read file");
+      if(item.fileType==="docx"&&item.textContent){
+        setQmDocText(item.textContent);
+        setQmMode("doc");
+      } else if(item.imageB64){
+        // PDF rendered to image — treat like an image upload
+        setQmImageB64(item.imageB64);
+        setQmImageURL(item.imageB64);
+        setQmMode("image");
+        setQmOcrLoading(true);
+        try{
+          const b64=item.imageB64.split(",")[1];
+          const text=await callAPI([{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:"Transcribe the handwritten or typed student answer. Output only the text, no commentary."}]}],"Expert at reading student answers.",800);
+          setQmOcr(text.trim()); setQmOcrOriginal(text.trim());
+        }catch{setQmOcr("(OCR failed — edit below)");}
+        finally{setQmOcrLoading(false);}
+      }
+    }catch(e){setError("Could not read file: "+e.message);}
+    finally{setQmDocLoading(false);}
+  },[fileToQueueItem,callAPI]);
+
+  /* ── Parse mark scheme into AR overlay hints ── */
+  /* ─────────────────────────────────────────────────────────────
+     parseSchemeIntoQuestions
+     Splits the global mark scheme into per-question sections.
+     Handles formats:
+       "Q1"  "Q2a"  "Q2 a)"  "Question 3"
+       "1."  "2."  "(1)"  "1a."
+       "Part a)"  "a)"  "i)"  "ii)"
+     Returns: [{id, label, hints:[{code,text,col,left,top}]}]
+  ─────────────────────────────────────────────────────────────── */
+  const parseSchemeIntoQuestions = useCallback(() => {
+    const scheme = (globalScheme || "").trim();
+    if (!scheme) return [];
+
+    const lines = scheme.split(/\n/).map(l => l.trim()).filter(Boolean);
+
+    // Regex: detect a question header line
+    // Matches: Q1, Q2a, Q2 a), Q2(a), Question 1, 1., 1a., (1), Part a, a), i), ii)
+    const Q_HEADER = /^(?:Q(?:uestion)?\s*(\d+)\s*([a-e])?[\s:.)\-]*$|Q(?:uestion)?\s*(\d+)\s*\(([a-e])\)|(\d+)\s*([a-e])\)|(\d+)\s*([a-e])?\s*[:.]\s*$|Part\s+([a-e])[:.)]?|^\(?([a-e])\)[\s:.]*$|^([ivx]+)\))/i;
+
+    const HINT_POSITIONS = [
+      {left:"4%",  top:"12%"}, {left:"54%", top:"12%"},
+      {left:"4%",  top:"34%"}, {left:"54%", top:"34%"},
+      {left:"4%",  top:"55%"}, {left:"54%", top:"55%"},
+      {left:"4%",  top:"75%"}, {left:"54%", top:"75%"},
+    ];
+
+    const buildHints = (markLines) => {
+      const hints = [];
+      let pi = 0;
+      for (const line of markLines) {
+        if (pi >= HINT_POSITIONS.length) break;
+        if (line.length < 3) continue;
+        // Skip pure header lines that slipped through
+        if (/^Q\d|^Question\s*\d/i.test(line) && line.length < 20) continue;
+        const codeMatch = line.match(/\b([BMAP]\d)\b/i);
+        const code = codeMatch ? codeMatch[1].toUpperCase() : "";
+        const isB = code.startsWith("B");
+        const isM = code.startsWith("M");
+        const isA = code.startsWith("A");
+        const col = isB ? "#3dd68c" : isM ? "#6c8ff5" : isA ? "#f5c842" : "#f0956b";
+        const text = line
+          .replace(/\b[BMAP]\d\b\s*/gi, "")
+          .replace(/^\d+[\.\)]\s*/, "")
+          .replace(/^[ivx]+\)\s*/i, "")
+          .replace(/^award\s+\d+\s+mark\s+for\s*/i, "")
+          .trim()
+          .slice(0, 90);
+        if (!text) continue;
+        hints.push({ code: code || "✓", text, col, ...HINT_POSITIONS[pi++] });
+      }
+      return hints;
+    };
+
+    // ── Split scheme into question buckets ──────────────────────────
+    const buckets = []; // [{rawId, label, lines[]}]
+    let current = null;
+
+    for (const line of lines) {
+      // Does this line look like a question header?
+      const isHeader = Q_HEADER.test(line) && line.length < 40;
+      if (isHeader) {
+        current = { rawId: line, label: line.replace(/[:.)\s]+$/,"").trim(), lines: [] };
+        buckets.push(current);
+      } else {
+        if (!current) {
+          // Lines before any header — lump into a "General" bucket
+          current = { rawId:"general", label:"General", lines:[] };
+          buckets.push(current);
+        }
+        current.lines.push(line);
+      }
+    }
+
+    // ── If no question headers found, try splitting by blank-line blocks ──
+    if (buckets.length <= 1 && buckets[0]?.rawId === "general") {
+      // Try to auto-detect question structure by looking for number prefixes
+      const numbered = [];
+      let cur = null;
+      for (const line of lines) {
+        const nm = line.match(/^(?:Q?(\d+)\s*([a-e])?[:.)\s])/i);
+        if (nm) {
+          const qn = nm[1], qp = nm[2]||"";
+          const lbl = `Q${qn}${qp.toLowerCase()}`;
+          cur = { rawId: lbl, label: lbl, lines: [line] };
+          numbered.push(cur);
+        } else if (cur) {
+          cur.lines.push(line);
+        } else {
+          cur = { rawId:"general", label:"General", lines:[line] };
+          numbered.push(cur);
+        }
+      }
+      if (numbered.length > 1) {
+        // Rebuild using numbered structure
+        buckets.length = 0;
+        numbered.forEach(b => buckets.push(b));
+      }
+    }
+
+    // ── Build final question objects ──────────────────────────────────
+    const questions = buckets
+      .filter(b => b.lines.length > 0)
+      .map((b, i) => ({
+        id:    b.label.toLowerCase().replace(/\s+/g,""),
+        label: b.label,
+        hints: buildHints(b.lines),
+        order: i,
+      }));
+
+    return questions;
+  }, [globalScheme]);
+
+  /* Keep parsedSchemeQs in sync with scheme and reset selection when overlay opens */
+  useEffect(() => {
+    if (overlayOn) {
+      const qs = parseSchemeIntoQuestions();
+      setParsedSchemeQs(qs);
+      // Default: select first question if available, else "all"
+      setOverlayQId(qs.length > 0 ? qs[0].id : "all");
+    }
+  }, [overlayOn, globalScheme, parseSchemeIntoQuestions]);
+
+  /* Legacy — kept so nothing referencing parseSchemeHints breaks */
+  const parseSchemeHints = useCallback(() => {
+    const qs = parseSchemeIntoQuestions();
+    if (!qs.length) return [];
+    const sel = qs.find(q => q.id === overlayQId);
+    return sel ? sel.hints : qs.flatMap(q => q.hints).slice(0, 8);
+  }, [parseSchemeIntoQuestions, overlayQId]);
+
   const handleMark=useCallback(async()=>{
-    const answer=qmMode==="image"?qmOcr:qmPasted;
+    // Get answer from the correct source
+    const answer = qmMode==="image" ? qmOcr
+                 : qmMode==="doc"   ? qmDocText
+                 : qmPasted;
     if(!answer.trim()){setError("Please provide a student answer.");return;}
     // If teacher edited OCR text, record as a correction before marking
     if(qmMode==="image" && qmOcr && qmOcr!==qmOcrOriginal && qmOcrOriginal) {
       recordCorrection("ocr", qmOcrOriginal, qmOcr, { question:qmQuestion, subject });
     }
     const scheme=qmScheme.trim()||globalScheme.trim();
-
-    // Detect annotation style from scheme (B/M/A/P marks etc.)
     const hasB = /\bB\d/i.test(scheme);
     const hasM = /\bM\d/i.test(scheme);
     const hasA = /\bA\d/i.test(scheme);
     const hasP = /\bP\d/i.test(scheme);
     const markTypes = [hasB?"B (knowledge/fact)":"", hasM?"M (method)":"", hasA?"A (accuracy)":"", hasP?"P (process)":""].filter(Boolean).join(", ") || "B (knowledge), M (method), A (accuracy)";
-
-    const sys=`You are an expert examiner marking a single student answer for a UK school.\n${subject?`Subject: ${subject}`:""}\n${qmQuestion?`Question: ${qmQuestion}`:""}\nMark Scheme: ${scheme||"Apply appropriate UK academic standards."}\n${globalMisconceptions?`Misconceptions to watch for: ${globalMisconceptions}`:""}\n\nANNOTATION STYLE:\nUse proper exam board annotation notation. Detected mark types in this scheme: ${markTypes}.\nFor each marking point: assign the correct mark code (B1, B2, M1, M2, A1, A2, P1, P2 etc.) based on what appears in the marking scheme. If no specific codes appear in the scheme, use B marks for knowledge/fact points and M/A for method/accuracy in calculations.\n\nRespond ONLY with valid JSON, no markdown:\n{"marksAwarded":<n>,"marksAvailable":<n or null>,"percentage":<0-100>,"breakdown":[{"point":"<mark scheme point text>","code":"<B1|M1|A1|P1 etc>","awarded":<bool>,"comment":"<why awarded or not>"}],"annotations":[{"label":"<B1✓ or M1✗ or A1✓ etc>","type":"correct|incorrect|partial","placement":"<top-left|top-right|middle-left|middle-right|bottom-left|bottom-right>"}],"feedback":"<2-3 sentences directly to student>","misconceptions":[],"strengths":[],"improvements":[]}`;
+    const sys=`You are an expert examiner marking a single student answer for a UK school.\n${subject?`Subject: ${subject}`:""}\n${qmQuestion?`Question: ${qmQuestion}`:""}\nMark Scheme: ${scheme||"Apply appropriate UK academic standards."}\n${globalMisconceptions?`Misconceptions to watch for: ${globalMisconceptions}`:""}\n\nANNOTATION STYLE:\nUse proper exam board annotation notation. Detected mark types in this scheme: ${markTypes}.\nFor each marking point assign the correct mark code (B1, B2, M1, M2, A1, A2, P1, P2 etc.).\n\nRespond ONLY with valid JSON, no markdown:\n{"marksAwarded":<n>,"marksAvailable":<n or null>,"percentage":<0-100>,"breakdown":[{"point":"<mark scheme point text>","code":"<B1|M1|A1|P1 etc>","awarded":<bool>,"comment":"<why awarded or not>"}],"annotations":[{"label":"<B1✓ or M1✗ etc>","type":"correct|incorrect|partial","placement":"<top-left|top-right|middle-left|middle-right|bottom-left|bottom-right>"}],"feedback":"<2-3 sentences directly to student>","misconceptions":[],"strengths":[],"improvements":[]}`;
     setQmAnnotReady(false);
     setQmLoading(true);setQmResult(null);setError("");
-    try{const text=await callAPI([{role:"user",content:`Student answer:\n\n${answer}`}],sys,1200);
+    try{
+      const text=await callAPI([{role:"user",content:`Student answer:\n\n${answer}`}],sys,1200);
       const parsed=parseJSON(text);
-      // Tag with original AI values so we can detect teacher corrections later
       parsed._aiMarks    = parsed.marksAwarded;
       parsed._aiFeedback = parsed.feedback;
-      setQmResult(parsed);setQmEditing(false);}
+      setQmResult(parsed);setQmEditing(false);
+    }
     catch(e){setError("Marking failed: "+e.message);}
     finally{setQmLoading(false);}
-  },[callAPI,qmMode,qmOcr,qmOcrOriginal,qmPasted,qmScheme,globalScheme,globalMisconceptions,subject,qmQuestion,recordCorrection]);
+  },[callAPI,qmMode,qmOcr,qmOcrOriginal,qmPasted,qmDocText,qmScheme,globalScheme,globalMisconceptions,subject,qmQuestion,recordCorrection]);
 
   const handleAccept=useCallback(()=>{
     if(!qmResult)return;
@@ -3662,8 +3967,15 @@ function NovaVista() {
       });
     }
     setSaved(p=>[{id:Date.now(),question:qmQuestion||"(no question)",score:`${qmResult.marksAwarded}${qmResult.marksAvailable?"/"+qmResult.marksAvailable:""}`,pct:qmResult.percentage,feedback:qmResult.feedback,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),result:qmResult},...p]);
-    setQmResult(null);setQmOcr("");setQmOcrOriginal("");setQmPasted("");setQmQuestion("");setQmScheme("");setQmImageB64(null);setQmImageURL(null);setQmEditing(false);
-  },[qmResult,qmQuestion,qmMode,qmOcr,qmPasted,qmScheme,globalScheme,qmEditing,recordCorrection]);
+    // Reset ALL input state — including doc mode so next paper starts clean
+    setQmResult(null);
+    setQmOcr("");setQmOcrOriginal("");setQmPasted("");
+    setQmDocText("");setQmDocName("");
+    setQmQuestion("");setQmScheme("");
+    setQmImageB64(null);setQmImageURL(null);
+    setQmMode("image"); // always return to image mode
+    setQmEditing(false);setQmAnnotReady(false);
+  },[qmResult,qmQuestion,qmMode,qmOcr,qmPasted,qmDocText,qmScheme,globalScheme,qmEditing,recordCorrection]);
 
   /* ── annotation canvas ── */
   useEffect(()=>{
@@ -3765,6 +4077,8 @@ function NovaVista() {
   const mClass=(a,av)=>!av?"":a/av>=.8?"correct":a/av>=.5?"partial":"wrong";
   const schemeReady=globalScheme.trim().length>10;
   const keySet=apiKey.trim().startsWith("sk-ant-");
+  const proxySet=proxyUrl.trim().startsWith("https://");
+  const apiReady=apiMode==="local"||(apiMode==="proxy"&&proxySet)||(apiMode==="cloud"&&keySet);
   const totalStudents=Object.values(classes).reduce((s,p)=>s+p.students.length,0);
 
   /* ══════════════════════════════════════════════════════════
@@ -3901,15 +4215,17 @@ function NovaVista() {
 
         <div className="sidebar-footer">
           <div className="key-status" onClick={()=>setShowKeyModal(true)} title="Click to configure AI connection">
-            <div className={`key-dot ${apiMode==="local"?"ok":keySet?"ok":"bad"}`}/>
-            <span className={`key-label ${apiMode==="local"?"ok":keySet?"ok":""}`}>
-              {apiMode==="local"?"Local model":"Cloud API"}{apiMode==="cloud"&&!keySet?" — not set":""}
+            <div className={`key-dot ${apiReady?"ok":"bad"}`}/>
+            <span className={`key-label ${apiReady?"ok":""}`}>
+              {apiMode==="local"?"Local model":apiMode==="proxy"?"Via Proxy":"Cloud API"}
+              {apiMode==="cloud"&&!keySet?" — key not set":""}
+              {apiMode==="proxy"&&!proxySet?" — URL not set":""}
             </span>
-            <Ic d={apiMode==="local"?I.server:I.key} size={13} color="var(--text3)"/>
+            <Ic d={apiMode==="local"?I.server:apiMode==="proxy"?I.globe:I.key} size={13} color="rgba(255,255,255,0.5)"/>
           </div>
           <div className={`privacy-badge ${apiMode==="local"?"local":"cloud"}`} onClick={()=>{setTab("privacy");setSidebarOpen(false);}}>
             <Ic d={apiMode==="local"?I.wifioff:I.cloud} size={12}/>
-            {apiMode==="local"?"🛡 Data stays on device":"☁ Using Anthropic cloud"}
+            {apiMode==="local"?"🛡 Data stays on device":apiMode==="proxy"?"🔒 Via secure proxy":"☁ Using Anthropic cloud"}
           </div>
           <div className="sidebar-licence active" onClick={()=>{setTab("account");setSidebarOpen(false);}}>
             <span>✓</span> Demo Mode — All features unlocked
@@ -4082,8 +4398,9 @@ function NovaVista() {
                   <div className="card card-pad col gap14">
                     <div className="row-between">
                       <div className="card-title" style={{marginBottom:0}}>Student Answer</div>
-                      <div className="toggle-group" style={{width:190}}>
-                        <button className={`toggle-opt ${qmMode==="image"?"on":""}`} onClick={()=>{setQmMode("image");setQmResult(null);}}>📷 Image</button>
+                      <div className="toggle-group" style={{width:260}}>
+                        <button className={`toggle-opt ${qmMode==="image"?"on":""}`} onClick={()=>{setQmMode("image");setQmResult(null);setQmDocText("");}}> 📷 Image</button>
+                        <button className={`toggle-opt ${qmMode==="doc"?"on":""}`}   onClick={()=>{setQmMode("doc");setQmResult(null);}}>📄 PDF/Doc</button>
                         <button className={`toggle-opt ${qmMode==="text"?"on":""}`}  onClick={()=>{setQmMode("text");setQmResult(null);}}>✏️ Text</button>
                       </div>
                     </div>
@@ -4115,6 +4432,41 @@ function NovaVista() {
                           </div>
                         )}
                       </>
+
+                    ):qmMode==="doc"?(
+                      <>
+                        {!qmDocText?(
+                          <div className="upload-zone"
+                            onDragOver={e=>{e.preventDefault();e.currentTarget.classList.add("drag-over");}}
+                            onDragLeave={e=>e.currentTarget.classList.remove("drag-over")}
+                            onDrop={e=>{e.preventDefault();e.currentTarget.classList.remove("drag-over");handleQmDocUpload(e.dataTransfer.files[0]);}}>
+                            <input
+                              type="file"
+                              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                              onChange={e=>handleQmDocUpload(e.target.files[0])}
+                            />
+                            <div className="upload-zone-icon">{qmDocLoading?<span className="spinner-lg"/>:<Ic d={I.upload} size={36} color="var(--text4)"/>}</div>
+                            <div className="upload-zone-text">{qmDocLoading?"Reading document…":"Drop PDF or Word doc here"}</div>
+                            <div className="upload-zone-sub">PDF · DOCX · DOC — text is extracted automatically</div>
+                          </div>
+                        ):(
+                          <div className="col gap8">
+                            <div className="row-between">
+                              <div className="dim small">📄 {qmDocName} — {qmDocText.split(/\s+/).length} words extracted</div>
+                              <button className="btn btn-ghost btn-sm" onClick={()=>{setQmDocText("");setQmDocName("");setQmResult(null);}}>✕ Remove</button>
+                            </div>
+                            <div className="ocr-box">
+                              <div className="ocr-label">📝 Extracted text — edit if needed</div>
+                              <textarea
+                                value={qmDocText}
+                                onChange={e=>{setQmDocText(e.target.value);setQmResult(null);}}
+                                style={{minHeight:120}}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </>
+
                     ):(
                       <div className="field">
                         <div className="field-label">Student's Answer</div>
@@ -4140,10 +4492,10 @@ function NovaVista() {
                   </div>
 
                   <button className="btn btn-blue btn-lg" style={{width:"100%",justifyContent:"center"}}
-                    disabled={qmLoading||(qmMode==="image"?(!qmOcr.trim()||qmOcrLoading):!qmPasted.trim())}
+                    disabled={qmLoading||qmDocLoading||(qmMode==="image"?(!qmOcr.trim()||qmOcrLoading):qmMode==="doc"?!qmDocText.trim():!qmPasted.trim())}
                     onClick={handleMark}>
                     <Ic d={I.zap} size={17}/>
-                    {qmLoading?"Marking…":"Mark This Answer"}
+                    {qmLoading?"Marking…":qmDocLoading?"Loading document…":"Mark This Answer"}
                   </button>
                 </div>
 
@@ -4311,13 +4663,14 @@ function NovaVista() {
               <div className="page-header">
                 <div>
                   <div className="page-title">Live Mark</div>
-                  <div className="page-sub">Point your camera at a student's paper and capture to mark instantly</div>
+                  <div className="page-sub">Point your camera at a student's paper — capture to mark, or enable Answer Overlay to see hints live</div>
                 </div>
                 <div className="row gap8">
                   <span className={`pill ${cameraActive?"pill-green":"pill-ghost"}`}>
                     <span className={`dot ${cameraActive?"dot-live":"dot-red"}`}/>
                     {cameraActive?"Live":"Off"}
                   </span>
+                  {overlayOn&&<span className="pill pill-green" style={{fontSize:"0.72rem"}}>🔍 Overlay ON</span>}
                 </div>
               </div>
             </div>
@@ -4325,26 +4678,154 @@ function NovaVista() {
               <div className="g2 gap16" style={{alignItems:"start"}}>
                 <div className="col gap16">
                   <div className="card card-pad col gap14">
-                    <div className="card-title">Visualiser</div>
+                    <div className="row-between">
+                      <div className="card-title" style={{marginBottom:0}}>Visualiser</div>
+                    </div>
+
                     <div className="viewfinder">
                       {cameraActive
-                        ?<><video ref={videoRef} autoPlay playsInline muted/>
-                           <div className="guides"><div className="guide tl"/><div className="guide tr"/><div className="guide bl"/><div className="guide br"/></div></>
+                        ?<>
+                           <video ref={videoRef} autoPlay playsInline muted/>
+                           <div className="guides"><div className="guide tl"/><div className="guide tr"/><div className="guide bl"/><div className="guide br"/></div>
+
+                           {/* ── Answer Overlay Layer ── */}
+                           {overlayOn&&(
+                             <div className="vf-overlay-layer">
+                               <div className="vf-scan-line"/>
+                               {(()=>{
+                                 const selQ = parsedSchemeQs.find(q=>q.id===overlayQId);
+                                 const hints = overlayQId==="all"
+                                   ? parsedSchemeQs.flatMap(q=>q.hints).slice(0,8)
+                                   : (selQ?.hints||[]);
+                                 const qLabel = overlayQId==="all"?"All Questions":(selQ?.label||overlayQId);
+                                 return(
+                                   <>
+                                     {/* Question label badge */}
+                                     <div className="vf-overlay-q-label">{qLabel}</div>
+                                     {/* Right-side badge */}
+                                     <div className="vf-overlay-badge" style={{top:10,right:10}}>
+                                       {hints.length} mark point{hints.length!==1?"s":""}
+                                     </div>
+
+                                     {/* Mark scheme hints */}
+                                     {!globalScheme&&(
+                                       <div className="vf-overlay-no-scheme">
+                                         ⚠ Add a mark scheme in Setup to see hints
+                                       </div>
+                                     )}
+                                     {globalScheme&&hints.length===0&&(
+                                       <div className="vf-overlay-no-hints">
+                                         No criteria found for {qLabel}<br/>
+                                         <span style={{fontSize:"0.72rem",opacity:0.7}}>Check mark scheme format</span>
+                                       </div>
+                                     )}
+                                     {hints.map((hint,i)=>(
+                                       <div key={i} className="vf-overlay-hint"
+                                         style={{left:hint.left, top:hint.top, borderColor:hint.col}}>
+                                         <div className="hint-code" style={{color:hint.col}}>{hint.code}</div>
+                                         <div className="hint-points">{hint.text}</div>
+                                       </div>
+                                     ))}
+                                   </>
+                                 );
+                               })()}
+                             </div>
+                           )}
+                         </>
                         :<div className="viewfinder-idle"><Ic d={I.camera} size={52}/><p>Camera not started</p></div>}
                     </div>
+
                     <canvas ref={canvasRef} style={{display:"none"}}/>
-                    <div className="row gap10" style={{justifyContent:"center"}}>
+
+                    <div className="row gap10" style={{justifyContent:"center",flexWrap:"wrap"}}>
                       {!cameraActive
                         ?<button className="btn btn-red" onClick={startCamera}><Ic d={I.camera} size={15}/> Start Camera</button>
                         :<><button className="btn btn-ghost" onClick={stopCamera}>Stop</button>
                            <div className="capture-ring" onClick={async()=>{
                              const img=captureFrame();
                              if(img){setStitchedImage(img);setScannedPages([img]);setReviewMode("review");}
-                           }}>                             <div className="capture-core"><Ic d={I.circle} size={20} color="white" fill="white"/></div>
+                           }}>
+                             <div className="capture-core"><Ic d={I.circle} size={20} color="white" fill="white"/></div>
                            </div>
                            <span style={{fontSize:"0.75rem",color:"var(--text3)"}}>Capture & Mark</span></>}
                     </div>
                   </div>
+
+                  {/* ── Answer Overlay Toggle ── */}
+                  <div
+                    className={`overlay-toggle ${overlayOn?"active":""}`}
+                    onClick={()=>setOverlayOn(v=>!v)}>
+                    <div style={{flex:1}}>
+                      <div className="overlay-toggle-label">🔍 Answer Overlay</div>
+                      <div className="overlay-toggle-sub">
+                        {overlayOn
+                          ?"Active — select the question you're marking below to see its criteria on screen"
+                          :"Toggle on to see mark scheme hints for each question overlaid on the live feed"}
+                      </div>
+                    </div>
+                    <div className={`toggle-switch ${overlayOn?"on":""}`}/>
+                  </div>
+
+                  {/* ── Question Selector ── */}
+                  {overlayOn&&(
+                    <>
+                      {!globalScheme?(
+                        <div className="warn-box">
+                          No mark scheme set — <button className="btn btn-ghost btn-sm" style={{display:"inline",padding:"0 6px"}}
+                            onClick={()=>{setTab("setup");setSidebarOpen(false);}}>add one in Setup →</button>
+                        </div>
+                      ):parsedSchemeQs.length===0?(
+                        <div className="info-box">Parsing mark scheme…</div>
+                      ):(
+                        <div className="col gap8">
+                          <div className="overlay-q-bar">
+                            <span className="overlay-q-bar-label">Question:</span>
+                            <button
+                              className={`overlay-q-btn all ${overlayQId==="all"?"active":""}`}
+                              onClick={()=>setOverlayQId("all")}>
+                              All
+                            </button>
+                            {parsedSchemeQs.map(q=>(
+                              <button
+                                key={q.id}
+                                className={`overlay-q-btn ${overlayQId===q.id?"active":""}`}
+                                onClick={()=>setOverlayQId(q.id)}>
+                                {q.label}
+                              </button>
+                            ))}
+                          </div>
+                          {(()=>{
+                            const selQ = parsedSchemeQs.find(q=>q.id===overlayQId);
+                            const allHints = parsedSchemeQs.flatMap(q=>q.hints);
+                            const hints = overlayQId==="all" ? allHints.slice(0,8) : (selQ?.hints||[]);
+                            return(
+                              <div className="card card-pad col gap8" style={{background:"var(--inset)",padding:"10px 14px"}}>
+                                <div className="row-between">
+                                  <div className="field-label" style={{marginBottom:0}}>
+                                    {overlayQId==="all"?"All criteria":"Criteria for "+(selQ?.label||overlayQId)}
+                                  </div>
+                                  <span className="pill pill-ghost small">{hints.length} mark point{hints.length!==1?"s":""}</span>
+                                </div>
+                                {hints.length===0?(
+                                  <div className="dim small">No mark points found for this question — check your mark scheme formatting.</div>
+                                ):(
+                                  hints.map((h,i)=>(
+                                    <div key={i} className="row gap8" style={{fontSize:"0.8rem",alignItems:"flex-start",paddingBottom:4,borderBottom:i<hints.length-1?"1px solid var(--border)":"none"}}>
+                                      <span style={{fontWeight:800,color:h.col,minWidth:28,fontSize:"0.72rem",paddingTop:1}}>{h.code}</span>
+                                      <span style={{color:"var(--text2)",lineHeight:1.5}}>{h.text}</span>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            );
+                          })()}
+                          <div className="dim small" style={{paddingLeft:4}}>
+                            💡 Tap a question above, then hold the matching section of the student's paper under the camera. The floating labels on the video show exactly what to look for.
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
 
                 <div className="col gap16">
@@ -4354,8 +4835,8 @@ function NovaVista() {
                       <li>Set your marking scheme in <strong>Setup</strong></li>
                       <li>Click <strong>Start Camera</strong> and allow access</li>
                       <li>Position camera above the student's paper</li>
-                      <li>Align paper within the red corner guides</li>
-                      <li>Press the capture button — results appear instantly</li>
+                      <li><strong>Optional:</strong> Toggle <em>Answer Overlay</em> to see scheme hints live</li>
+                      <li>Press the capture button to send to AI — or mark yourself using the hints</li>
                     </ol>
                   </div>
                   <div className="card card-pad col gap10">
@@ -5838,22 +6319,30 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                 <div className="card-title">AI Processing Mode</div>
                 <div className="muted small" style={{marginTop:-8,marginBottom:4}}>Choose where the AI analysis runs. This affects what data leaves your device.</div>
 
-                <div className="api-mode-grid">
+                <div className="api-mode-grid" style={{gridTemplateColumns:"1fr 1fr 1fr"}}>
                   <div className={`api-mode-card ${apiMode==="cloud"?"selected-cloud":""}`} onClick={()=>setApiMode("cloud")}>
-                    <div className="api-mode-card-badge badge-cloud">Recommended</div>
+                    <div className="api-mode-card-badge badge-cloud">Direct</div>
                     <div className="api-mode-card-icon">☁️</div>
-                    <div className="api-mode-card-title">Anthropic Cloud</div>
-                    <div className="api-mode-card-desc">Uses Claude via Anthropic's API. Paper images and answers are sent to Anthropic's servers for processing. Highest accuracy — full vision and OCR support.</div>
+                    <div className="api-mode-card-title">Cloud Direct</div>
+                    <div className="api-mode-card-desc">Your API key in browser. Great for personal use. Each teacher needs their own key.</div>
+                  </div>
+                  <div className={`api-mode-card ${apiMode==="proxy"?"selected-cloud":""}`}
+                    style={apiMode==="proxy"?{borderColor:"var(--green)",background:"var(--green-dim)"}:{}}
+                    onClick={()=>setApiMode("proxy")}>
+                    <div className="api-mode-card-badge" style={{background:"var(--green)",color:"#0b0c0f"}}>School Ready</div>
+                    <div className="api-mode-card-icon">🔒</div>
+                    <div className="api-mode-card-title">Secure Proxy</div>
+                    <div className="api-mode-card-desc">Your key lives on a server — teachers need no key at all. Best for selling to schools.</div>
                   </div>
                   <div className={`api-mode-card ${apiMode==="local"?"selected-local":""}`} onClick={()=>setApiMode("local")}>
                     <div className="api-mode-card-badge badge-local">Most Private</div>
                     <div className="api-mode-card-icon">🖥️</div>
-                    <div className="api-mode-card-title">Local Model (Ollama)</div>
-                    <div className="api-mode-card-desc">Runs on your computer via Ollama. No data leaves your device. Requires a vision-capable model (e.g. llava, llama3.2-vision) and a capable GPU.</div>
+                    <div className="api-mode-card-title">Local (Ollama)</div>
+                    <div className="api-mode-card-desc">Runs entirely on device. No data leaves. Requires a capable computer and GPU.</div>
                   </div>
                 </div>
 
-                {/* Cloud config */}
+                {/* Cloud direct config */}
                 {apiMode==="cloud"&&(
                   <div className="card card-pad col gap10" style={{background:"var(--inset)",border:"1px solid var(--border)"}}>
                     <div className="field-label">Anthropic API Key</div>
@@ -5863,8 +6352,39 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                       <button className="btn btn-ghost btn-icon" onClick={()=>setShowKey(s=>!s)}><Ic d={showKey?I.eyeoff:I.eye} size={16}/></button>
                     </div>
                     {keySet
-                      ?<div className="info-box">✓ API key is set. Papers and answers will be sent to Anthropic's API for marking.</div>
-                      :<div className="warn-box">No API key set. Get one free at <a href="https://console.anthropic.com" target="_blank" style={{color:"var(--blue)"}}>console.anthropic.com</a> — your key never leaves this browser tab.</div>}
+                      ?<div className="info-box">✓ API key is set. Papers and answers are sent to Anthropic for marking — nothing is stored permanently.</div>
+                      :<div className="warn-box">No API key set. Get one at <a href="https://console.anthropic.com" target="_blank" style={{color:"var(--blue)"}}>console.anthropic.com</a></div>}
+                  </div>
+                )}
+
+                {/* Proxy config */}
+                {apiMode==="proxy"&&(
+                  <div className="card card-pad col gap12" style={{background:"var(--inset)",border:"1px solid rgba(61,214,140,0.25)"}}>
+                    <div className="row gap8" style={{alignItems:"center"}}>
+                      <Ic d={I.globe} size={16} color="var(--green)"/>
+                      <div className="field-label" style={{marginBottom:0,color:"var(--green)"}}>Proxy Server URL</div>
+                    </div>
+                    <input
+                      value={proxyUrl}
+                      onChange={e=>setProxyUrl(e.target.value)}
+                      placeholder="https://novavista-proxy.YOUR-USERNAME.workers.dev"
+                    />
+                    {proxySet
+                      ? <div className="info-box">✓ Proxy configured — no API key needed in this browser. All requests route through your server.</div>
+                      : <div className="warn-box">Paste your Cloudflare Worker URL above. See setup instructions below.</div>}
+
+                    <div className="blue-box col gap8" style={{fontSize:"0.8rem"}}>
+                      <strong>How to deploy your proxy (one-time, free):</strong>
+                      <ol style={{paddingLeft:18,margin:0,lineHeight:2}}>
+                        <li>Download <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>proxy/worker.js</code> and <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>proxy/wrangler.toml</code> from your downloads</li>
+                        <li>Install the Cloudflare CLI: <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>npm install -g wrangler</code></li>
+                        <li>Login: <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>wrangler login</code></li>
+                        <li>Set your API key as a secret (never stored in the file): <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>wrangler secret put ANTHROPIC_API_KEY</code></li>
+                        <li>Deploy: <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>wrangler deploy</code></li>
+                        <li>Copy the <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>.workers.dev</code> URL and paste it above</li>
+                      </ol>
+                      <div style={{marginTop:4,color:"var(--text3)"}}>Once deployed, every school using NovaVista hits your proxy — you pay Anthropic centrally and charge schools a subscription. Completely free to host on Cloudflare's free tier (100,000 requests/day).</div>
+                    </div>
                   </div>
                 )}
 
@@ -5889,10 +6409,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                       <input value={localModel} onChange={e=>setLocalModel(e.target.value)} placeholder="e.g. llava, llama3.2-vision, moondream"/>
                     </div>
                     <div className="blue-box">
-                      <strong>Setup instructions:</strong> Install <a href="https://ollama.com" target="_blank" style={{color:"var(--blue)"}}>Ollama</a>, then run <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:4,fontSize:"0.8rem"}}>ollama pull llava</code> (or any vision model). Start Ollama — NovaVista will connect automatically. Enable CORS with <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:4,fontSize:"0.8rem"}}>OLLAMA_ORIGINS=* ollama serve</code>.
-                    </div>
-                    <div className="warn-box" style={{marginTop:0}}>
-                      ⚠ Local models have lower OCR accuracy than Claude. Complex handwriting or multi-page booklets may produce less reliable results. PDF marking scheme extraction also requires cloud mode.
+                      <strong>Setup:</strong> Install <a href="https://ollama.com" target="_blank" style={{color:"var(--blue)"}}>Ollama</a>, run <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:4,fontSize:"0.8rem"}}>ollama pull llava</code>, then start with <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:4,fontSize:"0.8rem"}}>OLLAMA_ORIGINS=* ollama serve</code>
                     </div>
                   </div>
                 )}
