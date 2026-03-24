@@ -2540,10 +2540,12 @@ function NovaVista() {
   const [captureFlash,setCaptureFlash]     = useState(false);   // green captured flash
 
   // API / Privacy mode
-  const [apiMode,setApiMode]               = useState("cloud"); // "cloud" | "proxy" | "local"
+  const [apiMode,setApiMode]               = useState("cloud"); // "cloud"|"proxy"|"gemini"|"openai"|"local"
   const [localEndpoint,setLocalEndpoint]   = useState("http://localhost:11434");
-  const [proxyUrl,setProxyUrl]             = useState(""); // Cloudflare Worker URL
+  const [proxyUrl,setProxyUrl]             = useState("");
   const [localModel,setLocalModel]         = useState("llava");
+  const [geminiKey,setGeminiKey]           = useState(""); // Google AI Studio key
+  const [openaiKey,setOpenaiKey]           = useState(""); // OpenAI key (powers Copilot)
   const [endpointTestResult,setEndpointTestResult] = useState(null); // null | "ok" | "fail"
   const [endpointTesting,setEndpointTesting] = useState(false);
   const [showClearConfirm,setShowClearConfirm] = useState(false);
@@ -2646,7 +2648,15 @@ function NovaVista() {
     } catch { setPinUnlocked(true); }
     try {
       const raw = localStorage.getItem("nv_prefs");
-      if (raw) { const p=JSON.parse(raw); if(p.apiMode)setApiMode(p.apiMode); if(p.localEndpoint)setLocalEndpoint(p.localEndpoint); if(p.localModel)setLocalModel(p.localModel); if(p.proxyUrl)setProxyUrl(p.proxyUrl); }
+      if (raw) {
+        const p=JSON.parse(raw);
+        if(p.apiMode)      setApiMode(p.apiMode);
+        if(p.localEndpoint)setLocalEndpoint(p.localEndpoint);
+        if(p.localModel)   setLocalModel(p.localModel);
+        if(p.proxyUrl)     setProxyUrl(p.proxyUrl);
+        if(p.geminiKey)    setGeminiKey(p.geminiKey);
+        if(p.openaiKey)    setOpenaiKey(p.openaiKey);
+      }
     } catch {}
   }, []);
 
@@ -2710,8 +2720,8 @@ function NovaVista() {
   }, [teacherName,teacherDept,teacherSchool,teacherPin,teacherRole]);
 
   useEffect(() => {
-    try { localStorage.setItem("nv_prefs", JSON.stringify({apiMode,localEndpoint,localModel,proxyUrl})); } catch {}
-  }, [apiMode,localEndpoint,localModel,proxyUrl]);
+    try { localStorage.setItem("nv_prefs", JSON.stringify({apiMode,localEndpoint,localModel,proxyUrl,geminiKey,openaiKey})); } catch {}
+  }, [apiMode,localEndpoint,localModel,proxyUrl,geminiKey,openaiKey]);
 
   const schoolFolderRef = useRef(null); // FileSystem API directory handle
 
@@ -2932,59 +2942,127 @@ function NovaVista() {
   }, [buildSchoolAnalysis]);
   const callAPI = useCallback(async(messages, system, maxTokens=1500) => {
 
-    if (apiMode === "local") {
-      // ── Ollama / LocalAI via OpenAI-compatible endpoint ──────────────────
-      const oaiMessages = [];
-      if (system) oaiMessages.push({ role: "system", content: system });
-      for (const m of messages) {
+    // ── Helper: convert Anthropic-style messages → OpenAI format ────────────
+    const toOAI = (msgs, sys) => {
+      const out = [];
+      if (sys) out.push({ role:"system", content: sys });
+      for (const m of msgs) {
         if (typeof m.content === "string") {
-          oaiMessages.push({ role: m.role, content: m.content });
+          out.push({ role: m.role, content: m.content });
         } else {
           const parts = m.content.map(block => {
-            if (block.type === "text") return { type:"text", text: block.text };
+            if (block.type === "text")   return { type:"text", text: block.text };
             if (block.type === "image") {
-              const b64 = block.source?.data;
+              const b64  = block.source?.data;
               const mime = block.source?.media_type || "image/jpeg";
               return { type:"image_url", image_url:{ url:`data:${mime};base64,${b64}` }};
             }
-            if (block.type === "document") return { type:"text", text:"[Document attached — PDF analysis requires cloud mode]" };
+            if (block.type === "document") return { type:"text", text:"[PDF — requires cloud mode]" };
             return { type:"text", text:"" };
           });
-          oaiMessages.push({ role: m.role, content: parts });
+          out.push({ role: m.role, content: parts });
         }
       }
+      return out;
+    };
+
+    if (apiMode === "local") {
+      // ── Ollama / LocalAI ──────────────────────────────────────────────────
       const endpoint = localEndpoint.replace(/\/+$/,"");
       const res = await fetch(`${endpoint}/v1/chat/completions`, {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({ model:localModel, messages:oaiMessages, stream:false, max_tokens:maxTokens }),
+        body:JSON.stringify({ model:localModel, messages:toOAI(messages,system), stream:false, max_tokens:maxTokens }),
       });
-      if (!res.ok) {
-        const txt = await res.text().catch(()=>"");
-        throw new Error(`Local model error ${res.status}${txt?" — "+txt.slice(0,120):""}`);
-      }
+      if (!res.ok) { const t=await res.text().catch(()=>""); throw new Error(`Local error ${res.status}${t?" — "+t.slice(0,120):""}`); }
       const d = await res.json();
       return d.choices?.[0]?.message?.content || "";
 
     } else if (apiMode === "proxy") {
-      // ── Proxy mode — API key lives on Cloudflare, never in browser ────────
-      if (!proxyUrl.trim()) throw new Error("Proxy URL not set — add it in Privacy & Data settings.");
-      const base = proxyUrl.trim().replace(/\/+$/, "");
+      // ── Cloudflare Worker proxy ───────────────────────────────────────────
+      if (!proxyUrl.trim()) throw new Error("Proxy URL not set — add it in Privacy & Data.");
+      const base = proxyUrl.trim().replace(/\/+$/,"");
       const res = await fetch(`${base}/v1/messages`, {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:maxTokens, system, messages }),
       });
-      if (!res.ok) {
-        const e = await res.json().catch(()=>({}));
-        throw new Error(e?.error || `Proxy error ${res.status}`);
-      }
+      if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e?.error||`Proxy error ${res.status}`); }
       const d = await res.json();
       return d.content.find(c=>c.type==="text")?.text || "";
 
+    } else if (apiMode === "gemini") {
+      // ── Google Gemini 1.5 Flash ───────────────────────────────────────────
+      if (!geminiKey.trim()) throw new Error("Gemini API key not set — add it in Privacy & Data.");
+      const model = "gemini-1.5-flash";
+      const url   = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey.trim()}`;
+
+      // Convert messages → Gemini parts format
+      const contents = [];
+      // Inject system prompt as first user turn (Gemini doesn't have a system role)
+      const allParts = [];
+      if (system) allParts.push({ text: `INSTRUCTIONS:\n${system}\n\n` });
+
+      for (const m of messages) {
+        const role = m.role === "assistant" ? "model" : "user";
+        if (typeof m.content === "string") {
+          contents.push({ role, parts:[{ text: m.content }] });
+        } else {
+          const parts = m.content.map(block => {
+            if (block.type === "text")  return { text: block.text };
+            if (block.type === "image") return { inlineData:{ mimeType: block.source?.media_type||"image/jpeg", data: block.source?.data||"" }};
+            if (block.type === "document") {
+              // Gemini supports PDF natively via inlineData
+              return { inlineData:{ mimeType:"application/pdf", data: block.source?.data||"" }};
+            }
+            return { text:"" };
+          });
+          // Prepend system to first user turn
+          if (allParts.length && role === "user") {
+            contents.push({ role:"user", parts:[...allParts, ...parts] });
+            allParts.length = 0;
+          } else {
+            contents.push({ role, parts });
+          }
+          continue;
+        }
+        // Handle string-content roles with prepended system
+        if (allParts.length && role === "user") {
+          contents[contents.length-1].parts = [...allParts, ...contents[contents.length-1].parts||[]];
+          allParts.length = 0;
+        }
+      }
+
+      const res = await fetch(url, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          contents,
+          generationConfig:{ maxOutputTokens: maxTokens, temperature: 0.2 },
+        }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(()=>({}));
+        throw new Error(e?.error?.message || `Gemini error ${res.status}`);
+      }
+      const d = await res.json();
+      return d.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    } else if (apiMode === "openai") {
+      // ── OpenAI GPT-4o (powers Microsoft Copilot) ──────────────────────────
+      if (!openaiKey.trim()) throw new Error("OpenAI API key not set — add it in Privacy & Data.");
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":`Bearer ${openaiKey.trim()}`},
+        body:JSON.stringify({ model:"gpt-4o", max_tokens:maxTokens, messages:toOAI(messages,system) }),
+      });
+      if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e?.error?.message||`OpenAI error ${res.status}`); }
+      const d = await res.json();
+      return d.choices?.[0]?.message?.content || "";
+
     } else {
-      // ── Anthropic Cloud direct ────────────────────────────────────────────
-      if (!apiKey.trim()) throw new Error("API key not set — click the key icon in the sidebar, or switch to Proxy mode.");
+      // ── Anthropic Claude direct ───────────────────────────────────────────
+      if (!apiKey.trim()) throw new Error("API key not set — click the key icon or switch provider in Privacy & Data.");
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
         headers:{"Content-Type":"application/json","x-api-key":apiKey.trim(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
@@ -2994,7 +3072,7 @@ function NovaVista() {
       const d = await res.json();
       return d.content.find(c=>c.type==="text")?.text || "";
     }
-  }, [apiKey, apiMode, proxyUrl, localEndpoint, localModel]);
+  }, [apiKey, apiMode, proxyUrl, geminiKey, openaiKey, localEndpoint, localModel]);
 
   /* ── Test local endpoint ── */
   const testLocalEndpoint = useCallback(async () => {
@@ -4076,9 +4154,15 @@ function NovaVista() {
   const gradeClass=g=>`grade-${["A","B","C","D","F"].includes(g)?g:"D"}`;
   const mClass=(a,av)=>!av?"":a/av>=.8?"correct":a/av>=.5?"partial":"wrong";
   const schemeReady=globalScheme.trim().length>10;
-  const keySet=apiKey.trim().startsWith("sk-ant-");
-  const proxySet=proxyUrl.trim().startsWith("https://");
-  const apiReady=apiMode==="local"||(apiMode==="proxy"&&proxySet)||(apiMode==="cloud"&&keySet);
+  const keySet    = apiKey.trim().startsWith("sk-ant-");
+  const proxySet  = proxyUrl.trim().startsWith("https://");
+  const geminiSet = geminiKey.trim().length > 10;
+  const openaiSet = openaiKey.trim().startsWith("sk-");
+  const apiReady  = apiMode==="local"
+    || (apiMode==="proxy"  && proxySet)
+    || (apiMode==="cloud"  && keySet)
+    || (apiMode==="gemini" && geminiSet)
+    || (apiMode==="openai" && openaiSet);
   const totalStudents=Object.values(classes).reduce((s,p)=>s+p.students.length,0);
 
   /* ══════════════════════════════════════════════════════════
@@ -4217,15 +4301,25 @@ function NovaVista() {
           <div className="key-status" onClick={()=>setShowKeyModal(true)} title="Click to configure AI connection">
             <div className={`key-dot ${apiReady?"ok":"bad"}`}/>
             <span className={`key-label ${apiReady?"ok":""}`}>
-              {apiMode==="local"?"Local model":apiMode==="proxy"?"Via Proxy":"Cloud API"}
-              {apiMode==="cloud"&&!keySet?" — key not set":""}
-              {apiMode==="proxy"&&!proxySet?" — URL not set":""}
+              {apiMode==="local" ?"Local model"
+              :apiMode==="proxy" ?"Via Proxy"
+              :apiMode==="gemini"?"Gemini AI"
+              :apiMode==="openai"?"OpenAI / Copilot"
+              :"Claude API"}
+              {apiMode==="cloud"  &&!keySet   ?" — key not set":""}
+              {apiMode==="proxy"  &&!proxySet  ?" — URL not set":""}
+              {apiMode==="gemini" &&!geminiSet ?" — key not set":""}
+              {apiMode==="openai" &&!openaiSet ?" — key not set":""}
             </span>
             <Ic d={apiMode==="local"?I.server:apiMode==="proxy"?I.globe:I.key} size={13} color="rgba(255,255,255,0.5)"/>
           </div>
           <div className={`privacy-badge ${apiMode==="local"?"local":"cloud"}`} onClick={()=>{setTab("privacy");setSidebarOpen(false);}}>
             <Ic d={apiMode==="local"?I.wifioff:I.cloud} size={12}/>
-            {apiMode==="local"?"🛡 Data stays on device":apiMode==="proxy"?"🔒 Via secure proxy":"☁ Using Anthropic cloud"}
+            {apiMode==="local" ?"🛡 Data stays on device"
+            :apiMode==="proxy" ?"🔒 Via secure proxy"
+            :apiMode==="gemini"?"✦ Google Gemini AI"
+            :apiMode==="openai"?"⬡ OpenAI / Copilot"
+            :"☁ Claude · Anthropic"}
           </div>
           <div className="sidebar-licence active" onClick={()=>{setTab("account");setSidebarOpen(false);}}>
             <span>✓</span> Demo Mode — All features unlocked
@@ -6306,9 +6400,13 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                   <div className="page-title">Privacy & Data</div>
                   <div className="page-sub">Control how NovaVista processes papers and stores student information</div>
                 </div>
-                <span className={`pill ${apiMode==="local"?"pill-green":"pill-blue"}`}>
+                <span className={`pill ${apiMode==="local"?"pill-green":apiMode==="gemini"?"pill-gold":apiMode==="openai"?"pill-blue":"pill-blue"}`}>
                   <Ic d={apiMode==="local"?I.wifioff:I.cloud} size={13}/>
-                  {apiMode==="local"?"Local — fully private":"Anthropic Cloud"}
+                  {apiMode==="local" ?"Local — fully private"
+                  :apiMode==="proxy" ?"Secure Proxy"
+                  :apiMode==="gemini"?"Google Gemini"
+                  :apiMode==="openai"?"OpenAI / Copilot"
+                  :"Anthropic Claude"}
                 </span>
               </div>
             </div>
@@ -6317,32 +6415,54 @@ ollama create novavista-marker -f novavista-Modelfile</div>
               {/* ── AI Processing mode ── */}
               <div className="card card-pad col gap14">
                 <div className="card-title">AI Processing Mode</div>
-                <div className="muted small" style={{marginTop:-8,marginBottom:4}}>Choose where the AI analysis runs. This affects what data leaves your device.</div>
+                <div className="muted small" style={{marginTop:-8,marginBottom:4}}>Choose your AI provider. Each has different pricing, accuracy, and privacy trade-offs.</div>
 
-                <div className="api-mode-grid" style={{gridTemplateColumns:"1fr 1fr 1fr"}}>
-                  <div className={`api-mode-card ${apiMode==="cloud"?"selected-cloud":""}`} onClick={()=>setApiMode("cloud")}>
-                    <div className="api-mode-card-badge badge-cloud">Direct</div>
-                    <div className="api-mode-card-icon">☁️</div>
-                    <div className="api-mode-card-title">Cloud Direct</div>
-                    <div className="api-mode-card-desc">Your API key in browser. Great for personal use. Each teacher needs their own key.</div>
+                {/* 5-way provider grid */}
+                <div className="api-mode-grid" style={{gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
+                  {/* 1 — Claude */}
+                  <div className={`api-mode-card ${apiMode==="cloud"?"selected-cloud":""}`} onClick={()=>setApiMode("cloud")} style={{padding:"12px 10px"}}>
+                    <div className="api-mode-card-badge badge-cloud">Best</div>
+                    <div className="api-mode-card-icon">🟣</div>
+                    <div className="api-mode-card-title" style={{fontSize:"0.82rem"}}>Claude</div>
+                    <div className="api-mode-card-desc">Anthropic. Best handwriting OCR &amp; marking accuracy.</div>
                   </div>
+                  {/* 2 — Proxy */}
                   <div className={`api-mode-card ${apiMode==="proxy"?"selected-cloud":""}`}
-                    style={apiMode==="proxy"?{borderColor:"var(--green)",background:"var(--green-dim)"}:{}}
+                    style={apiMode==="proxy"?{borderColor:"var(--green)",background:"var(--green-dim)",padding:"12px 10px"}:{padding:"12px 10px"}}
                     onClick={()=>setApiMode("proxy")}>
-                    <div className="api-mode-card-badge" style={{background:"var(--green)",color:"#0b0c0f"}}>School Ready</div>
+                    <div className="api-mode-card-badge" style={{background:"var(--green)",color:"#0b0c0f"}}>Schools</div>
                     <div className="api-mode-card-icon">🔒</div>
-                    <div className="api-mode-card-title">Secure Proxy</div>
-                    <div className="api-mode-card-desc">Your key lives on a server — teachers need no key at all. Best for selling to schools.</div>
+                    <div className="api-mode-card-title" style={{fontSize:"0.82rem"}}>Proxy</div>
+                    <div className="api-mode-card-desc">Key on server — no key needed by teachers.</div>
                   </div>
-                  <div className={`api-mode-card ${apiMode==="local"?"selected-local":""}`} onClick={()=>setApiMode("local")}>
-                    <div className="api-mode-card-badge badge-local">Most Private</div>
+                  {/* 3 — Gemini */}
+                  <div className={`api-mode-card ${apiMode==="gemini"?"selected-cloud":""}`}
+                    style={apiMode==="gemini"?{borderColor:"#f9ab00",background:"rgba(249,171,0,0.1)",padding:"12px 10px"}:{padding:"12px 10px"}}
+                    onClick={()=>setApiMode("gemini")}>
+                    <div className="api-mode-card-badge" style={{background:"rgba(249,171,0,0.15)",color:"#f9ab00",border:"1px solid rgba(249,171,0,0.3)"}}>Google</div>
+                    <div className="api-mode-card-icon">✦</div>
+                    <div className="api-mode-card-title" style={{fontSize:"0.82rem"}}>Gemini</div>
+                    <div className="api-mode-card-desc">Google AI. Fast, generous free tier.</div>
+                  </div>
+                  {/* 4 — OpenAI / Copilot */}
+                  <div className={`api-mode-card ${apiMode==="openai"?"selected-cloud":""}`}
+                    style={apiMode==="openai"?{borderColor:"#74aa9c",background:"rgba(116,170,156,0.1)",padding:"12px 10px"}:{padding:"12px 10px"}}
+                    onClick={()=>setApiMode("openai")}>
+                    <div className="api-mode-card-badge" style={{background:"rgba(116,170,156,0.15)",color:"#74aa9c",border:"1px solid rgba(116,170,156,0.3)"}}>OpenAI</div>
+                    <div className="api-mode-card-icon">⬡</div>
+                    <div className="api-mode-card-title" style={{fontSize:"0.82rem"}}>Copilot</div>
+                    <div className="api-mode-card-desc">GPT-4o via OpenAI. Powers Microsoft Copilot.</div>
+                  </div>
+                  {/* 5 — Local */}
+                  <div className={`api-mode-card ${apiMode==="local"?"selected-local":""}`} onClick={()=>setApiMode("local")} style={{padding:"12px 10px"}}>
+                    <div className="api-mode-card-badge badge-local">Private</div>
                     <div className="api-mode-card-icon">🖥️</div>
-                    <div className="api-mode-card-title">Local (Ollama)</div>
-                    <div className="api-mode-card-desc">Runs entirely on device. No data leaves. Requires a capable computer and GPU.</div>
+                    <div className="api-mode-card-title" style={{fontSize:"0.82rem"}}>Local</div>
+                    <div className="api-mode-card-desc">Ollama on device. No data leaves.</div>
                   </div>
                 </div>
 
-                {/* Cloud direct config */}
+                {/* ── Claude direct config ── */}
                 {apiMode==="cloud"&&(
                   <div className="card card-pad col gap10" style={{background:"var(--inset)",border:"1px solid var(--border)"}}>
                     <div className="field-label">Anthropic API Key</div>
@@ -6352,43 +6472,63 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                       <button className="btn btn-ghost btn-icon" onClick={()=>setShowKey(s=>!s)}><Ic d={showKey?I.eyeoff:I.eye} size={16}/></button>
                     </div>
                     {keySet
-                      ?<div className="info-box">✓ API key is set. Papers and answers are sent to Anthropic for marking — nothing is stored permanently.</div>
-                      :<div className="warn-box">No API key set. Get one at <a href="https://console.anthropic.com" target="_blank" style={{color:"var(--blue)"}}>console.anthropic.com</a></div>}
+                      ?<div className="info-box">✓ Claude API key set. Best accuracy for handwritten paper marking.</div>
+                      :<div className="warn-box">Get a free key at <a href="https://console.anthropic.com" target="_blank" style={{color:"var(--blue)"}}>console.anthropic.com</a></div>}
                   </div>
                 )}
 
-                {/* Proxy config */}
+                {/* ── Proxy config ── */}
                 {apiMode==="proxy"&&(
                   <div className="card card-pad col gap12" style={{background:"var(--inset)",border:"1px solid rgba(61,214,140,0.25)"}}>
-                    <div className="row gap8" style={{alignItems:"center"}}>
-                      <Ic d={I.globe} size={16} color="var(--green)"/>
-                      <div className="field-label" style={{marginBottom:0,color:"var(--green)"}}>Proxy Server URL</div>
-                    </div>
-                    <input
-                      value={proxyUrl}
-                      onChange={e=>setProxyUrl(e.target.value)}
-                      placeholder="https://novavista-proxy.YOUR-USERNAME.workers.dev"
-                    />
+                    <div className="field-label" style={{color:"var(--green)"}}>Proxy Server URL</div>
+                    <input value={proxyUrl} onChange={e=>setProxyUrl(e.target.value)}
+                      placeholder="https://novavista-proxy.YOUR-USERNAME.workers.dev"/>
                     {proxySet
-                      ? <div className="info-box">✓ Proxy configured — no API key needed in this browser. All requests route through your server.</div>
-                      : <div className="warn-box">Paste your Cloudflare Worker URL above. See setup instructions below.</div>}
-
-                    <div className="blue-box col gap8" style={{fontSize:"0.8rem"}}>
-                      <strong>How to deploy your proxy (one-time, free):</strong>
-                      <ol style={{paddingLeft:18,margin:0,lineHeight:2}}>
-                        <li>Download <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>proxy/worker.js</code> and <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>proxy/wrangler.toml</code> from your downloads</li>
-                        <li>Install the Cloudflare CLI: <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>npm install -g wrangler</code></li>
-                        <li>Login: <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>wrangler login</code></li>
-                        <li>Set your API key as a secret (never stored in the file): <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>wrangler secret put ANTHROPIC_API_KEY</code></li>
-                        <li>Deploy: <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>wrangler deploy</code></li>
-                        <li>Copy the <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>.workers.dev</code> URL and paste it above</li>
-                      </ol>
-                      <div style={{marginTop:4,color:"var(--text3)"}}>Once deployed, every school using NovaVista hits your proxy — you pay Anthropic centrally and charge schools a subscription. Completely free to host on Cloudflare's free tier (100,000 requests/day).</div>
+                      ?<div className="info-box">✓ Proxy configured — no key needed in browser.</div>
+                      :<div className="warn-box">Paste your Cloudflare Worker URL above.</div>}
+                    <div className="blue-box" style={{fontSize:"0.8rem"}}>
+                      Deploy with <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>wrangler secret put ANTHROPIC_API_KEY</code> then <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>wrangler deploy</code>
                     </div>
                   </div>
                 )}
 
-                {/* Local config */}
+                {/* ── Gemini config ── */}
+                {apiMode==="gemini"&&(
+                  <div className="card card-pad col gap10" style={{background:"var(--inset)",border:"1px solid rgba(249,171,0,0.25)"}}>
+                    <div className="field-label" style={{color:"#f9ab00"}}>✦ Google Gemini API Key</div>
+                    <div className="row gap8">
+                      <input type={showKey?"text":"password"} value={geminiKey} onChange={e=>setGeminiKey(e.target.value)}
+                        placeholder="AIza…" className="key-modal-input" style={{flex:1}}/>
+                      <button className="btn btn-ghost btn-icon" onClick={()=>setShowKey(s=>!s)}><Ic d={showKey?I.eyeoff:I.eye} size={16}/></button>
+                    </div>
+                    {geminiSet
+                      ?<div className="info-box">✓ Gemini key set — using gemini-1.5-flash for marking.</div>
+                      :<div className="warn-box">Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" style={{color:"var(--blue)"}}>aistudio.google.com</a> — generous free tier, no credit card needed.</div>}
+                    <div className="blue-box" style={{fontSize:"0.79rem"}}>
+                      <strong>Note:</strong> Gemini 1.5 Flash has strong vision capabilities. Handwriting accuracy is slightly below Claude but free tier allows ~1,500 marks/day. Images sent to Google's servers for processing.
+                    </div>
+                  </div>
+                )}
+
+                {/* ── OpenAI / Copilot config ── */}
+                {apiMode==="openai"&&(
+                  <div className="card card-pad col gap10" style={{background:"var(--inset)",border:"1px solid rgba(116,170,156,0.3)"}}>
+                    <div className="field-label" style={{color:"#74aa9c"}}>⬡ OpenAI API Key</div>
+                    <div className="row gap8">
+                      <input type={showKey?"text":"password"} value={openaiKey} onChange={e=>setOpenaiKey(e.target.value)}
+                        placeholder="sk-…" className="key-modal-input" style={{flex:1}}/>
+                      <button className="btn btn-ghost btn-icon" onClick={()=>setShowKey(s=>!s)}><Ic d={showKey?I.eyeoff:I.eye} size={16}/></button>
+                    </div>
+                    {openaiSet
+                      ?<div className="info-box">✓ OpenAI key set — using GPT-4o (the model that powers Microsoft Copilot).</div>
+                      :<div className="warn-box">Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" style={{color:"var(--blue)"}}>platform.openai.com</a> — requires a paid account.</div>}
+                    <div className="blue-box" style={{fontSize:"0.79rem"}}>
+                      <strong>Note:</strong> Uses GPT-4o — the same model powering Microsoft Copilot. Excellent marking accuracy. Pay-per-use (~£0.01–0.03/paper). Images sent to OpenAI's servers.
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Local / Ollama config ── */}
                 {apiMode==="local"&&(
                   <div className="card card-pad col gap12" style={{background:"var(--inset)",border:"1px solid var(--border)"}}>
                     <div className="field-label">Ollama Endpoint</div>
@@ -6408,8 +6548,8 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                       <div className="field-label">Vision Model Name</div>
                       <input value={localModel} onChange={e=>setLocalModel(e.target.value)} placeholder="e.g. llava, llama3.2-vision, moondream"/>
                     </div>
-                    <div className="blue-box">
-                      <strong>Setup:</strong> Install <a href="https://ollama.com" target="_blank" style={{color:"var(--blue)"}}>Ollama</a>, run <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:4,fontSize:"0.8rem"}}>ollama pull llava</code>, then start with <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:4,fontSize:"0.8rem"}}>OLLAMA_ORIGINS=* ollama serve</code>
+                    <div className="blue-box" style={{fontSize:"0.79rem"}}>
+                      Install <a href="https://ollama.com" target="_blank" style={{color:"var(--blue)"}}>Ollama</a>, run <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:4}}>ollama pull llava</code>, then start with <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:4}}>OLLAMA_ORIGINS=* ollama serve</code>
                     </div>
                   </div>
                 )}
@@ -6520,20 +6660,34 @@ ollama create novavista-marker -f novavista-Modelfile</div>
       {showKeyModal&&(
         <div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)setShowKeyModal(false);}}>
           <div className="modal">
-            <div className="modal-title">AI Connection</div>
-            <div className="modal-sub">Use Anthropic's cloud API for best accuracy, or a local Ollama model for full privacy.</div>
+            <div className="modal-title">AI Provider</div>
+            <div className="modal-sub">Choose your AI engine — switch anytime in Privacy &amp; Data.</div>
 
-            <div className="api-mode-grid" style={{marginBottom:16}}>
-              <div className={`api-mode-card ${apiMode==="cloud"?"selected-cloud":""}`} style={{padding:"12px 14px"}} onClick={()=>setApiMode("cloud")}>
-                <div className="api-mode-card-icon" style={{fontSize:"1.2rem",marginBottom:4}}>☁️</div>
-                <div className="api-mode-card-title" style={{fontSize:"0.82rem"}}>Anthropic Cloud</div>
-              </div>
-              <div className={`api-mode-card ${apiMode==="local"?"selected-local":""}`} style={{padding:"12px 14px"}} onClick={()=>setApiMode("local")}>
-                <div className="api-mode-card-icon" style={{fontSize:"1.2rem",marginBottom:4}}>🖥️</div>
-                <div className="api-mode-card-title" style={{fontSize:"0.82rem"}}>Local Ollama</div>
-              </div>
+            {/* 5-way quick picker */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6,marginBottom:14}}>
+              {[
+                {mode:"cloud",  icon:"🟣", label:"Claude"},
+                {mode:"proxy",  icon:"🔒", label:"Proxy"},
+                {mode:"gemini", icon:"✦",  label:"Gemini"},
+                {mode:"openai", icon:"⬡",  label:"Copilot"},
+                {mode:"local",  icon:"🖥️", label:"Local"},
+              ].map(o=>(
+                <div key={o.mode}
+                  className={`api-mode-card ${apiMode===o.mode?"selected-cloud":""}`}
+                  style={{
+                    padding:"10px 6px",textAlign:"center",cursor:"pointer",
+                    ...(apiMode===o.mode&&o.mode==="local"   ?{borderColor:"var(--green)",background:"var(--green-dim)"}:{}),
+                    ...(apiMode===o.mode&&o.mode==="gemini"  ?{borderColor:"#f9ab00",background:"rgba(249,171,0,0.1)"}:{}),
+                    ...(apiMode===o.mode&&o.mode==="openai"  ?{borderColor:"#74aa9c",background:"rgba(116,170,156,0.1)"}:{}),
+                  }}
+                  onClick={()=>setApiMode(o.mode)}>
+                  <div style={{fontSize:"1.3rem",marginBottom:3}}>{o.icon}</div>
+                  <div style={{fontSize:"0.72rem",fontWeight:700,color:"var(--text2)"}}>{o.label}</div>
+                </div>
+              ))}
             </div>
 
+            {/* Claude */}
             {apiMode==="cloud"&&(
               <div className="field">
                 <div className="field-label">Anthropic API Key</div>
@@ -6542,12 +6696,50 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                     placeholder="sk-ant-api03-…" className="key-modal-input" style={{flex:1}}/>
                   <button className="btn btn-ghost btn-icon" onClick={()=>setShowKey(s=>!s)}><Ic d={showKey?I.eyeoff:I.eye} size={16}/></button>
                 </div>
-                {keySet
-                  ?<div className="info-box mt8">✓ Key set — ready to mark</div>
-                  :<div className="dim small mt4">Get yours free at <a href="https://console.anthropic.com" target="_blank" style={{color:"var(--blue)"}}>console.anthropic.com</a>. Stays in this tab only.</div>}
+                {keySet?<div className="info-box mt8">✓ Claude key set — ready to mark</div>
+                  :<div className="dim small mt4">Free key at <a href="https://console.anthropic.com" target="_blank" style={{color:"var(--blue)"}}>console.anthropic.com</a></div>}
               </div>
             )}
 
+            {/* Proxy */}
+            {apiMode==="proxy"&&(
+              <div className="field">
+                <div className="field-label" style={{color:"var(--green)"}}>Proxy Server URL</div>
+                <input value={proxyUrl} onChange={e=>setProxyUrl(e.target.value)} placeholder="https://novavista-proxy.….workers.dev"/>
+                {proxySet?<div className="info-box mt8">✓ Proxy set — no key needed</div>
+                  :<div className="dim small mt4">Deploy your Cloudflare Worker — see Privacy &amp; Data for instructions.</div>}
+              </div>
+            )}
+
+            {/* Gemini */}
+            {apiMode==="gemini"&&(
+              <div className="field">
+                <div className="field-label" style={{color:"#f9ab00"}}>✦ Google Gemini API Key</div>
+                <div className="row gap8">
+                  <input type={showKey?"text":"password"} value={geminiKey} onChange={e=>setGeminiKey(e.target.value)}
+                    placeholder="AIza…" className="key-modal-input" style={{flex:1}}/>
+                  <button className="btn btn-ghost btn-icon" onClick={()=>setShowKey(s=>!s)}><Ic d={showKey?I.eyeoff:I.eye} size={16}/></button>
+                </div>
+                {geminiSet?<div className="info-box mt8">✓ Gemini key set</div>
+                  :<div className="dim small mt4">Free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" style={{color:"var(--blue)"}}>aistudio.google.com</a> — no credit card</div>}
+              </div>
+            )}
+
+            {/* OpenAI / Copilot */}
+            {apiMode==="openai"&&(
+              <div className="field">
+                <div className="field-label" style={{color:"#74aa9c"}}>⬡ OpenAI API Key (GPT-4o / Copilot)</div>
+                <div className="row gap8">
+                  <input type={showKey?"text":"password"} value={openaiKey} onChange={e=>setOpenaiKey(e.target.value)}
+                    placeholder="sk-…" className="key-modal-input" style={{flex:1}}/>
+                  <button className="btn btn-ghost btn-icon" onClick={()=>setShowKey(s=>!s)}><Ic d={showKey?I.eyeoff:I.eye} size={16}/></button>
+                </div>
+                {openaiSet?<div className="info-box mt8">✓ OpenAI key set — using GPT-4o</div>
+                  :<div className="dim small mt4">Key at <a href="https://platform.openai.com/api-keys" target="_blank" style={{color:"var(--blue)"}}>platform.openai.com</a></div>}
+              </div>
+            )}
+
+            {/* Local */}
             {apiMode==="local"&&(
               <div className="col gap10">
                 <div className="field">
@@ -6570,7 +6762,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
 
             <div className="modal-actions">
               <button className="btn btn-ghost btn-sm" onClick={()=>{setShowKeyModal(false);setTab("privacy");}}>
-                <Ic d={I.shield} size={14}/> Full Privacy Settings
+                <Ic d={I.shield} size={14}/> Full Settings
               </button>
               <button className="btn btn-ghost" onClick={()=>setShowKeyModal(false)}>Done</button>
             </div>
