@@ -1781,6 +1781,39 @@ input::placeholder, textarea::placeholder { color: var(--text4); }
 .heat-n { background: var(--border); color: var(--text4); }
 
 /* ═══════════════════════════════════════════════════════════
+   OFFLINE TOOLS
+═══════════════════════════════════════════════════════════ */
+.ot-tabs { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:18px; }
+.ot-tab {
+  padding:7px 13px; border-radius:var(--radius-sm); border:1px solid var(--border-md);
+  background:var(--card); font-size:0.78rem; font-weight:600; cursor:pointer;
+  color:var(--text2); transition:all 0.15s; white-space:nowrap;
+}
+.ot-tab:hover { border-color:rgba(245,200,66,0.5); color:#7a6000; background:rgba(245,200,66,0.08); }
+.ot-tab.active { background:rgba(245,200,66,0.18); border-color:rgba(245,200,66,0.5); color:#5a4400; }
+.rule-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; }
+.rule-card:hover { border-color:var(--border-md); }
+.rule-cond-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.rule-cond-row select, .rule-cond-row input { flex:1; min-width:80px; font-size:0.82rem; padding:7px 10px; }
+.bound-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); }
+.bound-grade { font-size:1.1rem; font-weight:800; width:32px; text-align:center; }
+.bound-bar { flex:1; height:10px; border-radius:99px; background:var(--inset); overflow:hidden; }
+.bound-fill { height:100%; border-radius:99px; }
+.err-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px 14px; display:flex; gap:10px; align-items:flex-start; }
+.err-card:hover { border-color:var(--border-md); }
+.spaced-row { display:flex; justify-content:space-between; align-items:center; padding:9px 14px; border-radius:var(--radius-sm); background:var(--card); border:1px solid var(--border); }
+.tpl-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; cursor:pointer; transition:all 0.15s; }
+.tpl-card:hover { border-color:var(--border-lg); transform:translateY(-1px); box-shadow:var(--shadow-card); }
+.deadline-row { display:flex; align-items:center; gap:12px; padding:12px 14px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius-sm); }
+.deadline-progress { flex:1; height:8px; background:var(--inset); border-radius:99px; overflow:hidden; }
+.deadline-fill { height:100%; border-radius:99px; background:var(--green); transition:width 0.4s; }
+.pred-row { display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:10px; align-items:center; padding:9px 14px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.84rem; }
+.group-tag { display:inline-block; padding:2px 9px; border-radius:99px; font-size:0.7rem; font-weight:700; background:rgba(108,143,245,0.15); color:var(--blue); border:1px solid rgba(108,143,245,0.25); }
+.gap16 { gap:16px; }
+.mt4 { margin-top:4px; }
+.mt8 { margin-top:8px; }
+
+/* ═══════════════════════════════════════════════════════════
    QUICK MARK — ANNOTATED IMAGE PREVIEW
 ═══════════════════════════════════════════════════════════ */
 .qm-annotated-wrap {
@@ -2559,6 +2592,35 @@ function NovaVista() {
   const [apiMode,setApiMode]               = useState("cloud"); // "cloud"|"proxy"|"gemini"|"openai"|"local"
   const [offlineMode,setOfflineMode]        = useState(false);  // demo/offline — no AI calls
   const [offlineTempFolders,setOfflineTempFolders] = useState({}); // session-only temp folders
+
+  // ── Offline Tools state ────────────────────────────────────────────────────
+  const [offlineToolsTab,setOfflineToolsTab] = useState("rules");
+  // 1. Auto-marking rules
+  const [markingRules,setMarkingRules]       = useState({}); // {qId:[{id,type,conditions,marks,code}]}
+  const [rulesEditQ,setRulesEditQ]           = useState("Q1");
+  const [newRuleConds,setNewRuleConds]       = useState([{field:"answer",op:"contains",value:""}]);
+  // 2. Calc checker
+  const [calcChecks,setCalcChecks]           = useState({}); // {qId:{answer,tolerance,units}}
+  // 3. Grade boundaries
+  const [gradeBounds,setGradeBounds]         = useState({A:70,B:55,C:40,D:25});
+  // 4. CSV roster
+  const [csvPreview,setCsvPreview]           = useState([]);
+  // 5. Group tags
+  const [studentGroups,setStudentGroups]     = useState({}); // {studentName:groupName}
+  const [groupNames,setGroupNames]           = useState(["Set 1","Set 2","Intervention","G&T"]);
+  // 6. Common errors DB
+  const [errorsDB,setErrorsDB]               = useState({}); // {topic:[{id,error,hint}]}
+  const [errorsTopicEdit,setErrorsTopicEdit] = useState("");
+  const [newErrorText,setNewErrorText]       = useState("");
+  const [newErrorHint,setNewErrorHint]       = useState("");
+  // 8. Paper templates
+  const [paperTemplates,setPaperTemplates]   = useState([]);
+  const [templateEdit,setTemplateEdit]       = useState(null);
+  // 11. Predicted grades
+  const [targetGrades,setTargetGrades]       = useState({}); // {studentName:{paper:grade}}
+  // 12. Deadlines
+  const [markingDeadlines,setMarkingDeadlines] = useState([]);
+  const [newDeadline,setNewDeadline]         = useState({paper:"",classSize:"",dueDate:""});
   const [localEndpoint,setLocalEndpoint]   = useState("http://localhost:11434");
   const [proxyUrl,setProxyUrl]             = useState("");
   const [localModel,setLocalModel]         = useState("llava");
@@ -2979,50 +3041,97 @@ function NovaVista() {
       const isOcr       = system && system.includes('Extract and list');
 
       // ── Local marking engine ───────────────────────────────────────────────
-      // Extracts mark points from the scheme and keyword-matches against answer text
+      // Checks rules first, then calc checks, then keyword matching
       const localMark = (answerText, scheme, maxMarks) => {
-        const ans    = (answerText||"").toLowerCase();
+        const ans = (answerText||"").toLowerCase();
         const scheme_ = scheme || globalScheme || "";
-        const lines  = scheme_.split(/\n/).map(l=>l.trim()).filter(Boolean);
+        const lines   = scheme_.split(/\n/).map(l=>l.trim()).filter(Boolean);
 
-        // Parse mark points: lines containing B1/M1/A1/etc or bullet/dash
+        // ── Step 1: Check marking rules (teacher-defined IF statements) ───────
+        const ruleResults = [];
+        Object.entries(markingRules).forEach(([qId,rules])=>{
+          rules.forEach(rule=>{
+            const allMet = rule.conditions.every(c=>{
+              const v = (c.value||"").toLowerCase();
+              if(c.field==="answer"){
+                if(c.op==="contains")     return ans.includes(v);
+                if(c.op==="not_contains") return !ans.includes(v);
+                if(c.op==="starts")       return ans.startsWith(v);
+                if(c.op==="regex"){try{return new RegExp(v,"i").test(ans);}catch{return false;}}
+              }
+              if(c.field==="number"){
+                const nums=ans.match(/-?[\d.]+/g)?.map(Number)||[];
+                const tv=parseFloat(v);
+                if(c.op==="equals")  return nums.some(n=>Math.abs(n-tv)<0.001);
+                if(c.op==="between"){const[mn,mx]=(c.value||"").split(",").map(Number);return nums.some(n=>n>=mn&&n<=mx);}
+                if(c.op==="gt")      return nums.some(n=>n>tv);
+                if(c.op==="lt")      return nums.some(n=>n<tv);
+              }
+              if(c.field==="length"){
+                const wc=ans.split(/\s+/).filter(Boolean).length;
+                const tv=parseInt(v)||0;
+                if(c.op==="gt") return wc>tv;
+                if(c.op==="lt") return wc<tv;
+                if(c.op==="equals") return wc===tv;
+              }
+              return false;
+            });
+            if(allMet) ruleResults.push({code:rule.code||"B1",text:`Rule: ${rule.conditions.map(c=>c.value).join(" AND ")}`,awarded:true,marks:rule.marks||1});
+          });
+        });
+
+        // ── Step 2: Check calc checks ──────────────────────────────────────────
+        const calcResults = [];
+        Object.entries(calcChecks).forEach(([qId,cc])=>{
+          if(!cc.answer) return;
+          const expected = parseFloat(cc.answer);
+          const tol      = parseFloat(cc.tolerance)||0;
+          const nums     = ans.match(/-?[\d.]+/g)?.map(Number)||[];
+          const hit      = nums.some(n=>Math.abs(n-expected)<=tol);
+          const hasWorking = ans.includes("/") || ans.includes("×") || ans.includes("*") || ans.includes("=") || ans.includes("+") || ans.includes("-") || /\d+\s*[÷×]\s*\d+/.test(ans);
+          if(hit) calcResults.push({code:"A1",text:`Correct answer: ${expected}${cc.units?" "+cc.units:""}`,awarded:true,marks:parseInt(cc.marks)||1});
+          if(!hit&&hasWorking) calcResults.push({code:"M1",text:`Method shown for ${qId}`,awarded:true,marks:1});
+        });
+
+        // ── Step 3: Keyword matching from scheme ───────────────────────────────
+        const stopWords = new Set(["the","a","an","and","or","of","to","in","is","are","was","were","it","its","for","on","at","by","as","with","from","that","this","be","been","being","have","has","had","do","does","did","will","would","can","could","should"]);
+        const keywords = w => w.toLowerCase().match(/\b[a-z]{3,}\b/g)?.filter(w=>!stopWords.has(w)) || [];
         const points = [];
         lines.forEach(line=>{
           const codeMatch = line.match(/\b([BMACPEF][0-9](?:\.[0-9])?)\b/i);
           const code = codeMatch ? codeMatch[1].toUpperCase() : "B1";
-          // Strip code from text to get the criterion
           const text = line.replace(/\b[BMACPEF][0-9](?:\.[0-9])?\b/gi,"").replace(/^[-•*]\s*/,"").trim();
-          if(text.length > 3) points.push({code, text});
+          if(text.length > 3) points.push({code,text});
         });
-
-        // If scheme has no parseable points, generate 1 generic point per mark
         const maxPts = maxMarks || (totalMarks ? parseInt(totalMarks) : Math.max(points.length, 4));
-        if(points.length === 0){
-          for(let i=0;i<maxPts;i++) points.push({code:"B1",text:`Mark point ${i+1}`});
-        }
-
-        // Keyword matching: extract significant words from each mark point
-        const stopWords = new Set(["the","a","an","and","or","of","to","in","is","are","was","were","it","its","for","on","at","by","as","with","from","that","this","be","been","being","have","has","had","do","does","did","will","would","can","could","should"]);
-        const keywords = w => w.toLowerCase().match(/\b[a-z]{3,}\b/g)?.filter(w=>!stopWords.has(w)) || [];
-
-        const awardedPoints = points.map(pt => {
+        if(points.length === 0) for(let i=0;i<maxPts;i++) points.push({code:"B1",text:`Mark point ${i+1}`});
+        const kwPoints = points.map(pt=>{
           const ptWords = keywords(pt.text);
-          if(ptWords.length === 0) return {...pt, awarded:false};
-          // Award if at least 40% of the key words appear in the answer
-          const hits = ptWords.filter(w => ans.includes(w)).length;
-          const awarded = ptWords.length <= 2 ? hits >= 1 : hits / ptWords.length >= 0.4;
-          return {...pt, awarded};
+          if(ptWords.length === 0) return {...pt,awarded:false};
+          const hits = ptWords.filter(w=>ans.includes(w)).length;
+          const awarded = ptWords.length<=2 ? hits>=1 : hits/ptWords.length>=0.4;
+          return {...pt,awarded};
         });
 
-        const marksAwarded = Math.min(awardedPoints.filter(p=>p.awarded).length, maxPts);
-        const marksAvailable = Math.min(points.length, maxPts);
-        const percentage = marksAvailable > 0 ? Math.round((marksAwarded/marksAvailable)*100) : 0;
-        const grade = percentage>=70?"A":percentage>=55?"B":percentage>=40?"C":"D";
+        // ── Combine all results ────────────────────────────────────────────────
+        const allPoints = [...ruleResults,...calcResults,...kwPoints];
+        const marksAwarded   = Math.min(allPoints.filter(p=>p.awarded).length, maxPts);
+        const marksAvailable = Math.min(Math.max(points.length,ruleResults.length+calcResults.length), maxPts);
+        const percentage     = marksAvailable > 0 ? Math.round((marksAwarded/marksAvailable)*100) : 0;
+        const grade          = percentage>=(gradeBounds.A||70)?"A":percentage>=(gradeBounds.B||55)?"B":percentage>=(gradeBounds.C||40)?"C":percentage>=(gradeBounds.D||25)?"D":"F";
 
-        const strengths    = awardedPoints.filter(p=>p.awarded).map(p=>p.text).slice(0,3);
-        const improvements = awardedPoints.filter(p=>!p.awarded).map(p=>`Include: ${p.text}`).slice(0,3);
+        // Check error DB for misconception hints
+        const misconceptions = [];
+        Object.values(errorsDB).flat().forEach(err=>{
+          const errWords=keywords(err.error);
+          if(errWords.length>0&&errWords.some(w=>ans.includes(w))&&!kwPoints.find(p=>p.text.toLowerCase().includes(errWords[0])&&p.awarded)){
+            misconceptions.push(err.hint||err.error);
+          }
+        });
 
-        return {marksAwarded, marksAvailable, percentage, grade, awardedPoints, strengths, improvements};
+        const strengths    = allPoints.filter(p=>p.awarded).map(p=>p.text).slice(0,3);
+        const improvements = allPoints.filter(p=>!p.awarded).map(p=>`Include: ${p.text}`).slice(0,3);
+        return {marksAwarded,marksAvailable,percentage,grade,awardedPoints:allPoints,strengths,improvements,misconceptions};
       };
 
       // Extract answer text from messages
@@ -3262,7 +3371,7 @@ function NovaVista() {
       const d = await res.json();
       return d.content.find(c=>c.type==="text")?.text || "";
     }
-  }, [apiKey, apiMode, offlineMode, proxyUrl, geminiKey, openaiKey, localEndpoint, localModel]);
+  }, [apiKey, apiMode, offlineMode, proxyUrl, geminiKey, openaiKey, localEndpoint, localModel, markingRules, calcChecks, gradeBounds, errorsDB]);
 
   /* ── Test local endpoint ── */
   const testLocalEndpoint = useCallback(async () => {
@@ -4657,6 +4766,18 @@ function NovaVista() {
             <span className="nav-icon"><Ic d={I.database} size={16}/></span> School Sync
             {syncStatus==="done"&&loadedTeachers.length>0&&<span className="nav-badge">{loadedTeachers.length}</span>}
           </button>
+          {offlineMode&&(<>
+            <div className="nav-divider"/>
+            <div className="nav-label" style={{color:"#b08a00",letterSpacing:"1.5px"}}>✈ OFFLINE TOOLS</div>
+            <button className={`nav-item ${tab==="offlinetools"?"active":""}`}
+              onClick={()=>{setTab("offlinetools");setSidebarOpen(false);}}
+              style={{color:tab==="offlinetools"?"#5a4400":"#8a7440",
+                background:tab==="offlinetools"?"rgba(245,200,66,0.22)":"rgba(245,200,66,0.06)",
+                border:"1px solid "+(tab==="offlinetools"?"rgba(245,200,66,0.5)":"rgba(245,200,66,0.18)"),
+                marginTop:2}}>
+              <span className="nav-icon"><Ic d={I.zap} size={16}/></span> Smart Tools
+            </button>
+          </>)}
         </nav>
 
         <div className="sidebar-footer">
@@ -7145,6 +7266,562 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                   </button>
                 </div>
               </div>
+
+            </div>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════
+            OFFLINE SMART TOOLS (all 12 features)
+        ═══════════════════════════════════════════════════════ */}
+        {tab==="offlinetools"&&offlineMode&&(
+          <>
+            <div className="topbar">
+              <div className="page-header">
+                <div>
+                  <div className="page-title">✈ Smart Tools</div>
+                  <div className="page-sub">Offline-only tools — rule-based marking, templates, dashboards, and planning. No AI required.</div>
+                </div>
+                <span className="pill pill-gold">✈ Offline Only</span>
+              </div>
+            </div>
+            <div className="content col gap16">
+              {/* Sub-tabs */}
+              <div className="ot-tabs">
+                {[
+                  {id:"rules",   label:"1. Auto-Mark Rules"},
+                  {id:"calc",    label:"2. Calc Checker"},
+                  {id:"bounds",  label:"3. Grade Boundaries"},
+                  {id:"csv",     label:"4. CSV Import"},
+                  {id:"groups",  label:"5. Group Tags"},
+                  {id:"errors",  label:"6. Error Database"},
+                  {id:"spaced",  label:"7. Spaced Rep"},
+                  {id:"tpl",     label:"8. Paper Templates"},
+                  {id:"dash",    label:"9. Class Dashboard"},
+                  {id:"reports", label:"10. Parent Reports"},
+                  {id:"predict", label:"11. Grade Predictor"},
+                  {id:"planner", label:"12. Session Planner"},
+                ].map(t=>(
+                  <button key={t.id} className={`ot-tab ${offlineToolsTab===t.id?"active":""}`}
+                    onClick={()=>setOfflineToolsTab(t.id)}>{t.label}</button>
+                ))}
+              </div>
+
+              {/* ── 1. Auto-Marking Rules ─────────────────────────────── */}
+              {offlineToolsTab==="rules"&&(
+                <div className="col gap14">
+                  <div className="card card-pad col gap12">
+                    <div className="row-between">
+                      <div className="card-title" style={{marginBottom:0}}>Auto-Marking Rules</div>
+                      <div className="dim small">IF answer contains X → award mark. Like Excel IF statements.</div>
+                    </div>
+                    <div className="blue-box" style={{fontSize:"0.79rem"}}>Build rules per question. The offline marker checks these before keyword matching — rules always take priority.</div>
+                    <div className="field">
+                      <div className="field-label">Question ID</div>
+                      <div className="row gap8" style={{flexWrap:"wrap"}}>
+                        <input value={rulesEditQ} onChange={e=>setRulesEditQ(e.target.value.toUpperCase())} placeholder="Q1" style={{maxWidth:80}}/>
+                        {Object.keys(markingRules).map(q=>(
+                          <button key={q} className={`btn btn-sm ${rulesEditQ===q?"btn-gold":"btn-ghost"}`}
+                            onClick={()=>setRulesEditQ(q)}>{q} ({markingRules[q]?.length||0})</button>
+                        ))}
+                      </div>
+                    </div>
+                    {(markingRules[rulesEditQ]||[]).map((rule,ri)=>(
+                      <div key={rule.id} className="rule-card">
+                        <div className="row-between" style={{marginBottom:8}}>
+                          <span className="pill pill-green">{rule.code||"B1"} — {rule.marks} mark{rule.marks!==1?"s":""}</span>
+                          <button className="btn btn-ghost btn-sm" style={{color:"var(--red)"}}
+                            onClick={()=>setMarkingRules(prev=>({...prev,[rulesEditQ]:prev[rulesEditQ].filter((_,i)=>i!==ri)}))}>✕</button>
+                        </div>
+                        {rule.conditions.map((c,ci)=>(
+                          <div key={ci} className="dim small" style={{marginBottom:3}}>
+                            {ci>0&&<span style={{color:"var(--gold)",fontWeight:700,marginRight:6}}>AND</span>}
+                            {c.field==="answer"?"Answer":c.field==="length"?"Answer length":"Numeric value"}{" "}
+                            <strong>{c.op}</strong>{" "}
+                            <code style={{background:"var(--inset)",padding:"1px 5px",borderRadius:3}}>{c.value}</code>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                    <div className="card" style={{padding:"14px",borderStyle:"dashed"}}>
+                      <div className="field-label" style={{marginBottom:8}}>Add Rule for {rulesEditQ||"Q?"}</div>
+                      {newRuleConds.map((c,ci)=>(
+                        <div key={ci} className="rule-cond-row" style={{marginBottom:8}}>
+                          {ci>0&&<span style={{fontSize:"0.72rem",fontWeight:700,color:"var(--gold)",minWidth:30}}>AND</span>}
+                          <select value={c.field} onChange={e=>setNewRuleConds(prev=>prev.map((x,i)=>i===ci?{...x,field:e.target.value}:x))}>
+                            <option value="answer">Answer text</option>
+                            <option value="number">Numeric value</option>
+                            <option value="length">Answer length (words)</option>
+                          </select>
+                          <select value={c.op} onChange={e=>setNewRuleConds(prev=>prev.map((x,i)=>i===ci?{...x,op:e.target.value}:x))}>
+                            {c.field==="number"?<><option value="equals">= exact</option><option value="between">between min,max</option><option value="gt">&gt;</option><option value="lt">&lt;</option></>
+                            :c.field==="length"?<><option value="gt">&gt; words</option><option value="lt">&lt; words</option><option value="equals">= words</option></>
+                            :<><option value="contains">contains</option><option value="not_contains">does NOT contain</option><option value="starts">starts with</option><option value="regex">matches regex</option></>}
+                          </select>
+                          <input value={c.value} onChange={e=>setNewRuleConds(prev=>prev.map((x,i)=>i===ci?{...x,value:e.target.value}:x))}
+                            placeholder={c.field==="number"?"e.g. 24.5 or 23,26":c.field==="length"?"word count":"keyword or phrase"}/>
+                          {newRuleConds.length>1&&<button className="btn btn-ghost btn-sm" onClick={()=>setNewRuleConds(prev=>prev.filter((_,i)=>i!==ci))}>✕</button>}
+                        </div>
+                      ))}
+                      <div className="row gap8" style={{marginTop:6,flexWrap:"wrap"}}>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>setNewRuleConds(prev=>[...prev,{field:"answer",op:"contains",value:""}])}>+ AND condition</button>
+                        <div style={{flex:1}}/>
+                        <input placeholder="Code e.g. B1" style={{maxWidth:80,fontSize:"0.8rem",padding:"6px 8px"}} id="ot-rule-code"/>
+                        <input placeholder="Marks" style={{maxWidth:60,fontSize:"0.8rem",padding:"6px 8px"}} id="ot-rule-marks" type="number" min="1" max="5"/>
+                        <button className="btn btn-green btn-sm" onClick={()=>{
+                          if(!rulesEditQ.trim())return;
+                          const code=document.getElementById("ot-rule-code").value||"B1";
+                          const marks=parseInt(document.getElementById("ot-rule-marks").value)||1;
+                          setMarkingRules(prev=>({...prev,[rulesEditQ]:[...(prev[rulesEditQ]||[]),{id:Date.now(),conditions:newRuleConds,code,marks}]}));
+                          setNewRuleConds([{field:"answer",op:"contains",value:""}]);
+                          document.getElementById("ot-rule-code").value="";
+                          document.getElementById("ot-rule-marks").value="";
+                        }}>+ Add Rule</button>
+                      </div>
+                    </div>
+                    {Object.keys(markingRules).length>0&&(
+                      <div className="info-box">✓ {Object.values(markingRules).flat().length} rule{Object.values(markingRules).flat().length!==1?"s":""} across {Object.keys(markingRules).length} question{Object.keys(markingRules).length!==1?"s":""}.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── 2. Calculation Checker ─────────────────────────── */}
+              {offlineToolsTab==="calc"&&(
+                <div className="card card-pad col gap14">
+                  <div className="card-title">Calculation Checker</div>
+                  <div className="muted small">Define expected numeric answers. The offline marker checks if the student's answer falls within tolerance.</div>
+                  {["Q1","Q2","Q3","Q4","Q5"].concat(Object.keys(calcChecks).filter(q=>!["Q1","Q2","Q3","Q4","Q5"].includes(q))).map(qid=>(
+                    <div key={qid} className="rule-card col gap8">
+                      <div className="field-label">{qid}</div>
+                      <div className="row gap8" style={{flexWrap:"wrap"}}>
+                        <input placeholder="Expected answer" type="number" step="any" value={calcChecks[qid]?.answer||""}
+                          onChange={e=>setCalcChecks(prev=>({...prev,[qid]:{...prev[qid]||{},answer:e.target.value}}))} style={{maxWidth:120}}/>
+                        <input placeholder="±tolerance" type="number" step="any" value={calcChecks[qid]?.tolerance||""}
+                          onChange={e=>setCalcChecks(prev=>({...prev,[qid]:{...prev[qid]||{},tolerance:e.target.value}}))} style={{maxWidth:100}}/>
+                        <input placeholder="Units e.g. m/s" value={calcChecks[qid]?.units||""}
+                          onChange={e=>setCalcChecks(prev=>({...prev,[qid]:{...prev[qid]||{},units:e.target.value}}))} style={{maxWidth:100}}/>
+                        <input placeholder="Marks" type="number" min="1" max="4" value={calcChecks[qid]?.marks||""}
+                          onChange={e=>setCalcChecks(prev=>({...prev,[qid]:{...prev[qid]||{},marks:e.target.value}}))} style={{maxWidth:60}}/>
+                        {calcChecks[qid]?.answer&&<span className="pill pill-green" style={{flexShrink:0}}>✓ {calcChecks[qid].answer} ± {calcChecks[qid].tolerance||0} {calcChecks[qid].units}</span>}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="blue-box" style={{fontSize:"0.79rem"}}><strong>How it works:</strong> The offline marker extracts numbers from the student answer and checks them against your expected answer ± tolerance. Method marks awarded if working is shown.</div>
+                </div>
+              )}
+
+              {/* ── 3. Grade Boundaries ───────────────────────────── */}
+              {offlineToolsTab==="bounds"&&(
+                <div className="card card-pad col gap14">
+                  <div className="row-between"><div className="card-title" style={{marginBottom:0}}>Grade Boundaries</div></div>
+                  <div className="muted small">Set the minimum percentage for each grade. Changes apply to all results previewed here.</div>
+                  {[{g:"A",col:"#3dd68c"},{g:"B",col:"#6c8ff5"},{g:"C",col:"#f5c842"},{g:"D",col:"#f0956b"},{g:"F",col:"#e8473f"}].map(({g,col})=>(
+                    <div key={g} className="bound-row">
+                      <div className="bound-grade" style={{color:col}}>{g}</div>
+                      <div className="bound-bar"><div className="bound-fill" style={{width:`${gradeBounds[g]||0}%`,background:col}}/></div>
+                      <input type="range" min="0" max="100" value={gradeBounds[g]||0}
+                        onChange={e=>setGradeBounds(prev=>({...prev,[g]:parseInt(e.target.value)}))} style={{width:100,accentColor:col}}/>
+                      <input type="number" min="0" max="100" value={gradeBounds[g]||0}
+                        onChange={e=>setGradeBounds(prev=>({...prev,[g]:parseInt(e.target.value)||0}))}
+                        style={{width:56,fontSize:"0.88rem",padding:"5px 8px",textAlign:"center"}}/>
+                      <span className="dim small">%</span>
+                    </div>
+                  ))}
+                  <div className="info-box">A≥{gradeBounds.A||70}% · B≥{gradeBounds.B||55}% · C≥{gradeBounds.C||40}% · D≥{gradeBounds.D||25}% · F&lt;{gradeBounds.D||25}%</div>
+                  {Object.keys(classes).length>0&&(
+                    <div className="col gap6">
+                      <div className="field-label">All saved students with new boundaries</div>
+                      {Object.entries(classes).flatMap(([pid,paper])=>
+                        (paper.students||[]).map(st=>{
+                          const pct=st.results?.percentage||0;
+                          const g=pct>=(gradeBounds.A||70)?"A":pct>=(gradeBounds.B||55)?"B":pct>=(gradeBounds.C||40)?"C":pct>=(gradeBounds.D||25)?"D":"F";
+                          const col=g==="A"?"#3dd68c":g==="B"?"#6c8ff5":g==="C"?"#f5c842":g==="D"?"#f0956b":"#e8473f";
+                          return(<div key={st.id} className="spaced-row"><span style={{fontWeight:600}}>{st.name}</span><span className="dim small">{paper.name}</span><span style={{fontWeight:700,color:col}}>{pct}% → {g}</span></div>);
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── 4. CSV Roster Import ──────────────────────────── */}
+              {offlineToolsTab==="csv"&&(
+                <div className="card card-pad col gap14">
+                  <div className="card-title">CSV Roster Import</div>
+                  <div className="muted small">Import your class list from SIMS, Bromcom, Arbor etc. Export as CSV and paste below.</div>
+                  <div className="field">
+                    <div className="field-label">Paste CSV Data</div>
+                    <textarea placeholder={"Name,Group,UPN\nEmma Johnson,Set 1,AB12345\nMarcus Williams,Set 2,CD67890\n..."} style={{minHeight:120,fontFamily:"monospace",fontSize:"0.8rem"}}
+                      onChange={e=>{const rows=e.target.value.trim().split("\n").filter(Boolean).map(r=>r.split(",").map(c=>c.trim().replace(/^["']|["']$/g,"")));setCsvPreview(rows);}}/>
+                  </div>
+                  {csvPreview.length>1&&(
+                    <>
+                      <div style={{overflowX:"auto"}}>
+                        <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.82rem"}}>
+                          <thead><tr>{csvPreview[0]?.map((h,i)=><th key={i} style={{padding:"6px 10px",textAlign:"left",borderBottom:"2px solid var(--border-md)",color:"var(--text3)",fontWeight:700,fontSize:"0.72rem",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
+                          <tbody>{csvPreview.slice(1,6).map((row,ri)=><tr key={ri} style={{borderBottom:"1px solid var(--border)"}}>{row.map((cell,ci)=><td key={ci} style={{padding:"7px 10px"}}>{cell}</td>)}</tr>)}</tbody>
+                        </table>
+                      </div>
+                      <div className="row gap8">
+                        <div className="field" style={{flex:1}}><div className="field-label">Name col (0-based)</div><input type="number" min="0" id="ot-csv-nc" defaultValue="0" style={{maxWidth:60}}/></div>
+                        <div className="field" style={{flex:1}}><div className="field-label">Group col (optional)</div><input type="number" min="0" id="ot-csv-gc" defaultValue="1" style={{maxWidth:60}}/></div>
+                        <button className="btn btn-green" style={{alignSelf:"flex-end"}} onClick={()=>{
+                          const nc=parseInt(document.getElementById("ot-csv-nc")?.value||0);
+                          const gc=parseInt(document.getElementById("ot-csv-gc")?.value||1);
+                          const students=csvPreview.slice(1).map(row=>({name:(row[nc]||"").trim(),group:(row[gc]||"").trim()})).filter(s=>s.name);
+                          setClassRoster(prev=>{const ex=new Set(prev.map(s=>s.name));return[...prev,...students.filter(s=>!ex.has(s.name)).map(s=>({name:s.name}))];});
+                          setStudentGroups(prev=>{const g={...prev};students.forEach(s=>{if(s.group)g[s.name]=s.group;});return g;});
+                          setError(`✓ Imported ${students.length} students.`);setCsvPreview([]);
+                        }}>Import {csvPreview.length-1} Students</button>
+                      </div>
+                    </>
+                  )}
+                  {classRoster.length>0&&(
+                    <div className="col gap6">
+                      <div className="field-label">Roster ({classRoster.length})</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                        {classRoster.map((s,i)=><span key={i} className="pill pill-blue" style={{cursor:"pointer"}} onClick={()=>setClassRoster(prev=>prev.filter((_,j)=>j!==i))}>{s.name}{studentGroups[s.name]&&<span style={{opacity:0.7}}> · {studentGroups[s.name]}</span>} ✕</span>)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── 5. Group Tags ─────────────────────────────────── */}
+              {offlineToolsTab==="groups"&&(
+                <div className="card card-pad col gap14">
+                  <div className="card-title">Group Tags</div>
+                  <div className="muted small">Assign students to teaching groups. See average performance per group.</div>
+                  <div className="field">
+                    <div className="field-label">Groups</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+                      {groupNames.map((g,i)=><span key={i} className="group-tag" style={{cursor:"pointer"}} onClick={()=>setGroupNames(prev=>prev.filter((_,j)=>j!==i))}>{g} ✕</span>)}
+                    </div>
+                    <div className="row gap8"><input id="ot-ng" placeholder="New group name…" style={{flex:1}}/><button className="btn btn-blue btn-sm" onClick={()=>{const v=document.getElementById("ot-ng").value.trim();if(v&&!groupNames.includes(v)){setGroupNames(prev=>[...prev,v]);document.getElementById("ot-ng").value="";}}}>+ Add</button></div>
+                  </div>
+                  {classRoster.length>0?(
+                    <div className="col gap6">
+                      <div className="field-label">Assign Groups</div>
+                      {classRoster.map((s,i)=>(
+                        <div key={i} className="spaced-row">
+                          <span style={{fontWeight:600}}>{s.name}</span>
+                          <div className="row gap6">
+                            {groupNames.map(g=><button key={g} className={`btn btn-sm ${studentGroups[s.name]===g?"btn-blue":"btn-ghost"}`}
+                              onClick={()=>setStudentGroups(prev=>({...prev,[s.name]:prev[s.name]===g?undefined:g}))}>{g}</button>)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ):<div className="warn-box">Import a roster first (Tool 4).</div>}
+                  {Object.keys(studentGroups).length>0&&Object.keys(classes).length>0&&(
+                    <div className="col gap8">
+                      <div className="field-label">Group Performance</div>
+                      {groupNames.map(g=>{
+                        const members=Object.entries(studentGroups).filter(([,grp])=>grp===g).map(([n])=>n);
+                        const res=Object.values(classes).flatMap(p=>p.students||[]).filter(st=>members.includes(st.name));
+                        const avg=res.length?Math.round(res.reduce((s,st)=>s+(st.results?.percentage||0),0)/res.length):null;
+                        return members.length?<div key={g} className="spaced-row"><span className="group-tag">{g}</span><span className="dim small">{members.length} students</span>{avg!==null?<span style={{fontWeight:700,color:avg>=70?"var(--green)":avg>=40?"var(--gold)":"var(--red)"}}>{avg}% avg</span>:<span className="dim small">No results</span>}</div>:null;
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── 6. Common Errors Database ─────────────────────── */}
+              {offlineToolsTab==="errors"&&(
+                <div className="card card-pad col gap14">
+                  <div className="card-title">Common Errors Database</div>
+                  <div className="muted small">Build a library of common mistakes per topic. Offline marking will suggest relevant misconceptions.</div>
+                  <div className="row gap8">
+                    <input value={errorsTopicEdit} onChange={e=>setErrorsTopicEdit(e.target.value)} placeholder="Topic (e.g. Osmosis, Quadratics…)" style={{flex:1}}/>
+                    <button className="btn btn-blue btn-sm" onClick={()=>{if(errorsTopicEdit.trim()&&!errorsDB[errorsTopicEdit.trim()]){setErrorsDB(prev=>({...prev,[errorsTopicEdit.trim()]:[]}));}}}>+ Topic</button>
+                  </div>
+                  {Object.keys(errorsDB).length===0&&<div className="warn-box">No topics yet.</div>}
+                  {Object.entries(errorsDB).map(([topic,errs])=>(
+                    <div key={topic} className="col gap8">
+                      <div className="row-between">
+                        <div className="field-label">{topic} ({errs.length})</div>
+                        <button className="btn btn-ghost btn-sm" style={{color:"var(--red)"}} onClick={()=>setErrorsDB(prev=>{const n={...prev};delete n[topic];return n;})}>✕</button>
+                      </div>
+                      {errs.map((err,ei)=>(
+                        <div key={ei} className="err-card">
+                          <div style={{flex:1}}><div style={{fontWeight:600,fontSize:"0.84rem"}}>{err.error}</div><div className="dim small mt4">💡 {err.hint}</div></div>
+                          <button className="btn btn-ghost btn-sm" style={{color:"var(--red)"}} onClick={()=>setErrorsDB(prev=>({...prev,[topic]:prev[topic].filter((_,i)=>i!==ei)}))}>✕</button>
+                        </div>
+                      ))}
+                      <div className="col gap6">
+                        <input placeholder="Common misconception…" id={`err-e-${topic}`} style={{fontSize:"0.84rem"}}/>
+                        <div className="row gap8">
+                          <input placeholder="Teacher hint / correction…" id={`err-h-${topic}`} style={{flex:1,fontSize:"0.84rem"}}/>
+                          <button className="btn btn-green btn-sm" onClick={()=>{
+                            const e=document.getElementById(`err-e-${topic}`)?.value.trim();
+                            const h=document.getElementById(`err-h-${topic}`)?.value.trim();
+                            if(e){setErrorsDB(prev=>({...prev,[topic]:[...prev[topic],{id:Date.now(),error:e,hint:h||""}]}));
+                            document.getElementById(`err-e-${topic}`).value="";document.getElementById(`err-h-${topic}`).value="";}
+                          }}>+ Add</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── 7. Spaced Repetition ──────────────────────────── */}
+              {offlineToolsTab==="spaced"&&(
+                <div className="card card-pad col gap14">
+                  <div className="card-title">Spaced Repetition Tracker</div>
+                  <div className="muted small">Identifies which questions each student consistently struggles with. Pure data analysis — no AI.</div>
+                  {Object.keys(classes).length===0?<div className="warn-box">No saved results yet.</div>:(()=>{
+                    const sm={};
+                    Object.values(classes).forEach(paper=>(paper.students||[]).forEach(st=>{
+                      if(!sm[st.name])sm[st.name]={name:st.name,weak:[],papers:0};
+                      sm[st.name].papers++;
+                      (st.results?.questions||[]).forEach(q=>{if(!q.correct)sm[st.name].weak.push(q.description?.slice(0,40)||q.id);});
+                    }));
+                    const students=Object.values(sm).map(s=>{
+                      const f={};s.weak.forEach(w=>{f[w]=(f[w]||0)+1;});
+                      return{...s,topWeak:Object.entries(f).sort((a,b)=>b[1]-a[1]).slice(0,4)};
+                    });
+                    return students.length===0?<div className="info-box">Mark some papers first.</div>:(
+                      <div className="col gap10">
+                        {students.map(s=>(
+                          <div key={s.name} className="rule-card col gap8">
+                            <div className="row-between"><span style={{fontWeight:700}}>{s.name}</span><span className="dim small">{s.papers} paper{s.papers!==1?"s":""}</span></div>
+                            {s.topWeak.length>0?(<>
+                              <div className="field-label" style={{color:"var(--red)"}}>Focus areas:</div>
+                              {s.topWeak.map(([t,c])=><div key={t} className="spaced-row" style={{padding:"6px 10px"}}><span style={{fontSize:"0.83rem"}}>{t}</span><span className="pill pill-red" style={{fontSize:"0.68rem"}}>Missed {c}×</span></div>)}
+                            </>):<div className="dim small" style={{color:"var(--green)"}}>✓ No consistent weak areas</div>}
+                          </div>
+                        ))}
+                        <button className="btn btn-ghost btn-sm" onClick={()=>{
+                          const rows=["Student,Focus Area,Times Missed"].concat(students.flatMap(s=>s.topWeak.map(([t,c])=>`${s.name},"${t}",${c}`))).join("\n");
+                          const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(rows);a.download="Spaced_Rep_Focus.csv";a.click();
+                        }}>📥 Export CSV</button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* ── 8. Paper Templates ────────────────────────────── */}
+              {offlineToolsTab==="tpl"&&(
+                <div className="col gap14">
+                  <div className="card card-pad col gap12">
+                    <div className="row-between">
+                      <div className="card-title" style={{marginBottom:0}}>Paper Templates</div>
+                      <button className="btn btn-blue btn-sm" onClick={()=>setTemplateEdit({id:Date.now(),name:"",subject:"",totalMarks:"",scheme:""})}>+ New</button>
+                    </div>
+                    <div className="muted small">Save mark scheme configs as templates. Hit Load to pre-fill Setup instantly.</div>
+                    {paperTemplates.length===0&&!templateEdit&&<div className="warn-box">No templates yet.</div>}
+                    {templateEdit&&(
+                      <div className="card col gap12" style={{padding:16,borderColor:"var(--blue)"}}>
+                        <div className="field"><div className="field-label">Template Name</div><input value={templateEdit.name} onChange={e=>setTemplateEdit(t=>({...t,name:e.target.value}))} placeholder="e.g. GCSE Biology Paper 1"/></div>
+                        <div className="g2 gap16">
+                          <div className="field"><div className="field-label">Subject</div><input value={templateEdit.subject} onChange={e=>setTemplateEdit(t=>({...t,subject:e.target.value}))} placeholder="e.g. Biology"/></div>
+                          <div className="field"><div className="field-label">Total Marks</div><input type="number" value={templateEdit.totalMarks} onChange={e=>setTemplateEdit(t=>({...t,totalMarks:e.target.value}))} placeholder="40"/></div>
+                        </div>
+                        <div className="field"><div className="field-label">Mark Scheme</div><textarea value={templateEdit.scheme} onChange={e=>setTemplateEdit(t=>({...t,scheme:e.target.value}))} placeholder="Paste full mark scheme…" style={{minHeight:100}}/></div>
+                        <div className="row gap8">
+                          <button className="btn btn-green" onClick={()=>{if(!templateEdit.name.trim())return;setPaperTemplates(prev=>{const ei=prev.findIndex(t=>t.id===templateEdit.id);return ei>=0?prev.map((t,i)=>i===ei?templateEdit:t):[...prev,templateEdit];});setTemplateEdit(null);}}>Save</button>
+                          <button className="btn btn-ghost" onClick={()=>setTemplateEdit(null)}>Cancel</button>
+                        </div>
+                      </div>
+                    )}
+                    {paperTemplates.map(tpl=>(
+                      <div key={tpl.id} className="tpl-card">
+                        <div className="row-between">
+                          <div><div style={{fontWeight:700}}>{tpl.name}</div><div className="dim small mt4">{tpl.subject||"No subject"} · {tpl.totalMarks||"?"} marks</div></div>
+                          <div className="row gap8">
+                            <button className="btn btn-green btn-sm" onClick={()=>{if(tpl.subject)setSubject(tpl.subject);if(tpl.totalMarks)setTotalMarks(tpl.totalMarks);if(tpl.scheme)setGlobalScheme(tpl.scheme);setTab("setup");setError("✓ Template loaded into Setup.");}}>▶ Load</button>
+                            <button className="btn btn-ghost btn-sm" onClick={()=>setTemplateEdit(tpl)}>Edit</button>
+                            <button className="btn btn-ghost btn-sm" style={{color:"var(--red)"}} onClick={()=>setPaperTemplates(prev=>prev.filter(t=>t.id!==tpl.id))}>✕</button>
+                          </div>
+                        </div>
+                        {tpl.scheme&&<div className="dim small mt4" style={{fontFamily:"monospace",background:"var(--inset)",padding:"6px 8px",borderRadius:4,marginTop:8,whiteSpace:"pre-wrap",fontSize:"0.72rem"}}>{tpl.scheme.slice(0,200)}{tpl.scheme.length>200?"…":""}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── 9. Class Dashboard ───────────────────────────── */}
+              {offlineToolsTab==="dash"&&(
+                <div className="col gap14">
+                  {Object.keys(classes).length===0?<div className="card card-pad"><div className="warn-box">No class data yet.</div></div>:
+                  Object.entries(classes).map(([pid,paper])=>{
+                    const sts=paper.students||[];if(!sts.length)return null;
+                    const pcts=sts.map(s=>s.results?.percentage||0);
+                    const avg=Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length);
+                    const sorted=[...sts].sort((a,b)=>(b.results?.percentage||0)-(a.results?.percentage||0));
+                    const grades={A:0,B:0,C:0,D:0,F:0};
+                    pcts.forEach(p=>{const g=p>=(gradeBounds.A||70)?"A":p>=(gradeBounds.B||55)?"B":p>=(gradeBounds.C||40)?"C":p>=(gradeBounds.D||25)?"D":"F";grades[g]++;});
+                    const mx=Math.max(...Object.values(grades),1);
+                    return(
+                      <div key={pid} className="card card-pad col gap14">
+                        <div className="row-between">
+                          <div><div className="card-title" style={{marginBottom:2}}>{paper.name}</div><div className="dim small">{sts.length} students · avg <strong style={{color:"var(--blue)"}}>{avg}%</strong></div></div>
+                          <span className="pill" style={{background:`rgba(${avg>=70?"61,214,140":avg>=40?"245,200,66":"232,71,63"},0.15)`,color:avg>=70?"var(--green)":avg>=40?"var(--gold)":"var(--red)"}}>{avg>=70?"Above target":avg>=40?"On track":"Below target"}</span>
+                        </div>
+                        <div>
+                          <div className="field-label" style={{marginBottom:8}}>Grade Distribution</div>
+                          <div className="row gap8" style={{alignItems:"flex-end",height:80}}>
+                            {Object.entries(grades).map(([g,count])=>{
+                              const col=g==="A"?"#3dd68c":g==="B"?"#6c8ff5":g==="C"?"#f5c842":g==="D"?"#f0956b":"#e8473f";
+                              return<div key={g} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                                <div style={{fontSize:"0.72rem",fontWeight:700,color:col}}>{count}</div>
+                                <div style={{width:"100%",background:col,borderRadius:"4px 4px 0 0",height:`${Math.round((count/mx)*60)}px`,minHeight:count>0?4:0}}/>
+                                <div style={{fontSize:"0.78rem",fontWeight:800,color:col}}>{g}</div>
+                              </div>;
+                            })}
+                          </div>
+                        </div>
+                        <div className="g2 gap16">
+                          <div><div className="field-label" style={{color:"var(--green)",marginBottom:6}}>Top performers</div>{sorted.slice(0,3).map(st=><div key={st.id} className="spaced-row" style={{marginBottom:4,padding:"6px 10px"}}><span style={{fontWeight:600,fontSize:"0.84rem"}}>{st.name}</span><span style={{fontWeight:700,color:"var(--green)"}}>{st.results?.percentage||0}%</span></div>)}</div>
+                          <div><div className="field-label" style={{color:"var(--red)",marginBottom:6}}>Need support</div>{sorted.slice(-3).reverse().map(st=><div key={st.id} className="spaced-row" style={{marginBottom:4,padding:"6px 10px"}}><span style={{fontWeight:600,fontSize:"0.84rem"}}>{st.name}</span><span style={{fontWeight:700,color:"var(--red)"}}>{st.results?.percentage||0}%</span></div>)}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* ── 10. Parent Report Generator ───────────────────── */}
+              {offlineToolsTab==="reports"&&(
+                <div className="card card-pad col gap14">
+                  <div className="card-title">Parent Report Generator</div>
+                  <div className="muted small">One-click printable parent reports from saved results. No AI needed.</div>
+                  {Object.keys(classes).length===0?<div className="warn-box">No saved results yet.</div>:
+                  Object.entries(classes).flatMap(([pid,paper])=>
+                    (paper.students||[]).map(st=>{
+                      const pct=st.results?.percentage||0;
+                      const g=pct>=(gradeBounds.A||70)?"A":pct>=(gradeBounds.B||55)?"B":pct>=(gradeBounds.C||40)?"C":pct>=(gradeBounds.D||25)?"D":"F";
+                      const col=g==="A"?"#3dd68c":g==="B"?"#6c8ff5":g==="C"?"#f5c842":g==="D"?"#f0956b":"#e8473f";
+                      return(
+                        <div key={st.id} className="rule-card">
+                          <div className="row-between">
+                            <div><div style={{fontWeight:700}}>{st.name}</div><div className="dim small">{paper.name}</div></div>
+                            <div className="row gap8">
+                              <span style={{fontWeight:800,color:col,fontSize:"1.1rem"}}>{g} · {pct}%</span>
+                              <button className="btn btn-green btn-sm" onClick={()=>{
+                                const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Report — ${st.name}</title><style>body{font-family:'Segoe UI',sans-serif;background:#f8f8fc;color:#1a1530;margin:0;padding:0}@media print{.np{display:none}}.page{max-width:680px;margin:0 auto;padding:32px 28px}.hdr{background:linear-gradient(135deg,#7c3aed,#6c8ff5);color:white;border-radius:12px;padding:28px 32px;margin-bottom:24px}.name{font-size:1.6rem;font-weight:800;margin-bottom:4px}.sub{opacity:.75;font-size:.9rem}.gb{display:inline-block;background:rgba(255,255,255,.2);border-radius:8px;padding:10px 20px;font-size:2rem;font-weight:900;margin-top:12px}.sec{background:white;border-radius:10px;padding:20px 22px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.06)}.sec h2{margin:0 0 14px;font-size:1rem;color:#7c3aed}.qr{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f0f8;font-size:.87rem}.ck{color:#3dd68c;font-weight:700}.cx{color:#e8473f;font-weight:700}.ft{text-align:center;font-size:.72rem;color:#bbb;margin-top:20px}</style></head><body><div class="page"><div class="hdr"><div class="name">${st.name}</div><div class="sub">${paper.name} · ${new Date().toLocaleDateString("en-GB")}</div><div class="gb">${g} · ${pct}%</div></div><div class="sec"><h2>📊 Results</h2><div class="qr"><span>Score</span><strong>${st.results?.totalScore||0}/${st.results?.maxScore||0}</strong></div>${(st.results?.questions||[]).slice(0,8).map(q=>`<div class="qr"><span>${q.id}: ${q.description?.slice(0,40)||""}</span><span>${q.marksAwarded>=q.marksAvailable?'<span class="ck">✓</span>':'<span class="cx">✗</span>'} ${q.marksAwarded}/${q.marksAvailable}</span></div>`).join("")}</div><div class="sec"><h2>✅ Strengths</h2>${(st.results?.strengths||["Good attempt"]).map(s=>`<div style="padding:5px 0;font-size:.86rem">• ${s}</div>`).join("")}</div><div class="sec"><h2>📈 Next Steps</h2>${(st.results?.improvements||["Review mark scheme"]).map(s=>`<div style="padding:5px 0;font-size:.86rem">• ${s}</div>`).join("")}</div><div class="ft">NovaVista © DMA 2026 · ${new Date().toLocaleDateString("en-GB")}</div></div></body></html>`;
+                                const w=window.open("","_blank");w.document.write(html);w.document.close();w.print();
+                              }}>🖨 Print</button>
+                              <button className="btn btn-ghost btn-sm" onClick={()=>{const a=document.createElement("a");a.href="data:text/html;charset=utf-8,"+encodeURIComponent(st.feedbackHTML||"");a.download=`${st.name.replace(/\s+/g,"_")}_feedback.html`;a.click();}}>📄 Feedback</button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {/* ── 11. Grade Predictor ──────────────────────────── */}
+              {offlineToolsTab==="predict"&&(
+                <div className="card card-pad col gap14">
+                  <div className="card-title">Predicted Grade Tracker</div>
+                  <div className="muted small">Set target grades per student. Compare against actuals and flag students falling behind.</div>
+                  {Object.keys(classes).length===0?<div className="warn-box">No saved results yet.</div>:
+                  Object.entries(classes).map(([pid,paper])=>{
+                    const sts=paper.students||[];if(!sts.length)return null;
+                    return(
+                      <div key={pid} className="col gap8">
+                        <div className="field-label">{paper.name}</div>
+                        {sts.map(st=>{
+                          const pct=st.results?.percentage||0;
+                          const ag=pct>=(gradeBounds.A||70)?"A":pct>=(gradeBounds.B||55)?"B":pct>=(gradeBounds.C||40)?"C":pct>=(gradeBounds.D||25)?"D":"F";
+                          const tg=targetGrades[st.name]?.[pid]||"";
+                          const go={A:4,B:3,C:2,D:1,F:0};
+                          const ok=!tg||(go[ag]||0)>=(go[tg]||0);
+                          return(
+                            <div key={st.id} className="pred-row">
+                              <span style={{fontWeight:600}}>{st.name}</span>
+                              <span style={{fontWeight:700,color:ag==="A"?"var(--green)":ag==="D"||ag==="F"?"var(--red)":"var(--gold)"}}>{ag} ({pct}%)</span>
+                              <div className="row gap6">
+                                <span className="dim small">Target:</span>
+                                <select value={tg} onChange={e=>setTargetGrades(prev=>({...prev,[st.name]:{...(prev[st.name]||{}),[pid]:e.target.value}}))} style={{padding:"4px 8px",fontSize:"0.82rem"}}>
+                                  <option value="">—</option>
+                                  {["A","B","C","D","F"].map(g=><option key={g} value={g}>{g}</option>)}
+                                </select>
+                              </div>
+                              <span style={{fontSize:"0.82rem",fontWeight:700,color:ok?"var(--green)":"var(--red)"}}>{!tg?"—":ok?"✓ On track":"⚠ Below"}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                  {(()=>{
+                    const at=Object.entries(classes).flatMap(([pid,paper])=>(paper.students||[]).filter(st=>{
+                      const pct=st.results?.percentage||0;
+                      const ag=pct>=(gradeBounds.A||70)?"A":pct>=(gradeBounds.B||55)?"B":pct>=(gradeBounds.C||40)?"C":pct>=(gradeBounds.D||25)?"D":"F";
+                      const tg=targetGrades[st.name]?.[pid]||"";
+                      const go={A:4,B:3,C:2,D:1,F:0};
+                      return tg&&(go[ag]||0)<(go[tg]||0);
+                    }).map(st=>st.name));
+                    return at.length>0?<div className="error-box"><strong>⚠ {at.length} student{at.length!==1?"s":""} below target:</strong> {at.join(" · ")}</div>:null;
+                  })()}
+                </div>
+              )}
+
+              {/* ── 12. Session Planner ──────────────────────────── */}
+              {offlineToolsTab==="planner"&&(
+                <div className="col gap14">
+                  <div className="card card-pad col gap14">
+                    <div className="card-title">Marking Session Planner</div>
+                    <div className="muted small">Track marking deadlines and progress. Hit +1 Marked as you complete each paper.</div>
+                    <div className="card col gap10" style={{padding:14,borderStyle:"dashed"}}>
+                      <div className="field-label">Add Deadline</div>
+                      <div className="row gap8" style={{flexWrap:"wrap"}}>
+                        <input placeholder="Paper / Class" value={newDeadline.paper} onChange={e=>setNewDeadline(d=>({...d,paper:e.target.value}))} style={{flex:2,minWidth:130}}/>
+                        <input placeholder="Class size" type="number" min="1" value={newDeadline.classSize} onChange={e=>setNewDeadline(d=>({...d,classSize:e.target.value}))} style={{flex:1,minWidth:70}}/>
+                        <input type="date" value={newDeadline.dueDate} onChange={e=>setNewDeadline(d=>({...d,dueDate:e.target.value}))} style={{flex:1,minWidth:120}}/>
+                        <button className="btn btn-green btn-sm" onClick={()=>{if(!newDeadline.paper.trim())return;setMarkingDeadlines(prev=>[...prev,{id:Date.now(),...newDeadline,markedCount:0}]);setNewDeadline({paper:"",classSize:"",dueDate:""});}}>+ Add</button>
+                      </div>
+                    </div>
+                    {markingDeadlines.length===0?<div className="warn-box">No deadlines set.</div>:(
+                      <div className="col gap10">
+                        {markingDeadlines.map((dl,di)=>{
+                          const total=parseInt(dl.classSize)||0;
+                          const done=dl.markedCount||0;
+                          const pct=total>0?Math.round((done/total)*100):0;
+                          const due=dl.dueDate?new Date(dl.dueDate):null;
+                          const days=due?Math.ceil((due-new Date())/(86400000)):null;
+                          const over=days!==null&&days<0;
+                          const urg=days!==null&&days>=0&&days<=2;
+                          return(
+                            <div key={dl.id} className="deadline-row" style={{borderColor:over?"rgba(232,71,63,0.4)":urg?"rgba(245,200,66,0.4)":"var(--border)"}}>
+                              <div style={{flex:1}}>
+                                <div style={{fontWeight:700,marginBottom:4}}>{dl.paper}</div>
+                                <div className="deadline-progress"><div className="deadline-fill" style={{width:`${pct}%`,background:pct===100?"var(--green)":over?"var(--red)":"var(--blue)"}}/></div>
+                                <div className="dim small mt4">{done}/{total||"?"} · {pct}%</div>
+                              </div>
+                              <div className="col gap6" style={{alignItems:"flex-end",minWidth:90}}>
+                                {due&&<span style={{fontSize:"0.72rem",fontWeight:700,color:over?"var(--red)":urg?"var(--gold)":"var(--text3)"}}>{over?`Overdue ${Math.abs(days)}d`:days===0?"Due today":`${days}d left`}</span>}
+                                <div className="row gap6">
+                                  <button className="btn btn-ghost btn-sm" style={{padding:"4px 8px",fontSize:"0.75rem"}} onClick={()=>setMarkingDeadlines(prev=>prev.map((d,i)=>i===di?{...d,markedCount:Math.max(0,(d.markedCount||0)-1)}:d))}>−</button>
+                                  <button className="btn btn-blue btn-sm" style={{padding:"4px 8px",fontSize:"0.75rem"}} onClick={()=>setMarkingDeadlines(prev=>prev.map((d,i)=>i===di?{...d,markedCount:Math.min(parseInt(d.classSize)||999,(d.markedCount||0)+1)}:d))}>+1 Marked</button>
+                                </div>
+                              </div>
+                              <button className="btn btn-ghost btn-sm" style={{color:"var(--red)",marginLeft:4}} onClick={()=>setMarkingDeadlines(prev=>prev.filter((_,i)=>i!==di))}>✕</button>
+                            </div>
+                          );
+                        })}
+                        {(()=>{
+                          const tot=markingDeadlines.reduce((s,d)=>s+(parseInt(d.classSize)||0),0);
+                          const don=markingDeadlines.reduce((s,d)=>s+(d.markedCount||0),0);
+                          const ov=markingDeadlines.filter(d=>d.dueDate&&Math.ceil((new Date(d.dueDate)-new Date())/86400000)<0&&(d.markedCount||0)<(parseInt(d.classSize)||0)).length;
+                          return<div className="g2 gap16" style={{marginTop:4}}>
+                            <div className="card" style={{padding:14,textAlign:"center"}}><div style={{fontSize:"1.6rem",fontWeight:800,color:"var(--blue)"}}>{don}/{tot}</div><div className="dim small">Papers marked</div></div>
+                            <div className="card" style={{padding:14,textAlign:"center"}}><div style={{fontSize:"1.6rem",fontWeight:800,color:ov>0?"var(--red)":"var(--green)"}}>{ov}</div><div className="dim small">Overdue batches</div></div>
+                          </div>;
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
             </div>
           </>
