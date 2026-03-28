@@ -3094,31 +3094,93 @@ function NovaVista() {
         });
 
         // ── Step 3: Keyword matching from scheme ───────────────────────────────
-        const stopWords = new Set(["the","a","an","and","or","of","to","in","is","are","was","were","it","its","for","on","at","by","as","with","from","that","this","be","been","being","have","has","had","do","does","did","will","would","can","could","should"]);
-        const keywords = w => w.toLowerCase().match(/\b[a-z]{3,}\b/g)?.filter(w=>!stopWords.has(w)) || [];
+        const stopWords = new Set(["the","a","an","and","or","of","to","in","is","are","was","were","it","its","for","on","at","by","as","with","from","that","this","be","been","being","have","has","had","do","does","did","will","would","can","could","should","not","no","all","any","each","per","use","used","show","shown","give","given"]);
+        const keywords = w => w.toLowerCase().match(/\b[a-z]{4,}\b/g)?.filter(w=>!stopWords.has(w)) || [];
+
+        // Extract numbers from a string as exact values
+        const extractNums = str => (str.match(/-?[\d]+(?:\.\d+)?/g)||[]).map(Number);
+
         const points = [];
         lines.forEach(line=>{
-          const codeMatch = line.match(/\b([BMACPEF][0-9](?:\.[0-9])?)\b/i);
+          // Strip question-number prefixes like "Q1", "Q1)", "Qn 9)", "1.", "(a)", "Part a"
+          const stripped = line
+            .replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"")
+            .replace(/^\d+[a-z]?[\.\)\s]+/,"")
+            .replace(/^\([a-z]\)\s*/i,"")
+            .replace(/^Part\s+[a-z]\s*/i,"")
+            .trim();
+          if(!stripped || stripped.length < 3) return;
+
+          const codeMatch = stripped.match(/\b([BMACPEF][0-9](?:\.[0-9])?)\b/i);
           const code = codeMatch ? codeMatch[1].toUpperCase() : "B1";
-          const text = line.replace(/\b[BMACPEF][0-9](?:\.[0-9])?\b/gi,"").replace(/^[-•*]\s*/,"").trim();
-          if(text.length > 3) points.push({code,text});
+          // Strip mark code from display text
+          const text = stripped.replace(/\b[BMACPEF][0-9](?:\.[0-9])?\b/gi,"").replace(/^[-•*]\s*/,"").trim();
+          if(text.length > 2) points.push({code, text, nums: extractNums(text)});
         });
-        const maxPts = maxMarks || (totalMarks ? parseInt(totalMarks) : Math.max(points.length, 4));
-        if(points.length === 0) for(let i=0;i<maxPts;i++) points.push({code:"B1",text:`Mark point ${i+1}`});
+
+        // maxPts: use totalMarks if set, else use number of points found (NOT a minimum of 4)
+        const maxPts = maxMarks
+          ? parseInt(maxMarks)
+          : (totalMarks ? parseInt(totalMarks) : points.length || 1);
+
+        if(points.length === 0) for(let i=0;i<maxPts;i++) points.push({code:"B1",text:`Mark point ${i+1}`,nums:[]});
+
         const kwPoints = points.map(pt=>{
           const ptWords = keywords(pt.text);
-          if(ptWords.length === 0) return {...pt,awarded:false};
-          const hits = ptWords.filter(w=>ans.includes(w)).length;
-          const awarded = ptWords.length<=2 ? hits>=1 : hits/ptWords.length>=0.4;
-          return {...pt,awarded};
+          const ptNums  = pt.nums || [];
+
+          // Numeric mark points: check if expected answer number appears in student answer
+          // e.g. "4 × 8 = 32 pens" — the answer to check is the LAST number (32)
+          let numericMatch = false;
+          if(ptNums.length > 0){
+            const ansNums = extractNums(ans);
+            // Check if the last (answer) number from the scheme appears in student work
+            const expectedAnswer = ptNums[ptNums.length - 1];
+            numericMatch = ansNums.some(n => Math.abs(n - expectedAnswer) < 0.01);
+          }
+
+          // Keyword match: need word-boundary matches, not substring matches
+          // to avoid "8" in "28" matching "8"
+          const wordBoundaryMatch = w => {
+            const re = new RegExp('\\b' + w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\b', 'i');
+            return re.test(ans);
+          };
+
+          if(ptWords.length === 0 && ptNums.length === 0) return {...pt, awarded:false};
+
+          // Award if: numeric answer matches OR enough keywords match
+          let awarded = false;
+          if(numericMatch) {
+            awarded = true;
+          } else if(ptWords.length > 0) {
+            // Match with basic singular/plural stemming (ribosome↔ribosomes, release↔releases)
+            const stemMatch = w => {
+              const escaped = w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+              // Try word + optional plural suffix
+              if(new RegExp('\\b'+escaped+'s?\\b','i').test(ans)) return true;
+              // Try stem (strip trailing s/es/ies/ses)
+              const stem = w.replace(/(?:ses|ies|es|s)$/i,'');
+              if(stem.length>=4 && new RegExp('\\b'+stem.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[a-z]{0,4}\\b','i').test(ans)) return true;
+              return false;
+            };
+            const hits = ptWords.filter(w => stemMatch(w)).length;
+            // Stricter: need at least 50% of keywords, minimum 1, using word-boundary
+            awarded = ptWords.length === 1 ? hits >= 1 : hits / ptWords.length >= 0.5;
+          }
+          return {...pt, awarded};
         });
 
         // ── Combine all results ────────────────────────────────────────────────
-        const allPoints = [...ruleResults,...calcResults,...kwPoints];
-        const marksAwarded   = Math.min(allPoints.filter(p=>p.awarded).length, maxPts);
-        const marksAvailable = Math.min(Math.max(points.length,ruleResults.length+calcResults.length), maxPts);
-        const percentage     = marksAvailable > 0 ? Math.round((marksAwarded/marksAvailable)*100) : 0;
-        const grade          = percentage>=(gradeBounds.A||70)?"A":percentage>=(gradeBounds.B||55)?"B":percentage>=(gradeBounds.C||40)?"C":percentage>=(gradeBounds.D||25)?"D":"F";
+        const allPoints = [...ruleResults, ...calcResults, ...kwPoints];
+        // FIX: cap marksAwarded against marksAvailable (not maxPts) to prevent 1 point = 100%
+        const marksAvailable = Math.min(
+          Math.max(points.length, ruleResults.length + calcResults.length),
+          maxPts
+        );
+        // marksAwarded cannot exceed marksAvailable
+        const marksAwarded = Math.min(allPoints.filter(p=>p.awarded).length, marksAvailable);
+        const percentage   = marksAvailable > 0 ? Math.round((marksAwarded / marksAvailable) * 100) : 0;
+        const grade        = percentage>=(gradeBounds.A||70)?"A":percentage>=(gradeBounds.B||55)?"B":percentage>=(gradeBounds.C||40)?"C":percentage>=(gradeBounds.D||25)?"D":"F";
 
         // Check error DB for misconception hints
         const misconceptions = [];
