@@ -2262,6 +2262,8 @@ document.querySelectorAll('script[src]').forEach(function(s){
 <script>if(typeof pdfjsLib!=='undefined'){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 <!-- mammoth.js for DOCX → text extraction -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<!-- Tesseract.js for local in-browser OCR (handwriting + print, no server needed) -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <script type="text/babel">
 const { useState, useRef, useEffect, useCallback } = React;
@@ -2592,6 +2594,10 @@ function NovaVista() {
   const [apiMode,setApiMode]               = useState("cloud"); // "cloud"|"proxy"|"gemini"|"openai"|"local"
   const [offlineMode,setOfflineMode]        = useState(false);  // demo/offline — no AI calls
   const [offlineTempFolders,setOfflineTempFolders] = useState({}); // session-only temp folders
+  const [tesseractReady,setTesseractReady]   = useState(false);
+  const [tesseractLoading,setTesseractLoading] = useState(false);
+  const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
+  const tesseractWorkerRef                   = useRef(null);
 
   // ── Offline Tools state ────────────────────────────────────────────────────
   const [offlineToolsTab,setOfflineToolsTab] = useState("rules");
@@ -3255,7 +3261,33 @@ function NovaVista() {
 
       // ── Mark whole paper / batch ────────────────────────────────────────────
       if(isMarkWhole || isBatch){
-        const {marksAwarded,marksAvailable,percentage,grade,awardedPoints,strengths,improvements} = localMark(answerText, scheme, totalMarks?parseInt(totalMarks):null);
+        // Detect if this is an image-only call (no real typed answer)
+        const hasImageMsg = messages.some(m=>Array.isArray(m.content)&&m.content.some(b=>b.type==="image"));
+        // A real answer is either: long text, contains STUDENT ANSWERS block, or isn't the default phrase
+        const realAnswer  = answerText && (
+          answerText.includes("STUDENT ANSWERS:") ||
+          (answerText.trim().length>20 && answerText!=="Mark this paper.")
+        );
+        // Extract just the answer portion if it follows "STUDENT ANSWERS:"
+        const cleanAnswer = answerText.includes("STUDENT ANSWERS:")
+          ? answerText.split("STUDENT ANSWERS:")[1]?.trim() || answerText
+          : answerText;
+
+        // If we have an image but no typed answer, we can't keyword-match handwriting.
+        // Return a special flag so markWhole can route to Manual Assist.
+        if(hasImageMsg && !realAnswer){
+          return JSON.stringify({
+            _offlineNeedsText: true,
+            totalScore:0, maxScore: totalMarks?parseInt(totalMarks):1,
+            percentage:0, grade:"—",
+            studentName: studentName||"Student",
+            questions:[], overallFeedback:"",
+            strengths:[], improvements:[],
+            offlineMessage:"Offline mode cannot read handwriting from images. Please type or paste the student's answer to use keyword marking."
+          });
+        }
+
+        const {marksAwarded,marksAvailable,percentage,grade,awardedPoints,strengths,improvements} = localMark(cleanAnswer||answerText, scheme, totalMarks?parseInt(totalMarks):null);
         return JSON.stringify({
           totalScore:marksAwarded, maxScore:marksAvailable, percentage, grade,
           studentName: studentName||"Student",
@@ -3273,7 +3305,7 @@ function NovaVista() {
           strengths: strengths.length>0 ? strengths : ["Attempt made"],
           improvements: improvements.length>0 ? improvements : ["Review mark scheme criteria"],
           annotations:[
-            {region:"top-right",text:`${marksAwarded}/${marksAvailable}`,type:"correct"},
+            {region:"top-right",text:`${marksAwarded}/${marksAvailable}`,type:marksAwarded===marksAvailable?"correct":"comment"},
             {region:"top-left",text:"📋 Offline",type:"comment"},
           ]
         });
@@ -4036,10 +4068,148 @@ function NovaVista() {
   },[webSearchEnabled,webSearchKey,webSearchCx,webSearchEngine]);
   const captureFrame=useCallback(()=>{const v=videoRef.current,c=canvasRef.current;if(!v||!c)return null;c.width=v.videoWidth||1280;c.height=v.videoHeight||720;c.getContext("2d").drawImage(v,0,0);return c.toDataURL("image/jpeg",0.92);},[]);
 
+  /* ── Tesseract OCR — local in-browser handwriting/print recognition ─── */
+  // Initialise worker once (lazy) — downloads language data on first call (~4MB)
+  const getTesseractWorker = useCallback(async () => {
+    if (tesseractWorkerRef.current) return tesseractWorkerRef.current;
+    if (typeof Tesseract === "undefined") throw new Error("Tesseract.js not loaded — check internet connection for first download.");
+    setTesseractLoading(true);
+    setOcrProgress(0);
+    try {
+      const worker = await Tesseract.createWorker("eng", 1, {
+        logger: m => {
+          if (m.status === "recognizing text") setOcrProgress(Math.round(m.progress * 100));
+          if (m.status === "loading tesseract core") setOcrProgress(5);
+          if (m.status === "initializing tesseract") setOcrProgress(15);
+          if (m.status === "loading language traineddata") setOcrProgress(30);
+          if (m.status === "initializing api") setOcrProgress(50);
+        },
+        workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js",
+        langPath:   "https://tessdata.projectnaptha.com/4.0.0",
+        corePath:   "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js",
+      });
+      // Set parameters that improve handwriting recognition
+      await worker.setParameters({
+        tessedit_pageseg_mode: "1",        // Auto page seg with OSD
+        tessedit_char_whitelist: "",        // All characters
+        preserve_interword_spaces: "1",
+      });
+      tesseractWorkerRef.current = worker;
+      setTesseractReady(true);
+      return worker;
+    } finally {
+      setTesseractLoading(false);
+    }
+  }, []);
+
+  // Run OCR on a base64 image — returns extracted text
+  const runTesseractOCR = useCallback(async (imageB64) => {
+    const worker = await getTesseractWorker();
+    setOcrProgress(0);
+    const { data: { text } } = await worker.recognize(imageB64);
+    setOcrProgress(100);
+    return text.trim();
+  }, [getTesseractWorker]);
+
+  // Pre-process canvas image for better OCR accuracy:
+  // greyscale → increase contrast → threshold to black/white
+  const preprocessForOCR = useCallback((imageB64) => {
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = img.width; c.height = img.height;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        const d = ctx.getImageData(0, 0, c.width, c.height);
+        // Convert to greyscale + boost contrast
+        for (let i = 0; i < d.data.length; i += 4) {
+          const grey = 0.299 * d.data[i] + 0.587 * d.data[i+1] + 0.114 * d.data[i+2];
+          // Contrast stretch: push towards black/white
+          const v = grey < 128 ? Math.max(0, grey - 40) : Math.min(255, grey + 40);
+          d.data[i] = d.data[i+1] = d.data[i+2] = v;
+          d.data[i+3] = 255;
+        }
+        ctx.putImageData(d, 0, 0);
+        resolve(c.toDataURL("image/png"));
+      };
+      img.src = imageB64;
+    });
+  }, []);
+
   /* ── markWhole — full AI marking of an image ── */
   const markWhole=useCallback(async (img, extraAnswers)=>{
     setMarking(true);setMarkingStep("Sending to AI marker…");
     try{
+      // ── Auto-fallback: if online mode but no API key, use local marking engine ──
+      if(!offlineMode && !apiReady){
+        setMarkingStep("No API key — using local mark scheme matching…");
+        await new Promise(r=>setTimeout(r,600));
+        // Extract any typed answers from extraAnswers, or use scheme-only marking
+        const combinedAnswer = extraAnswers
+          ? Object.values(extraAnswers).join(" ")
+          : "";
+        const scheme_ = globalScheme||"";
+        const lines = scheme_.split(/\n/).map(l=>l.trim()).filter(Boolean);
+        const stopWords = new Set(["the","a","an","and","or","of","to","in","is","are","was","were","it","its","for","on","at","by","as","with","from","that","this","be","been","being","have","has","had","do","does","did","will","would","can","could","should","not","no","all","any","each","per","use","used","show","shown","give","given"]);
+        const kws = w=>w.toLowerCase().match(/\b[a-z]{4,}\b/g)?.filter(w=>!stopWords.has(w))||[];
+        const extractNums = s=>(s.match(/-?[\d]+(?:\.\d+)?/g)||[]).map(Number);
+        const stemMatch = (w,text)=>{
+          const e=w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+          if(new RegExp('\\b'+e+'s?\\b','i').test(text)) return true;
+          const stem=w.replace(/(?:ses|ies|es|s)$/i,'');
+          return stem.length>=4&&new RegExp('\\b'+stem.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[a-z]{0,4}\\b','i').test(text);
+        };
+        const points=[];
+        lines.forEach(line=>{
+          const stripped=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").replace(/^\d+[a-z]?[\.\)\s]+/,"").replace(/^\([a-z]\)\s*/i,"").trim();
+          if(!stripped||stripped.length<3) return;
+          const codeM=stripped.match(/\b([BMACPEF][0-9])\b/i);
+          const code=codeM?codeM[1].toUpperCase():"B1";
+          const text=stripped.replace(/\b[BMACPEF][0-9]\b/gi,"").replace(/^[-•*—]\s*/,"").trim();
+          if(text.length>2) points.push({code,text,nums:extractNums(text)});
+        });
+        const maxPts=totalMarks?parseInt(totalMarks):points.length||1;
+        if(points.length===0) for(let i=0;i<maxPts;i++) points.push({code:"B1",text:`Mark point ${i+1}`,nums:[]});
+        const ansLower=combinedAnswer.toLowerCase();
+        const marked=points.map(pt=>{
+          const ptWords=kws(pt.text),ptNums=pt.nums||[];
+          let awarded=false;
+          if(ptNums.length>0){const exp=ptNums[ptNums.length-1];awarded=extractNums(ansLower).some(n=>Math.abs(n-exp)<0.01);}
+          if(!awarded&&ptWords.length>0){const hits=ptWords.filter(w=>stemMatch(w,ansLower)).length;awarded=ptWords.length===1?hits>=1:hits/ptWords.length>=0.5;}
+          return{...pt,awarded};
+        });
+        const avail=Math.min(points.length,maxPts);
+        const awarded=Math.min(marked.filter(p=>p.awarded).length,avail);
+        const pct=avail>0?Math.round((awarded/avail)*100):0;
+        const gb={A:70,B:55,C:40,D:25};
+        const grade=pct>=gb.A?"A":pct>=gb.B?"B":pct>=gb.C?"C":pct>=gb.D?"D":"F";
+        // If no typed answer was provided (image only), we can't keyword match
+        const imageOnly = !combinedAnswer && img;
+        const fallbackResult = imageOnly ? {
+          totalScore:0,maxScore:avail,percentage:0,grade:"—",
+          studentName:studentName||"Student",
+          questions:points.map((p,i)=>({id:`Q${i+1}`,description:p.text,marksAwarded:0,marksAvailable:1,code:p.code,feedback:"Could not read answer — no API key set. Type the answer in Manual Assist or add an API key.",correct:false,misconception:null,uncertain:true})),
+          overallFeedback:"No API key set. Switch to Offline Mode to use keyword marking, or add a Claude API key in Privacy & Data to use AI marking.",
+          strengths:[],improvements:["Add an API key in Privacy & Data → Claude API","Or enable Offline Mode in the sidebar to use local marking"],
+          _fallback:true, _noKey:true, image:img
+        } : {
+          totalScore:awarded,maxScore:avail,percentage:pct,grade,
+          studentName:studentName||"Student",
+          questions:marked.map((p,i)=>({id:`Q${i+1}`,description:p.text,marksAwarded:p.awarded?1:0,marksAvailable:1,code:p.code,
+            feedback:p.awarded?`✓ ${p.text}`:`✗ Not found in answer. Expected: ${p.text}`,
+            correct:p.awarded,misconception:p.awarded?null:`Missing: ${p.text}`,uncertain:false})),
+          overallFeedback:pct>=70?"Good performance based on keyword matching.":"Answer does not fully address the mark scheme criteria.",
+          strengths:marked.filter(p=>p.awarded).map(p=>p.text).slice(0,3),
+          improvements:marked.filter(p=>!p.awarded).map(p=>`Include: ${p.text}`).slice(0,3),
+          _fallback:true, image:img
+        };
+        setResults(fallbackResult);
+        setReviewMode(null);setUncertainQs([]);setManualAnswers({});
+        setTab("results");
+        return;
+      }
+
       const b64=img.split(",")[1];
       // If teacher provided manual answers for uncertain questions, inject them
       const answerNote = extraAnswers && Object.keys(extraAnswers).length>0
@@ -4057,38 +4227,141 @@ function NovaVista() {
         setMarkingStep("Sending to AI marker…");
       }
       const sys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}${studentName?`\nStudent: ${studentName}`:""}\nMARKING SCHEME: ${globalScheme||"Apply standard academic marking."}\n${globalMisconceptions?`MISCONCEPTIONS TO FLAG: ${globalMisconceptions}`:""}\n${answerNote}${searchNote}\nFor each question use B/M/A mark codes matching the marking scheme.\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"<B1|M1|A1 etc>","feedback":"","correct":<bool>,"misconception":null,"uncertain":<bool>}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
-      const text=await callAPI([{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:"Mark this paper."}]}],sys,2500);
-      setResults({...parseJSON(text),image:img});
+      // Build the typed answers note for offline engine
+      const typedAnswerText = extraAnswers && Object.keys(extraAnswers).length>0
+        ? Object.entries(extraAnswers).map(([id,ans])=>`${id}: ${ans}`).join("\n")
+        : "";
+      const msgText = typedAnswerText
+        ? `Mark this paper.\n\nSTUDENT ANSWERS:\n${typedAnswerText}`
+        : "Mark this paper.";
+      const text=await callAPI([{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:msgText}]}],sys,2500);
+      const parsed=parseJSON(text);
+
+        // ── Offline image-only: use Tesseract local OCR ───────────────────
+        if(parsed._offlineNeedsText){
+          setMarkingStep("Running local OCR — reading handwriting…");
+          let ocrText = "";
+          try {
+            const preprocessed = await preprocessForOCR(img);
+            ocrText = await runTesseractOCR(preprocessed);
+          } catch(ocrErr) {
+            // OCR failed — fall back to manual input
+            const schemeLines=(globalScheme||"").split(/\n/).map(l=>l.trim()).filter(Boolean);
+            const schemeQs=schemeLines.map((line,i)=>{
+              const stripped=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").replace(/^\d+[a-z]?[\.\)\s]+/,"").trim();
+              const text_=stripped.replace(/\b[BMACPEF][0-9]\b/gi,"").replace(/^[-•*]\s*/,"").trim();
+              return text_.length>2?{id:`Q${i+1}`,description:text_.slice(0,80),studentAnswer:"",canRead:false,confidence:"low",readingNote:`OCR unavailable: ${ocrErr.message}. Type the answer manually.`}:null;
+            }).filter(Boolean);
+            if(schemeQs.length===0) schemeQs.push({id:"Q1",description:"Student answer",studentAnswer:"",canRead:false,confidence:"low",readingNote:"OCR unavailable — type the answer below"});
+            setUncertainQs(schemeQs); setManualAnswers({});
+            setReviewMode("manual"); setMarking(false); setMarkingStep("");
+            setError("⚠ Local OCR unavailable. Type student answers manually.");
+            return;
+          }
+
+          if (ocrText.length < 5) {
+            // OCR produced nothing useful — go to manual
+            const schemeLines=(globalScheme||"").split(/\n/).map(l=>l.trim()).filter(Boolean);
+            const schemeQs=schemeLines.map((line,i)=>{
+              const stripped=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").replace(/^\d+[a-z]?[\.\)\s]+/,"").trim();
+              const text_=stripped.replace(/\b[BMACPEF][0-9]\b/gi,"").replace(/^[-•*]\s*/,"").trim();
+              return text_.length>2?{id:`Q${i+1}`,description:text_.slice(0,80),studentAnswer:"",canRead:false,confidence:"low",readingNote:"OCR could not read this image — handwriting may be too unclear. Type the answer below."}:null;
+            }).filter(Boolean);
+            if(schemeQs.length===0) schemeQs.push({id:"Q1",description:"Student answer",studentAnswer:"",canRead:false,confidence:"low",readingNote:"Could not read image — type answer below"});
+            setUncertainQs(schemeQs); setManualAnswers({});
+            setReviewMode("manual"); setMarking(false); setMarkingStep("");
+            setError("⚠ OCR could not read enough text. Please type the student's answers below.");
+            return;
+          }
+
+          // OCR succeeded — now run local marking against extracted text
+          setMarkingStep("OCR complete — matching against mark scheme…");
+          await new Promise(r=>setTimeout(r,300));
+          // Reuse the callAPI offline path by passing the OCR text as answer
+          const ocrResult = await callAPI(
+            [{role:"user",content:`STUDENT ANSWERS:\n${ocrText}`}],
+            sys, 2500
+          );
+          const ocrParsed = parseJSON(ocrResult);
+          // Add the OCR text to the result so teacher can review what was read
+          ocrParsed._ocrText = ocrText;
+          ocrParsed.image = img;
+          setResults(ocrParsed);
+          setReviewMode(null); setUncertainQs([]); setManualAnswers({});
+          setTab("results");
+          return;
+        }
+
+      setResults({...parsed,image:img});
       setReviewMode(null); setUncertainQs([]); setManualAnswers({});
       setTab("results");
-    }catch(e){setError("Marking failed: "+e.message);}
+    }catch(e){
+      // If API fails, offer offline fallback
+      if(e.message&&(e.message.includes("key not set")||e.message.includes("API key")||e.message.includes("401")||e.message.includes("403"))){
+        setError("No API key set. Switch to Offline Mode in the sidebar to mark using your mark scheme, or add an API key in Privacy & Data.");
+      } else {
+        setError("Marking failed: "+e.message);
+      }
+    }
     finally{setMarking(false);setMarkingStep("");}
-  },[callAPI,subject,totalMarks,studentName,globalScheme,globalMisconceptions,webSearchEnabled,webSearchKey,searchWeb]);
+  },[callAPI,offlineMode,apiReady,subject,totalMarks,studentName,globalScheme,globalMisconceptions,webSearchEnabled,webSearchKey,searchWeb,runTesseractOCR,preprocessForOCR]);
 
   /* ── extractAndReview — OCR pass to flag questions AI can't read ── */
   const extractAndReview=useCallback(async(img)=>{
+    // If no API key (online) or offline mode — use Tesseract local OCR
+    if(offlineMode || (!offlineMode && !apiReady)){
+      setMarking(true); setMarkingStep("Running local OCR — reading paper…");
+      try {
+        const preprocessed = await preprocessForOCR(img);
+        const ocrText = await runTesseractOCR(preprocessed);
+        // Build question list from scheme + OCR text
+        const schemeLines=(globalScheme||"").split(/\n/).map(l=>l.trim()).filter(Boolean);
+        const schemeQs=schemeLines.map((line,i)=>{
+          const stripped=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").replace(/^\d+[a-z]?[\.\)\s]+/,"").trim();
+          const text_=stripped.replace(/\b[BMACPEF][0-9]\b/gi,"").replace(/^[-•*]\s*/,"").trim();
+          return text_.length>2?{
+            id:`Q${i+1}`, description:text_.slice(0,80),
+            studentAnswer: ocrText,  // give OCR text to first question (teacher can edit)
+            canRead: ocrText.length>10,
+            confidence: ocrText.length>30?"medium":"low",
+            readingNote: ocrText.length>10?"OCR extracted text — verify before marking":"OCR could not read clearly — check and correct below"
+          }:null;
+        }).filter(Boolean);
+        // Only give OCR text to first question; rest are blank for teacher to review
+        schemeQs.forEach((q,i)=>{ if(i>0){q.studentAnswer=""; q.canRead=false; q.readingNote="Check OCR text above, type this answer separately";} });
+        if(schemeQs.length===0) schemeQs.push({id:"Q1",description:"Student answer",studentAnswer:ocrText,canRead:ocrText.length>10,confidence:"low",readingNote:"OCR extracted text above — verify"});
+        setUncertainQs(schemeQs); setManualAnswers({Q1:ocrText});
+        setReviewMode("manual"); setMarking(false); setMarkingStep("");
+        if(ocrText.length<10) setError("⚠ OCR could not read much text — handwriting may be unclear. Review and correct below.");
+      } catch(e) {
+        // OCR completely failed — manual entry
+        const pts=(globalScheme||"").split(/\n/).map(l=>l.trim()).filter(Boolean)
+          .map((line,i)=>{const s=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").trim().replace(/\b[BMACPEF][0-9]\b/gi,"").trim();return s.length>2?{id:`Q${i+1}`,description:s.slice(0,80),studentAnswer:"",canRead:false,confidence:"low",readingNote:"OCR failed — type the answer below"}:null;}).filter(Boolean);
+        setUncertainQs(pts.length>0?pts:[{id:"Q1",description:"Student answer",studentAnswer:"",canRead:false,confidence:"low",readingNote:"Type the answer below"}]);
+        setManualAnswers({}); setReviewMode("manual"); setMarking(false); setMarkingStep("");
+        setError("Local OCR unavailable. Enter answers manually.");
+      }
+      return;
+    }
     setMarking(true);setMarkingStep("Reading paper — identifying questions…");
     try{
       const b64=img.split(",")[1];
       const sys=`You are an expert at reading student exam papers.\nSubject: ${subject||"General"}\nMARKING SCHEME: ${globalScheme||"No scheme provided — infer questions from the paper."}\n\nRead this paper carefully. For each question you can identify, return the question ID, a brief description, and the student's answer if you can read it confidently. If the handwriting for a question is illegible or ambiguous, set "canRead" to false and leave "studentAnswer" blank — the teacher will supply it.\n\nRespond ONLY with valid JSON:\n{"studentName":"<if visible on paper>","questions":[{"id":"Q1","description":"<question text or topic>","studentAnswer":"<transcribed answer or blank if illegible>","canRead":<true|false>,"confidence":"high|medium|low","readingNote":"<brief note if unclear>"}]}`;
       const text=await callAPI([{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:"Extract the questions and student answers from this paper."}]}],sys,1500);
       const parsed=parseJSON(text);
-      // Auto-fill student name if found
       if(parsed.studentName&&!studentName) setStudentName(parsed.studentName);
       const uncertain=(parsed.questions||[]).filter(q=>!q.canRead||q.confidence==="low");
       if(uncertain.length===0){
-        // All readable — go straight to marking
         setMarkingStep("All questions readable — marking now…");
         await markWhole(img);
       } else {
-        // Some questions need teacher input
         setUncertainQs(parsed.questions||[]);
         setManualAnswers({});
         setReviewMode("manual");
         setMarking(false);setMarkingStep("");
       }
     }catch(e){setError("Reading failed: "+e.message);setMarking(false);setMarkingStep("");}
-  },[callAPI,subject,globalScheme,studentName,markWhole]);
+  },[callAPI,offlineMode,apiReady,subject,globalScheme,studentName,markWhole,runTesseractOCR,preprocessForOCR]);
 
   /* ── stitchPages — joins scanned pages into one image, returns base64 ── */
   const stitchPages=useCallback(async()=>{
@@ -4267,53 +4540,141 @@ function NovaVista() {
     batchStopRef.current=false;
     setBatchRunning(true);setBatchDone(false);
 
-    // BUG-3 FIX: snapshot the queue at call time so we iterate the correct items
-    // even as setBatchQueue updates happen asynchronously during the loop
     const snapshot=[...batchQueue];
 
     const scheme=globalScheme.trim()||"Apply standard UK academic marking.";
     const baseSys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}\nMARKING SCHEME: ${scheme}\n${globalMisconceptions?`MISCONCEPTIONS: ${globalMisconceptions}`:""}\nFor each question use B/M/A mark codes from the marking scheme.\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"<from paper or blank>","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"","feedback":"","correct":<bool>,"misconception":null}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
 
+    // ── Local offline marking helper (same engine as callAPI offline branch) ──
+    const runLocalMark = (answerText) => {
+      const ans = (answerText||"").toLowerCase();
+      const lines = scheme.split(/\n/).map(l=>l.trim()).filter(Boolean);
+      const stopWords=new Set(["the","a","an","and","or","of","to","in","is","are","was","were","it","its","for","on","at","by","as","with","from","that","this","be","been","being","have","has","had","do","does","did","will","would","can","could","should","not","no","all","any","each","per","use","used","show","shown","give","given"]);
+      const kws=w=>w.toLowerCase().match(/\b[a-z]{4,}\b/g)?.filter(w=>!stopWords.has(w))||[];
+      const exNums=s=>(s.match(/-?[\d]+(?:\.\d+)?/g)||[]).map(Number);
+      const stemMatch=(w,text)=>{
+        const e=w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+        if(new RegExp('\\b'+e+'s?\\b','i').test(text)) return true;
+        const stem=w.replace(/(?:ses|ies|es|s)$/i,'');
+        return stem.length>=4&&new RegExp('\\b'+stem.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[a-z]{0,4}\\b','i').test(text);
+      };
+      const points=[];
+      lines.forEach(line=>{
+        const stripped=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").replace(/^\d+[a-z]?[\.\)\s]+/,"").replace(/^\([a-z]\)\s*/i,"").trim();
+        if(!stripped||stripped.length<3) return;
+        const codeM=stripped.match(/\b([BMACPEF][0-9])\b/i);
+        const code=codeM?codeM[1].toUpperCase():"B1";
+        const text=stripped.replace(/\b[BMACPEF][0-9]\b/gi,"").replace(/^[-•*—]\s*/,"").trim();
+        const nums=exNums(text);
+        if(text.length>2) points.push({code,text,nums});
+      });
+      const maxPts=totalMarks?parseInt(totalMarks):points.length||1;
+      if(points.length===0) for(let i=0;i<maxPts;i++) points.push({code:"B1",text:`Mark point ${i+1}`,nums:[]});
+      const marked=points.map(pt=>{
+        const ptWords=kws(pt.text),ptNums=pt.nums||[];
+        let awarded=false;
+        if(ptNums.length>0){const exp=ptNums[ptNums.length-1];awarded=exNums(ans).some(n=>Math.abs(n-exp)<0.01);}
+        if(!awarded&&ptWords.length>0){const hits=ptWords.filter(w=>stemMatch(w,ans)).length;awarded=ptWords.length===1?hits>=1:hits/ptWords.length>=0.5;}
+        return{...pt,awarded};
+      });
+      const avail=Math.min(points.length,maxPts);
+      const awarded=Math.min(marked.filter(p=>p.awarded).length,avail);
+      const pct=avail>0?Math.round((awarded/avail)*100):0;
+      const grade=pct>=(gradeBounds.A||70)?"A":pct>=(gradeBounds.B||55)?"B":pct>=(gradeBounds.C||40)?"C":pct>=(gradeBounds.D||25)?"D":"F";
+      return {
+        totalScore:awarded,maxScore:avail,percentage:pct,grade,
+        studentName:"",
+        questions:marked.map((p,i)=>({
+          id:`Q${i+1}`,description:p.text.slice(0,50),
+          marksAwarded:p.awarded?1:0,marksAvailable:1,code:p.code,
+          feedback:p.awarded?`✓ ${p.text}`:`✗ Not evidenced: ${p.text}`,
+          correct:p.awarded,misconception:p.awarded?null:`Missing: ${p.text}`
+        })),
+        overallFeedback:pct>=70?"Good performance — most mark scheme criteria met.":pct>=40?"Partial marks — some criteria not evidenced.":"Answer does not address the mark scheme criteria.",
+        strengths:marked.filter(p=>p.awarded).map(p=>p.text).slice(0,3),
+        improvements:marked.filter(p=>!p.awarded).map(p=>`Include: ${p.text}`).slice(0,3),
+        annotations:[{region:"top-right",text:`${awarded}/${avail}`,type:"comment"},{region:"top-left",text:"📋 Offline",type:"comment"}]
+      };
+    };
+
     for(let i=0;i<snapshot.length;i++){
       if(batchStopRef.current)break;
       const item=snapshot[i];
-
-      // BUG-2 FIX: correct operator precedence — skip done items only,
-      // always retry pending; failed items are skipped (user retries manually)
       if(item.status==="done")continue;
       if(item.status==="failed")continue;
 
-      // Mark as in-progress in the live queue (by index)
       setBatchQueue(prev=>prev.map((it,idx)=>idx===i?{...it,status:"marking"}:it));
 
       try{
-        let text="";
+        let parsed;
 
-        if(item.fileType==="docx"&&item.textContent){
-          const wordLimit=3000;
-          const truncated=item.textContent.length>wordLimit
-            ? item.textContent.slice(0,wordLimit)+"…[truncated]"
-            : item.textContent;
-          text=await callAPI(
-            [{role:"user",content:`Student name: ${item.name}\n\nPaper content:\n\n${truncated}`}],
-            baseSys, 2500
-          );
-        } else if(item.imageB64){
-          const b64=item.imageB64.split(",")[1];
-          text=await callAPI(
-            [{role:"user",content:[
-              {type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},
-              {type:"text",text:`Mark this paper. Student name if visible: ${item.name}${item.pageCount?` (${item.pageCount}-page PDF rendered as image)`:""}`}
-            ]}],
-            baseSys, 2500
-          );
+        // ── OFFLINE MODE ─────────────────────────────────────────────────────
+        if(offlineMode){
+          if(item.fileType==="docx"&&item.textContent){
+            // Word/text — can keyword-match directly ✅
+            parsed=runLocalMark(item.textContent);
+            parsed.studentName=item.name;
+          } else if((item.fileType==="pdf"||item.fileType==="image")&&item.imageB64){
+            // PDF/image — run Tesseract local OCR, then keyword-match ✅
+            setBatchQueue(prev=>prev.map((it,idx)=>idx===i?{...it,status:"marking",ocrStatus:"Running local OCR…"}:it));
+            try {
+              const preprocessed = await preprocessForOCR(item.imageB64);
+              const ocrText = await runTesseractOCR(preprocessed);
+              if(ocrText.length < 5){
+                parsed={
+                  totalScore:0, maxScore:totalMarks?parseInt(totalMarks):1,
+                  percentage:0, grade:"—", studentName:item.name,
+                  questions:[], overallFeedback:"",
+                  strengths:[], improvements:[],
+                  _ocrFailed:true,
+                  offlineMessage:"OCR could not extract text from this image — handwriting may be too unclear or image quality too low."
+                };
+              } else {
+                parsed=runLocalMark(ocrText);
+                parsed.studentName=item.name;
+                parsed._ocrText=ocrText; // preserve for teacher review
+              }
+            } catch(ocrErr) {
+              parsed={
+                totalScore:0, maxScore:totalMarks?parseInt(totalMarks):1,
+                percentage:0, grade:"—", studentName:item.name,
+                questions:[], overallFeedback:"",
+                strengths:[], improvements:[],
+                _ocrFailed:true,
+                offlineMessage:"Local OCR error: "+ocrErr.message
+              };
+            }
+          } else {
+            throw new Error("No content to mark — file may have failed to load.");
+          }
         } else {
-          throw new Error("No content to mark — file may have failed to load.");
+          // ── ONLINE MODE (AI) ────────────────────────────────────────────────
+          let text="";
+          if(item.fileType==="docx"&&item.textContent){
+            const wordLimit=3000;
+            const truncated=item.textContent.length>wordLimit
+              ? item.textContent.slice(0,wordLimit)+"…[truncated]"
+              : item.textContent;
+            text=await callAPI(
+              [{role:"user",content:`Student name: ${item.name}\n\nPaper content:\n\n${truncated}`}],
+              baseSys, 2500
+            );
+          } else if(item.imageB64){
+            const b64=item.imageB64.split(",")[1];
+            text=await callAPI(
+              [{role:"user",content:[
+                {type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},
+                {type:"text",text:`Mark this paper. Student name if visible: ${item.name}${item.pageCount?` (${item.pageCount}-page PDF rendered as image)`:""}`}
+              ]}],
+              baseSys, 2500
+            );
+          } else {
+            throw new Error("No content to mark — file may have failed to load.");
+          }
+          parsed=parseJSON(text);
         }
 
-        const parsed=parseJSON(text);
         const finalName=(parsed.studentName?.trim())||item.name;
-        // Update snapshot so later iterations see the correct state
         snapshot[i]={...item,status:"done",name:finalName,results:{...parsed,image:item.imageB64||null}};
         setBatchQueue(prev=>prev.map((it,idx)=>idx===i?{
           ...it,status:"done",name:finalName,
@@ -4326,11 +4687,11 @@ function NovaVista() {
       }
 
       if(i<snapshot.length-1&&!batchStopRef.current){
-        await new Promise(r=>setTimeout(r,600));
+        await new Promise(r=>setTimeout(r,offlineMode?200:600));
       }
     }
     setBatchRunning(false);setBatchDone(true);
-  },[batchQueue,callAPI,subject,totalMarks,globalScheme,globalMisconceptions]);
+  },[batchQueue,callAPI,offlineMode,subject,totalMarks,globalScheme,globalMisconceptions,gradeBounds,runTesseractOCR,preprocessForOCR]);
 
   /* ── Save all completed batch results to a class folder ── */
   const batchSaveAll=useCallback(()=>{
@@ -4745,6 +5106,22 @@ function NovaVista() {
           <div className="spinner-lg"/>
           <div className="loading-text">{qmLoading?"Marking answer…":"NovaVista is marking…"}</div>
           {markingStep&&<div className="loading-sub">{markingStep}</div>}
+          {/* OCR progress bar — shown during Tesseract runs */}
+          {ocrProgress>0&&ocrProgress<100&&(
+            <div style={{marginTop:14,width:220}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,fontSize:"0.72rem",color:"rgba(255,255,255,0.6)"}}>
+                <span>Local OCR</span><span>{ocrProgress}%</span>
+              </div>
+              <div style={{height:5,background:"rgba(255,255,255,0.15)",borderRadius:99,overflow:"hidden"}}>
+                <div style={{height:"100%",width:ocrProgress+"%",background:"var(--blue)",borderRadius:99,transition:"width 0.3s"}}/>
+              </div>
+            </div>
+          )}
+          {tesseractLoading&&ocrProgress<5&&(
+            <div style={{marginTop:10,fontSize:"0.72rem",color:"rgba(255,255,255,0.5)"}}>
+              Downloading OCR language data (~4MB) — one-time only
+            </div>
+          )}
         </div>
       )}
 
@@ -4859,7 +5236,7 @@ function NovaVista() {
                 {offlineMode?"Offline Mode":"Online Mode"}
               </div>
               <div style={{fontSize:"0.67rem",color:"#8878aa",marginTop:2}}>
-                {offlineMode?"Using demo data — no AI":"AI marking enabled"}
+                {offlineMode?"Mark scheme matching — no AI":"AI marking enabled"}
               </div>
             </div>
             <div className={`toggle-switch ${offlineMode?"on":""}`} style={{
@@ -5844,6 +6221,18 @@ function NovaVista() {
             </div>
             <div className="content col gap16">
 
+              {/* Offline mode notice for batch */}
+              {offlineMode&&(
+                <div style={{padding:"12px 16px",background:"rgba(245,200,66,0.12)",border:"1px solid rgba(245,200,66,0.4)",borderRadius:"var(--radius-sm)",fontSize:"0.83rem",color:"#7a6000",lineHeight:1.7}}>
+                  <div style={{fontWeight:700,marginBottom:4}}>✈️ Offline Mode — Batch Marking with Local OCR</div>
+                  <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"4px 10px"}}>
+                    <span>✅</span><span><strong>Word docs (.docx)</strong> — text extracted and keyword-matched instantly.</span>
+                    <span>✅</span><span><strong>PDFs &amp; images (.pdf .jpg .png)</strong> — Tesseract.js local OCR reads the text from the page, then keyword-matches against your mark scheme. Works offline. First use downloads ~4MB language data.</span>
+                    <span>⚠️</span><span><strong>Very unclear handwriting</strong> — OCR may struggle. If it fails, you'll be prompted to type the answer manually.</span>
+                  </div>
+                </div>
+              )}
+
               {/* Step 1 — Configure */}
               <div className="card card-pad col gap14">
                 <div className="card-title">1. Paper details</div>
@@ -5967,14 +6356,19 @@ function NovaVista() {
                                 </span>
                                 <span>
                                   {item.status==="pending"  && (item.fileType==="docx"?`${item.wordCount||"?"} words`:`Ready to mark${item.pageCount?` · ${item.pageCount}pp`:""}`)}
-                                  {item.status==="marking"  && <span style={{color:"var(--blue)"}}>⏳ Marking…</span>}
-                                  {item.status==="done"     && `${item.results?.totalScore??'?'}/${item.results?.maxScore??'?'} · Grade ${item.results?.grade||'—'}`}
+                                  {item.status==="marking"  && <span style={{color:"var(--blue)"}}>{item.ocrStatus?"🔍 "+item.ocrStatus:"⏳ Marking…"}</span>}
+                                  {item.status==="done"     && !item.results?._offlineImageOnly && !item.results?._ocrFailed && `${item.results?.totalScore??'?'}/${item.results?.maxScore??'?'} · Grade ${item.results?.grade||'—'}${item.results?._ocrText?" · OCR ✓":""}`}
+                                  {item.status==="done"     && item.results?._offlineImageOnly  && <span style={{color:"var(--gold)"}}>⚠ Needs review — image offline</span>}
+                                  {item.status==="done"     && item.results?._ocrFailed         && <span style={{color:"var(--red)"}}>⚠ OCR failed — image unclear</span>}
                                   {item.status==="failed"   && <span style={{color:"var(--red)"}}>✗ {item.error?.slice(0,60)}</span>}
                                 </span>
                               </div>
                             </div>
-                            {item.status==="done"&&(
+                            {item.status==="done"&&!item.results?._offlineImageOnly&&(
                               <div className="batch-item-score" style={{color:pctColor(pct)}}>{pct}%</div>
+                            )}
+                            {item.status==="done"&&item.results?._offlineImageOnly&&(
+                              <div style={{fontSize:"0.78rem",fontWeight:700,color:"var(--gold)",flexShrink:0}}>⚠ Review</div>
                             )}
                             <span className={`batch-status-pill ${item.status}`}>
                               {item.status==="pending" ?"Queued"
@@ -6104,17 +6498,45 @@ function NovaVista() {
                         <div className="review-mode-card selected-green" onClick={()=>markWhole(stitchedImage)}>
                           <div className="review-mode-icon">⚡</div>
                           <div className="review-mode-title">Auto-Mark with Scheme</div>
-                          <div className="review-mode-desc">AI reads the paper and marks every question against your marking scheme. Best when handwriting is clear.</div>
+                          <div className="review-mode-desc">
+                            {offlineMode
+                              ?"Offline: Tesseract.js reads the handwriting locally, then keyword-matches against your mark scheme. No internet needed after first load."
+                              :"AI reads the paper and marks every question against your marking scheme. Best when handwriting is clear."}
+                          </div>
                         </div>
                         <div className="review-mode-card selected-blue" onClick={()=>extractAndReview(stitchedImage)}>
                           <div className="review-mode-icon">✍️</div>
                           <div className="review-mode-title">Manual Assist</div>
-                          <div className="review-mode-desc">AI reads what it can, then flags any questions it's unsure about. You fill those in — then AI marks everything.</div>
+                          <div className="review-mode-desc">
+                            {offlineMode
+                              ?"Offline: Tesseract.js OCR will try to read the paper automatically. If it struggles, you can correct the text before marking."
+                              :"AI reads what it can, then flags any questions it's unsure about. You fill those in — then AI marks everything."}
+                          </div>
                         </div>
                       </div>
 
                       {!globalScheme&&(
                         <div className="warn-box">No marking scheme set — Auto-Mark will use general academic standards. Add one in Setup for accurate marking.</div>
+                      )}
+
+                      {/* ── API key warning ── */}
+                      {!offlineMode&&!apiReady&&(
+                        <div style={{padding:"14px 16px",background:"rgba(232,71,63,0.08)",border:"1px solid rgba(232,71,63,0.3)",borderRadius:"var(--radius-sm)"}}>
+                          <div style={{fontWeight:700,color:"var(--red)",marginBottom:6,fontSize:"0.88rem"}}>⚠ No API key set</div>
+                          <div style={{fontSize:"0.82rem",color:"var(--text2)",marginBottom:10,lineHeight:1.6}}>
+                            AI marking requires an API key. You can:
+                          </div>
+                          <div className="col gap8">
+                            <button className="btn btn-sm btn-gold" style={{justifyContent:"flex-start",gap:8}}
+                              onClick={()=>setOfflineMode(true)}>
+                              ✈️ Switch to Offline Mode — mark using your scheme (no AI needed)
+                            </button>
+                            <button className="btn btn-sm btn-ghost" style={{justifyContent:"flex-start",gap:8}}
+                              onClick={()=>{setTab("privacy");setSidebarOpen(false);}}>
+                              🔑 Add API key in Privacy & Data
+                            </button>
+                          </div>
+                        </div>
                       )}
 
                       <div className="card card-pad col gap10">
@@ -6132,14 +6554,26 @@ function NovaVista() {
                             <span style={{color:studentName?"var(--green)":"var(--text4)"}}>●</span>
                             <span>Student: <strong style={{color:"var(--text)"}}>{studentName||"Not identified yet — AI will try to read from paper"}</strong></span>
                           </div>
+                          <div className="row gap8">
+                            <span style={{color:offlineMode?"var(--gold)":apiReady?"var(--green)":"var(--red)"}}>●</span>
+                            <span>Marking: <strong style={{color:"var(--text)"}}>
+                              {offlineMode?"✈ Offline — local mark scheme matching"
+                              :apiReady?`AI ready — ${apiMode==="cloud"?"Claude":apiMode==="gemini"?"Gemini":apiMode==="openai"?"OpenAI":apiMode==="proxy"?"Proxy":"Local"}`
+                              :"No API key — will use scheme matching"}
+                            </strong></span>
+                          </div>
                         </div>
                         <button className="btn btn-ghost btn-sm" onClick={()=>{setReviewMode(null);setStitchedImage(null);setTab("setup");setSidebarOpen(false);}}>
                           Edit Setup →
                         </button>
                       </div>
 
-                      <button className="btn btn-green btn-lg" style={{width:"100%",justifyContent:"center"}} onClick={()=>markWhole(stitchedImage)}>
-                        <Ic d={I.checksq} size={17}/> Auto-Mark Now
+                      <button className="btn btn-green btn-lg" style={{width:"100%",justifyContent:"center"}}
+                        onClick={()=>markWhole(stitchedImage)}>
+                        <Ic d={I.checksq} size={17}/>
+                        {offlineMode?"✈ Mark with Scheme (Offline)"
+                        :!apiReady?"Mark with Scheme — No AI (key not set)"
+                        :"Auto-Mark Now"}
                       </button>
                     </>
                   )}
@@ -6149,7 +6583,12 @@ function NovaVista() {
                     <>
                       <div className="card card-pad col gap10">
                         <div className="card-title">Questions the AI flagged</div>
-                        <div className="dim small">The AI read the paper but wasn't confident about the answers below. Fill them in so the marking is accurate.</div>
+                        {offlineMode
+                          ?<div style={{fontSize:"0.83rem",color:"#7a6000",background:"rgba(245,200,66,0.1)",border:"1px solid rgba(245,200,66,0.3)",borderRadius:"var(--radius-sm)",padding:"10px 14px",lineHeight:1.6}}>
+                            ✈️ <strong>Offline Mode</strong> — Type what the student wrote for each question below. The app will keyword-match your text against the mark scheme to award marks.
+                          </div>
+                          :<div className="dim small">The AI read the paper but wasn't confident about the answers below. Fill them in so the marking is accurate.</div>
+                        }
                       </div>
 
                       {uncertainQs.length===0&&(
@@ -6232,7 +6671,29 @@ function NovaVista() {
             <div className="content">
               <div className="g2 gap16" style={{alignItems:"start"}}>
                 <div className="col gap16">
-                  {/* Score hero */}
+
+                  {/* OCR text review panel — shown when Tesseract was used */}
+                  {results._ocrText&&(
+                    <div style={{padding:"12px 16px",background:"rgba(108,143,245,0.08)",border:"1px solid rgba(108,143,245,0.25)",borderRadius:"var(--radius-sm)"}}>
+                      <div className="row-between" style={{marginBottom:8}}>
+                        <div style={{fontWeight:700,fontSize:"0.85rem",color:"var(--blue)"}}>🔍 Local OCR — what was read from the paper</div>
+                        <span className="pill pill-blue" style={{fontSize:"0.68rem"}}>Tesseract.js</span>
+                      </div>
+                      <div style={{fontFamily:"monospace",fontSize:"0.78rem",color:"var(--text2)",background:"var(--inset)",padding:"10px 12px",borderRadius:"var(--radius-sm)",whiteSpace:"pre-wrap",maxHeight:120,overflowY:"auto",lineHeight:1.6}}>
+                        {results._ocrText}
+                      </div>
+                      <div className="dim small mt4">Marking was based on this extracted text. If it looks wrong, use <strong>Manual Assist</strong> to correct it.</div>
+                    </div>
+                  )}
+
+                  {/* Offline marking notice */}
+                  {results._fallback&&(
+                    <div style={{padding:"10px 14px",background:"rgba(245,200,66,0.10)",border:"1px solid rgba(245,200,66,0.35)",borderRadius:"var(--radius-sm)",fontSize:"0.82rem",color:"#7a6000"}}>
+                      {results._noKey
+                        ?"⚠ No API key — marked using local mark scheme matching only. Add a Claude/Gemini key for AI marking."
+                        :"✈ Marked offline using keyword matching against your mark scheme."}
+                    </div>
+                  )}
                   <div className="score-hero-card">
                     <div className="score-dial" style={{background:`conic-gradient(var(--red) ${(results.percentage||0)*3.6}deg, var(--inset) 0)`}}>
                       <div className="score-dial-inner">
