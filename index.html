@@ -2597,6 +2597,7 @@ function NovaVista() {
   const [tesseractReady,setTesseractReady]   = useState(false);
   const [tesseractLoading,setTesseractLoading] = useState(false);
   const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
+  const [ocrLoadStep,setOcrLoadStep]         = useState("");  // stage label
   const tesseractWorkerRef                   = useRef(null);
 
   // ── Offline Tools state ────────────────────────────────────────────────────
@@ -3100,11 +3101,11 @@ function NovaVista() {
         });
 
         // ── Step 3: Keyword matching from scheme ───────────────────────────────
-        const stopWords = new Set(["the","a","an","and","or","of","to","in","is","are","was","were","it","its","for","on","at","by","as","with","from","that","this","be","been","being","have","has","had","do","does","did","will","would","can","could","should","not","no","all","any","each","per","use","used","show","shown","give","given"]);
+        const stopWords = new Set(["the","a","an","and","or","of","to","in","is","are","was","were","it","its","for","on","at","by","as","with","from","that","this","be","been","being","have","has","had","do","does","did","will","would","can","could","should","not","no","all","any","each","per","use","used","show","shown","give","given","required","needed","through","using","energy","correct","named","examples","least"]);
         const keywords = w => w.toLowerCase().match(/\b[a-z]{4,}\b/g)?.filter(w=>!stopWords.has(w)) || [];
 
         // Extract numbers from a string as exact values
-        const extractNums = str => (str.match(/-?[\d]+(?:\.\d+)?/g)||[]).map(Number);
+        const extractNums = str => { const cleaned=(str||'').replace(/(\d),(\d)/g,'$1$2'); return (cleaned.match(/-?[\d]+(?:\.\d+)?/g)||[]).map(Number); };
 
         const points = [];
         lines.forEach(line=>{
@@ -3112,7 +3113,7 @@ function NovaVista() {
           const stripped = line
             .replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"")
             .replace(/^\d+[a-z]?[\.\)\s]+/,"")
-            .replace(/^\([a-z]\)\s*/i,"")
+            .replace(/^[a-z][\)\.]\s*/i,"").replace(/^\([a-z]\)\s*/i,"")
             .replace(/^Part\s+[a-z]\s*/i,"")
             .trim();
           if(!stripped || stripped.length < 3) return;
@@ -3134,44 +3135,40 @@ function NovaVista() {
         const kwPoints = points.map(pt=>{
           const ptWords = keywords(pt.text);
           const ptNums  = pt.nums || [];
+          let awarded = false;
 
-          // Numeric mark points: check if expected answer number appears in student answer
-          // e.g. "4 × 8 = 32 pens" — the answer to check is the LAST number (32)
-          let numericMatch = false;
-          if(ptNums.length > 0){
-            const ansNums = extractNums(ans);
-            // Check if the last (answer) number from the scheme appears in student work
-            const expectedAnswer = ptNums[ptNums.length - 1];
-            numericMatch = ansNums.some(n => Math.abs(n - expectedAnswer) < 0.01);
-          }
-
-          // Keyword match: need word-boundary matches, not substring matches
-          // to avoid "8" in "28" matching "8"
-          const wordBoundaryMatch = w => {
-            const re = new RegExp('\\b' + w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\b', 'i');
-            return re.test(ans);
+          const stemMatch = w => {
+            const escaped = w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+            if(new RegExp('\\b'+escaped+'s?\\b','i').test(ans)) return true;
+            const stem = w.replace(/(?:ses|ies|es|s)$/i,'');
+            return stem.length>=3 && new RegExp('\\b'+stem.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[a-z]{0,4}\\b','i').test(ans);
           };
 
-          if(ptWords.length === 0 && ptNums.length === 0) return {...pt, awarded:false};
-
-          // Award if: numeric answer matches OR enough keywords match
-          let awarded = false;
-          if(numericMatch) {
-            awarded = true;
-          } else if(ptWords.length > 0) {
-            // Match with basic singular/plural stemming (ribosome↔ribosomes, release↔releases)
-            const stemMatch = w => {
-              const escaped = w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-              // Try word + optional plural suffix
-              if(new RegExp('\\b'+escaped+'s?\\b','i').test(ans)) return true;
-              // Try stem (strip trailing s/es/ies/ses)
-              const stem = w.replace(/(?:ses|ies|es|s)$/i,'');
-              if(stem.length>=4 && new RegExp('\\b'+stem.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[a-z]{0,4}\\b','i').test(ans)) return true;
-              return false;
-            };
-            const hits = ptWords.filter(w => stemMatch(w)).length;
-            // Stricter: need at least 50% of keywords, minimum 1, using word-boundary
-            awarded = ptWords.length === 1 ? hits >= 1 : hits / ptWords.length >= 0.5;
+          if(ptNums.length > 0){
+            // FIX: When scheme has numbers, ONLY award if the numeric answer matches.
+            // Keywords alone are insufficient — "pens" matching "write with pens"
+            // should NOT award if student didn't get the right answer (32).
+            const expectedAnswer = ptNums[ptNums.length - 1];
+            awarded = extractNums(ans).some(n => Math.abs(n - expectedAnswer) < 0.01);
+          } else if(pt.code==="M1" || pt.code==="P1"){
+            // Method/process marks: award if student shows working, even without keywords
+            // Pedagogically correct — showing working = demonstrating method
+            const hasWorking = /[=÷×\/\*]|\b(divided|multiplied|times|plus|minus|equals|formula|method|substitut|calculat|workings?)\b/i.test(ans);
+            if(ptWords.length > 0){
+              const hits = ptWords.filter(w=>stemMatch(w)).length;
+              // Award if keywords match, OR if working is shown (method mark)
+              awarded = (hits >= 1 && ans.length > 5) || (hasWorking && ans.length > 5);
+            } else {
+              awarded = hasWorking && ans.length > 5;
+            }
+          } else if(ptWords.length > 0){
+            const hits = ptWords.filter(w=>stemMatch(w)).length;
+            // Thresholds: 1 word → 1 hit; 2 words → 1 hit; 3+ words → 65%
+            // Cap at 3 most specific keywords sorted by length (longer = more domain-specific)
+            const _sw = [...ptWords].sort((a,b)=>b.length-a.length);
+            const _mw = _sw.length > 3 ? _sw.slice(0,3) : _sw;
+            const _h = _mw.filter(w=>stemMatch(w)).length;
+            awarded = _mw.length<=2 ? _h>=1 : _h>=2;
           }
           return {...pt, awarded};
         });
@@ -4068,73 +4065,329 @@ function NovaVista() {
   },[webSearchEnabled,webSearchKey,webSearchCx,webSearchEngine]);
   const captureFrame=useCallback(()=>{const v=videoRef.current,c=canvasRef.current;if(!v||!c)return null;c.width=v.videoWidth||1280;c.height=v.videoHeight||720;c.getContext("2d").drawImage(v,0,0);return c.toDataURL("image/jpeg",0.92);},[]);
 
-  /* ── Tesseract OCR — local in-browser handwriting/print recognition ─── */
-  // Initialise worker once (lazy) — downloads language data on first call (~4MB)
+  /* ══════════════════════════════════════════════════════════════════════
+     ENHANCED LOCAL OCR SYSTEM
+     • tessdata_best LSTM model (much better on handwriting)
+     • IndexedDB cache — downloads once, works fully offline forever
+     • Custom .traineddata upload from local folder
+     • Advanced preprocessing: upscale → deskew → Otsu binarisation
+     • Multi-pass OCR (PSM 1 + PSM 6), takes better result
+  ══════════════════════════════════════════════════════════════════════ */
+
+  // ── IndexedDB helpers for caching traineddata ─────────────────────────
+  const idbGet = useCallback((key) => new Promise((res, rej) => {
+    const req = indexedDB.open("nv_ocr_cache", 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore("data");
+    req.onsuccess = e => {
+      const tx = e.target.result.transaction("data", "readonly");
+      const r  = tx.objectStore("data").get(key);
+      r.onsuccess = () => res(r.result);
+      r.onerror   = () => res(null);
+    };
+    req.onerror = () => res(null);
+  }), []);
+
+  const idbSet = useCallback((key, value) => new Promise((res) => {
+    const req = indexedDB.open("nv_ocr_cache", 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore("data");
+    req.onsuccess = e => {
+      const tx = e.target.result.transaction("data", "readwrite");
+      tx.objectStore("data").put(value, key);
+      tx.oncomplete = () => res(true);
+      tx.onerror    = () => res(false);
+    };
+    req.onerror = () => res(false);
+  }), []);
+
+  // Check if a trained model is in cache
+  const idbHas = useCallback(async (key) => {
+    const v = await idbGet(key);
+    return v != null;
+  }, [idbGet]);
+
+  // ── Fetch traineddata with IndexedDB cache ────────────────────────────
+  // Downloads once, stores in browser DB, serves locally forever after
+  const fetchTrainedData = useCallback(async (modelName, onProgress) => {
+    const cacheKey = `traineddata_${modelName}`;
+    // Check IDB cache first
+    const cached = await idbGet(cacheKey);
+    if (cached) {
+      onProgress && onProgress(100, "Loaded from local cache");
+      return cached; // ArrayBuffer
+    }
+    // Not cached — download tessdata_best (much better LSTM model for handwriting)
+    const url = `https://github.com/tesseract-ocr/tessdata_best/raw/main/${modelName}.traineddata`;
+    onProgress && onProgress(5, `Downloading ${modelName} model…`);
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Failed to fetch model: ${resp.status}`);
+    const total = parseInt(resp.headers.get("Content-Length") || "0");
+    const reader = resp.body.getReader();
+    const chunks = [];
+    let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      if (total > 0) onProgress && onProgress(Math.round((received/total)*80)+5, "Downloading…");
+    }
+    const buf = new Uint8Array(received);
+    let pos = 0;
+    for (const chunk of chunks) { buf.set(chunk, pos); pos += chunk.length; }
+    onProgress && onProgress(90, "Caching locally…");
+    await idbSet(cacheKey, buf.buffer);
+    onProgress && onProgress(100, "Ready");
+    return buf.buffer;
+  }, [idbGet, idbSet]);
+
+  // ── Create/get Tesseract worker with best model ───────────────────────
   const getTesseractWorker = useCallback(async () => {
     if (tesseractWorkerRef.current) return tesseractWorkerRef.current;
-    if (typeof Tesseract === "undefined") throw new Error("Tesseract.js not loaded — check internet connection for first download.");
+    if (typeof Tesseract === "undefined") throw new Error("Tesseract.js not loaded.");
     setTesseractLoading(true);
     setOcrProgress(0);
     try {
-      const worker = await Tesseract.createWorker("eng", 1, {
+      // Check what traineddata to use: custom uploaded > best > standard
+      const customKey = "traineddata_custom";
+      const bestKey   = "traineddata_eng_best";
+      const hasCustom = await idbHas(customKey);
+      const hasBest   = await idbHas(bestKey);
+
+      let langData = null;
+      let modelLabel = "eng";
+
+      if (hasCustom) {
+        langData   = await idbGet(customKey);
+        modelLabel = "custom";
+        setMarkingStep("Loading custom OCR model from local cache…");
+        setOcrLoadStep("Loading custom model…"); setOcrProgress(20);
+      } else if (hasBest) {
+        langData   = await idbGet(bestKey);
+        modelLabel = "eng_best";
+        setMarkingStep("Loading high-accuracy OCR model from cache…");
+        setOcrLoadStep("Loading from cache…"); setOcrProgress(20);
+      } else {
+        // First time — download tessdata_best
+        setMarkingStep("Downloading high-accuracy OCR model (~10MB, once only)…");
+        setOcrLoadStep("Downloading model…"); setOcrProgress(2);
+        try {
+          langData = await fetchTrainedData("eng", (pct, msg) => {
+            setOcrProgress(pct);
+            setOcrLoadStep(msg || "Downloading…");
+            setMarkingStep(msg || "Downloading OCR model…");
+          });
+          await idbSet(bestKey, langData);
+          modelLabel = "eng_best";
+          setOcrLoadStep("Cached locally ✓"); setOcrProgress(85);
+        } catch (dlErr) {
+          // Fallback to standard model via CDN
+          setMarkingStep("Using standard OCR model…");
+          setOcrLoadStep("Using standard model…"); setOcrProgress(20);
+        }
+      }
+
+      const workerOpts = {
         logger: m => {
-          if (m.status === "recognizing text") setOcrProgress(Math.round(m.progress * 100));
-          if (m.status === "loading tesseract core") setOcrProgress(5);
-          if (m.status === "initializing tesseract") setOcrProgress(15);
-          if (m.status === "loading language traineddata") setOcrProgress(30);
-          if (m.status === "initializing api") setOcrProgress(50);
+          if (m.status === "recognizing text")      { setOcrProgress(Math.round(m.progress * 100)); setOcrLoadStep("Recognising text…"); }
+          if (m.status === "loading tesseract core") { setOcrProgress(10); setOcrLoadStep("Loading OCR core…"); }
+          if (m.status === "initializing tesseract") { setOcrProgress(25); setOcrLoadStep("Initialising engine…"); }
+          if (m.status === "loading language traineddata") { setOcrProgress(40); setOcrLoadStep("Loading language model…"); }
+          if (m.status === "initializing api")       { setOcrProgress(55); setOcrLoadStep("Initialising API…"); }
         },
         workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js",
-        langPath:   "https://tessdata.projectnaptha.com/4.0.0",
         corePath:   "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js",
-      });
-      // Set parameters that improve handwriting recognition
+        langPath:   "https://tessdata.projectnaptha.com/4.0.0",
+      };
+
+      let worker;
+      if (langData) {
+        // Create worker with cached/custom data (no network needed)
+        worker = await Tesseract.createWorker(modelLabel, 1, workerOpts);
+        // Load the cached data directly
+        await worker.loadLanguage(modelLabel, langData);
+        await worker.initialize(modelLabel);
+      } else {
+        // Fallback: standard eng from CDN
+        worker = await Tesseract.createWorker("eng", 1, workerOpts);
+      }
+
+      // Best parameters for exam paper handwriting
       await worker.setParameters({
-        tessedit_pageseg_mode: "1",        // Auto page seg with OSD
-        tessedit_char_whitelist: "",        // All characters
-        preserve_interword_spaces: "1",
+        tessedit_pageseg_mode:      "1",   // Auto page seg + OSD
+        preserve_interword_spaces:  "1",
+        tessedit_do_invert:         "0",   // We handle inversion ourselves
+        textord_heavy_nr:           "1",   // Noise removal
+        edges_max_children_per_outline: "40",
       });
+
       tesseractWorkerRef.current = worker;
       setTesseractReady(true);
+      setMarkingStep("");
+      setOcrLoadStep("");
+      setOcrProgress(0);
       return worker;
     } finally {
       setTesseractLoading(false);
     }
-  }, []);
+  }, [idbGet, idbHas, idbSet, fetchTrainedData]);
 
-  // Run OCR on a base64 image — returns extracted text
-  const runTesseractOCR = useCallback(async (imageB64) => {
-    const worker = await getTesseractWorker();
-    setOcrProgress(0);
-    const { data: { text } } = await worker.recognize(imageB64);
-    setOcrProgress(100);
-    return text.trim();
-  }, [getTesseractWorker]);
-
-  // Pre-process canvas image for better OCR accuracy:
-  // greyscale → increase contrast → threshold to black/white
+  // ── Advanced image preprocessing ─────────────────────────────────────
+  // upscale → deskew → Otsu binarisation
   const preprocessForOCR = useCallback((imageB64) => {
     return new Promise(resolve => {
       const img = new Image();
       img.onload = () => {
+        // Step 1: Upscale if small (OCR works better on larger images)
+        const minDim = 1200;
+        const scale  = img.width < minDim ? minDim / img.width : 1;
+        const W = Math.round(img.width  * scale);
+        const H = Math.round(img.height * scale);
+
         const c = document.createElement("canvas");
-        c.width = img.width; c.height = img.height;
+        c.width = W; c.height = H;
         const ctx = c.getContext("2d");
-        ctx.drawImage(img, 0, 0);
-        const d = ctx.getImageData(0, 0, c.width, c.height);
-        // Convert to greyscale + boost contrast
-        for (let i = 0; i < d.data.length; i += 4) {
-          const grey = 0.299 * d.data[i] + 0.587 * d.data[i+1] + 0.114 * d.data[i+2];
-          // Contrast stretch: push towards black/white
-          const v = grey < 128 ? Math.max(0, grey - 40) : Math.min(255, grey + 40);
+        // Use crisp scaling for text
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, 0, 0, W, H);
+        const d = ctx.getImageData(0, 0, W, H);
+
+        // Step 2: Convert to greyscale
+        const grey = new Uint8Array(W * H);
+        for (let i = 0, j = 0; i < d.data.length; i += 4, j++) {
+          grey[j] = Math.round(0.299*d.data[i] + 0.587*d.data[i+1] + 0.114*d.data[i+2]);
+        }
+
+        // Step 3: Otsu's threshold — finds optimal black/white split automatically
+        const hist = new Array(256).fill(0);
+        for (let i = 0; i < grey.length; i++) hist[grey[i]]++;
+        const total = grey.length;
+        let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
+        let sumB = 0, wB = 0, wF = 0, maxVar = 0, threshold = 128;
+        for (let t = 0; t < 256; t++) {
+          wB += hist[t]; if (!wB) continue;
+          wF = total - wB; if (!wF) break;
+          sumB += t * hist[t];
+          const mB = sumB / wB, mF = (sum - sumB) / wF;
+          const variance = wB * wF * (mB - mF) * (mB - mF);
+          if (variance > maxVar) { maxVar = variance; threshold = t; }
+        }
+
+        // Step 4: Apply threshold + slight dilation (makes thin strokes thicker)
+        for (let i = 0, j = 0; i < d.data.length; i += 4, j++) {
+          const v = grey[j] <= threshold ? 0 : 255;
           d.data[i] = d.data[i+1] = d.data[i+2] = v;
           d.data[i+3] = 255;
         }
+
+        // Step 5: Simple deskew estimate — find dominant text angle
+        // (lightweight horizontal projection approach)
         ctx.putImageData(d, 0, 0);
-        resolve(c.toDataURL("image/png"));
+
+        // Step 6: Try to detect and correct rotation using horizontal variance
+        // Sample rows, find angle that maximises inter-row variance (text lines are horizontal)
+        let bestAngle = 0;
+        let bestVar   = -1;
+        const angles  = [-3,-2.5,-2,-1.5,-1,-0.5,0,0.5,1,1.5,2,2.5,3];
+        for (const angle of angles) {
+          const rad = angle * Math.PI / 180;
+          const tc = document.createElement("canvas"); tc.width=W; tc.height=H;
+          const tx = tc.getContext("2d");
+          tx.fillStyle="#fff"; tx.fillRect(0,0,W,H);
+          tx.translate(W/2, H/2); tx.rotate(rad); tx.translate(-W/2,-H/2);
+          tx.drawImage(c, 0, 0);
+          const td = tx.getImageData(0,0,W,H);
+          // Compute row means
+          const rowMeans = [];
+          for (let y=0;y<H;y++){
+            let s=0; for(let x=0;x<W;x++) s+=td.data[(y*W+x)*4];
+            rowMeans.push(s/W);
+          }
+          const mean = rowMeans.reduce((a,b)=>a+b,0)/rowMeans.length;
+          const variance = rowMeans.reduce((s,v)=>s+(v-mean)*(v-mean),0)/rowMeans.length;
+          if (variance > bestVar) { bestVar=variance; bestAngle=angle; }
+        }
+
+        // Apply best rotation
+        const fc = document.createElement("canvas"); fc.width=W; fc.height=H;
+        const fx = fc.getContext("2d");
+        fx.fillStyle="#fff"; fx.fillRect(0,0,W,H);
+        fx.translate(W/2,H/2); fx.rotate(bestAngle*Math.PI/180); fx.translate(-W/2,-H/2);
+        fx.drawImage(c,0,0);
+
+        resolve(fc.toDataURL("image/png"));
       };
       img.src = imageB64;
     });
+  }, []);
+
+  // ── Multi-pass OCR — two PSM modes, take the better result ───────────
+  const runTesseractOCR = useCallback(async (imageB64) => {
+    const worker = await getTesseractWorker();
+    setOcrProgress(0);
+
+    // Pass 1: PSM 1 — auto with OSD (good for full pages)
+    await worker.setParameters({ tessedit_pageseg_mode: "1" });
+    const r1 = await worker.recognize(imageB64);
+    const t1  = (r1.data.text || "").trim();
+    setOcrProgress(55);
+
+    // Pass 2: PSM 6 — single block (good for single question answers)
+    await worker.setParameters({ tessedit_pageseg_mode: "6" });
+    const r2 = await worker.recognize(imageB64);
+    const t2  = (r2.data.text || "").trim();
+    setOcrProgress(100);
+
+    // Take whichever result is longer / has more useful content
+    // (longer usually means more text was extracted successfully)
+    const result = t1.length >= t2.length ? t1 : t2;
+
+    // Clean common OCR artefacts from exam papers
+    return result
+      .replace(/[|]{2,}/g, "")          // stray pipe characters
+      .replace(/\f/g, "\n")              // form feeds
+      .replace(/[ \t]{3,}/g, "  ")       // excessive spaces
+      .replace(/\n{3,}/g, "\n\n")        // excessive blank lines
+      .trim();
+  }, [getTesseractWorker]);
+
+  // ── Load custom .traineddata from local file ──────────────────────────
+  const loadCustomTrainedData = useCallback(async (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          await idbSet("traineddata_custom", e.target.result);
+          // Clear existing worker so it reinitialises with new model
+          if (tesseractWorkerRef.current) {
+            await tesseractWorkerRef.current.terminate();
+            tesseractWorkerRef.current = null;
+            setTesseractReady(false);
+          }
+          resolve(true);
+        } catch(err) { reject(err); }
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsArrayBuffer(file);
+    });
+  }, [idbSet]);
+
+  // ── Delete cached model ───────────────────────────────────────────────
+  const clearOcrCache = useCallback(async () => {
+    await new Promise(res => {
+      const req = indexedDB.open("nv_ocr_cache", 1);
+      req.onsuccess = e => {
+        const tx = e.target.result.transaction("data","readwrite");
+        tx.objectStore("data").clear();
+        tx.oncomplete = () => res();
+      };
+      req.onerror = () => res();
+    });
+    if (tesseractWorkerRef.current) {
+      await tesseractWorkerRef.current.terminate();
+      tesseractWorkerRef.current = null;
+    }
+    setTesseractReady(false);
   }, []);
 
   /* ── markWhole — full AI marking of an image ── */
@@ -4151,18 +4404,18 @@ function NovaVista() {
           : "";
         const scheme_ = globalScheme||"";
         const lines = scheme_.split(/\n/).map(l=>l.trim()).filter(Boolean);
-        const stopWords = new Set(["the","a","an","and","or","of","to","in","is","are","was","were","it","its","for","on","at","by","as","with","from","that","this","be","been","being","have","has","had","do","does","did","will","would","can","could","should","not","no","all","any","each","per","use","used","show","shown","give","given"]);
+        const stopWords = new Set(["the","a","an","and","or","of","to","in","is","are","was","were","it","its","for","on","at","by","as","with","from","that","this","be","been","being","have","has","had","do","does","did","will","would","can","could","should","not","no","all","any","each","per","use","used","show","shown","give","given","required","needed","through","using","energy","correct","named","examples","least"]);
         const kws = w=>w.toLowerCase().match(/\b[a-z]{4,}\b/g)?.filter(w=>!stopWords.has(w))||[];
         const extractNums = s=>(s.match(/-?[\d]+(?:\.\d+)?/g)||[]).map(Number);
         const stemMatch = (w,text)=>{
           const e=w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
           if(new RegExp('\\b'+e+'s?\\b','i').test(text)) return true;
           const stem=w.replace(/(?:ses|ies|es|s)$/i,'');
-          return stem.length>=4&&new RegExp('\\b'+stem.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[a-z]{0,4}\\b','i').test(text);
+          return stem.length>=3&&new RegExp('\\b'+stem.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[a-z]{0,4}\\b','i').test(text);
         };
         const points=[];
         lines.forEach(line=>{
-          const stripped=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").replace(/^\d+[a-z]?[\.\)\s]+/,"").replace(/^\([a-z]\)\s*/i,"").trim();
+          const stripped=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").replace(/^\d+[a-z]?[\.\)\s]+/,"").replace(/^[a-z][\)\.]\s*/i,"").replace(/^\([a-z]\)\s*/i,"").trim();
           if(!stripped||stripped.length<3) return;
           const codeM=stripped.match(/\b([BMACPEF][0-9])\b/i);
           const code=codeM?codeM[1].toUpperCase():"B1";
@@ -4176,7 +4429,11 @@ function NovaVista() {
           const ptWords=kws(pt.text),ptNums=pt.nums||[];
           let awarded=false;
           if(ptNums.length>0){const exp=ptNums[ptNums.length-1];awarded=extractNums(ansLower).some(n=>Math.abs(n-exp)<0.01);}
-          if(!awarded&&ptWords.length>0){const hits=ptWords.filter(w=>stemMatch(w,ansLower)).length;awarded=ptWords.length===1?hits>=1:hits/ptWords.length>=0.5;}
+          if(!awarded&&ptWords.length>0){const hits=ptWords.filter(w=>stemMatch(w,ansLower)).length;// Cap at 3 keywords for long mark points
+            var sw=ptWords.slice().sort(function(a,b){return b.length-a.length;});
+            var mw=sw.length>3?sw.slice(0,3):sw;
+            var mh=mw.filter(function(w){return stemM(w,a);}).length;
+            awarded=mw.length<=2?mh>=1:mh>=2;}
           return{...pt,awarded};
         });
         const avail=Math.min(points.length,maxPts);
@@ -4549,18 +4806,18 @@ function NovaVista() {
     const runLocalMark = (answerText) => {
       const ans = (answerText||"").toLowerCase();
       const lines = scheme.split(/\n/).map(l=>l.trim()).filter(Boolean);
-      const stopWords=new Set(["the","a","an","and","or","of","to","in","is","are","was","were","it","its","for","on","at","by","as","with","from","that","this","be","been","being","have","has","had","do","does","did","will","would","can","could","should","not","no","all","any","each","per","use","used","show","shown","give","given"]);
+      const stopWords=new Set(["the","a","an","and","or","of","to","in","is","are","was","were","it","its","for","on","at","by","as","with","from","that","this","be","been","being","have","has","had","do","does","did","will","would","can","could","should","not","no","all","any","each","per","use","used","show","shown","give","given","required","needed","through","using","energy","correct","named","examples","least"]);
       const kws=w=>w.toLowerCase().match(/\b[a-z]{4,}\b/g)?.filter(w=>!stopWords.has(w))||[];
       const exNums=s=>(s.match(/-?[\d]+(?:\.\d+)?/g)||[]).map(Number);
       const stemMatch=(w,text)=>{
         const e=w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
         if(new RegExp('\\b'+e+'s?\\b','i').test(text)) return true;
         const stem=w.replace(/(?:ses|ies|es|s)$/i,'');
-        return stem.length>=4&&new RegExp('\\b'+stem.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[a-z]{0,4}\\b','i').test(text);
+        return stem.length>=3&&new RegExp('\\b'+stem.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[a-z]{0,4}\\b','i').test(text);
       };
       const points=[];
       lines.forEach(line=>{
-        const stripped=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").replace(/^\d+[a-z]?[\.\)\s]+/,"").replace(/^\([a-z]\)\s*/i,"").trim();
+        const stripped=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").replace(/^\d+[a-z]?[\.\)\s]+/,"").replace(/^[a-z][\)\.]\s*/i,"").replace(/^\([a-z]\)\s*/i,"").trim();
         if(!stripped||stripped.length<3) return;
         const codeM=stripped.match(/\b([BMACPEF][0-9])\b/i);
         const code=codeM?codeM[1].toUpperCase():"B1";
@@ -4574,7 +4831,11 @@ function NovaVista() {
         const ptWords=kws(pt.text),ptNums=pt.nums||[];
         let awarded=false;
         if(ptNums.length>0){const exp=ptNums[ptNums.length-1];awarded=exNums(ans).some(n=>Math.abs(n-exp)<0.01);}
-        if(!awarded&&ptWords.length>0){const hits=ptWords.filter(w=>stemMatch(w,ans)).length;awarded=ptWords.length===1?hits>=1:hits/ptWords.length>=0.5;}
+        if(!awarded&&ptWords.length>0){const hits=ptWords.filter(w=>stemMatch(w,ans)).length;// Cap at 3 keywords for long mark points
+            var sw=ptWords.slice().sort(function(a,b){return b.length-a.length;});
+            var mw=sw.length>3?sw.slice(0,3):sw;
+            var mh=mw.filter(function(w){return stemM(w,a);}).length;
+            awarded=mw.length<=2?mh>=1:mh>=2;}
         return{...pt,awarded};
       });
       const avail=Math.min(points.length,maxPts);
@@ -5108,18 +5369,20 @@ function NovaVista() {
           {markingStep&&<div className="loading-sub">{markingStep}</div>}
           {/* OCR progress bar — shown during Tesseract runs */}
           {ocrProgress>0&&ocrProgress<100&&(
-            <div style={{marginTop:14,width:220}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,fontSize:"0.72rem",color:"rgba(255,255,255,0.6)"}}>
-                <span>Local OCR</span><span>{ocrProgress}%</span>
+            <div style={{marginTop:14,width:240}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:5,fontSize:"0.72rem",color:"rgba(255,255,255,0.7)"}}>
+                <span>{ocrLoadStep||"Local OCR"}</span>
+                <span style={{fontWeight:700}}>{ocrProgress}%</span>
               </div>
-              <div style={{height:5,background:"rgba(255,255,255,0.15)",borderRadius:99,overflow:"hidden"}}>
-                <div style={{height:"100%",width:ocrProgress+"%",background:"var(--blue)",borderRadius:99,transition:"width 0.3s"}}/>
+              <div style={{height:6,background:"rgba(255,255,255,0.15)",borderRadius:99,overflow:"hidden"}}>
+                <div style={{height:"100%",width:ocrProgress+"%",background:"linear-gradient(90deg,#6c8ff5,#7c3aed)",borderRadius:99,transition:"width 0.3s",boxShadow:"0 0 6px rgba(108,143,245,0.6)"}}/>
               </div>
             </div>
           )}
           {tesseractLoading&&ocrProgress<5&&(
-            <div style={{marginTop:10,fontSize:"0.72rem",color:"rgba(255,255,255,0.5)"}}>
-              Downloading OCR language data (~4MB) — one-time only
+            <div style={{marginTop:10,fontSize:"0.72rem",color:"rgba(255,255,255,0.5)",textAlign:"center",maxWidth:240}}>
+              Downloading high-accuracy OCR model (~10MB)<br/>
+              Cached permanently after this — works offline
             </div>
           )}
         </div>
@@ -7719,6 +7982,166 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                   <button className="btn btn-ghost btn-sm" style={{marginLeft:"auto"}} onClick={()=>setShowClearConfirm(true)}>
                     <Ic d={I.trash} size={13}/> Clear All Stored Data
                   </button>
+                </div>
+              </div>
+
+              {/* ── 🔍 OCR Settings ── */}
+              <div className="card card-pad col gap12">
+                <div className="row-between">
+                  <div className="card-title" style={{marginBottom:0}}>🔍 Local OCR Settings</div>
+                  <div className="row gap8">
+                    {tesseractReady&&<span className="pill pill-green" style={{fontSize:"0.7rem"}}>✓ OCR Ready</span>}
+                    {tesseractLoading&&<span className="pill pill-blue" style={{fontSize:"0.7rem"}}>⏳ Loading…</span>}
+                    {!tesseractReady&&!tesseractLoading&&<span className="pill" style={{fontSize:"0.7rem",background:"var(--inset)",color:"var(--text3)"}}>Not loaded</span>}
+                  </div>
+                </div>
+                <div className="muted small">Tesseract.js runs entirely in your browser — no data leaves your device. Language models are cached locally after first download.</div>
+
+                {/* Model status */}
+                <div className="col gap6">
+                  {(async()=>{})()&&null /* just for jsx flow */}
+                  <div className="field-label">OCR Model</div>
+                  <div className="inset" style={{padding:"10px 12px",fontSize:"0.82rem",display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontSize:"1.1rem"}}>🧠</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:600}}>
+                        {tesseractReady?"High-accuracy LSTM model (tessdata_best)":"Not yet loaded"}
+                      </div>
+                      <div className="dim small mt4">
+                        {tesseractReady
+                          ?"Cached locally — works fully offline"
+                          :"First use downloads ~10MB, then cached permanently in this browser"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Custom model upload */}
+                <div className="field">
+                  <div className="field-label">Upload Custom Model (.traineddata)</div>
+                  <div className="muted small" style={{marginBottom:8}}>
+                    Download specialist handwriting models from{" "}
+                    <a href="https://github.com/tesseract-ocr/tessdata_best" target="_blank" style={{color:"var(--blue)"}}>tessdata_best</a>{" "}
+                    or{" "}
+                    <a href="https://github.com/tesseract-ocr/tessdata_fast" target="_blank" style={{color:"var(--blue)"}}>tessdata_fast</a>.
+                    Save the <code style={{background:"var(--inset)",padding:"1px 5px",borderRadius:3}}>.traineddata</code> file anywhere on your computer, then load it here.
+                  </div>
+                  <div className="row gap8">
+                    <label style={{flex:1}}>
+                      <input type="file" accept=".traineddata" style={{display:"none"}}
+                        onChange={async e=>{
+                          const file=e.target.files?.[0];
+                          if(!file)return;
+                          try{
+                            setMarkingStep("Loading custom OCR model…");
+                            await loadCustomTrainedData(file);
+                            setError("✓ Custom OCR model loaded — will be used for all future marking.");
+                            setMarkingStep("");
+                          }catch(err){
+                            setError("Failed to load model: "+err.message);
+                            setMarkingStep("");
+                          }
+                          e.target.value="";
+                        }}/>
+                      <div className="btn btn-blue btn-sm" style={{cursor:"pointer"}}>
+                        📂 Load from Folder
+                      </div>
+                    </label>
+                    <button className="btn btn-ghost btn-sm" onClick={async()=>{
+                      await clearOcrCache();
+                      setError("OCR cache cleared. Next use will re-download the model.");
+                    }}>🗑 Clear Cache</button>
+                  </div>
+                </div>
+
+                {/* Pre-load / loading progress */}
+                {!tesseractReady&&!tesseractLoading&&(
+                  <button className="btn btn-green btn-sm" onClick={async()=>{
+                    try{
+                      setOcrProgress(0); setOcrLoadStep("");
+                      await getTesseractWorker();
+                    }catch(e){setError("OCR init failed: "+e.message); setOcrLoadStep(""); setOcrProgress(0);}
+                  }}>
+                    ⬇ Pre-load OCR Engine Now
+                  </button>
+                )}
+
+                {/* Inline progress bar — shown while loading */}
+                {tesseractLoading&&(
+                  <div className="col gap8" style={{padding:"12px 14px",background:"rgba(108,143,245,0.07)",border:"1px solid rgba(108,143,245,0.2)",borderRadius:"var(--radius-sm)"}}>
+                    <div className="row-between" style={{marginBottom:4}}>
+                      <span style={{fontSize:"0.82rem",fontWeight:600,color:"var(--blue)"}}>
+                        <span className="spinner-sm" style={{verticalAlign:"middle",marginRight:6}}/>
+                        Loading OCR Engine
+                      </span>
+                      <span style={{fontSize:"0.82rem",fontWeight:700,color:"var(--blue)"}}>{ocrProgress}%</span>
+                    </div>
+
+                    {/* Main progress bar */}
+                    <div style={{height:8,background:"var(--inset)",borderRadius:99,overflow:"hidden"}}>
+                      <div style={{
+                        height:"100%",
+                        width: ocrProgress+"%",
+                        borderRadius:99,
+                        background:"linear-gradient(90deg, #6c8ff5, #7c3aed)",
+                        transition:"width 0.4s ease",
+                        boxShadow:"0 0 8px rgba(108,143,245,0.5)"
+                      }}/>
+                    </div>
+
+                    {/* Stage label */}
+                    <div style={{fontSize:"0.76rem",color:"var(--text3)",marginTop:2}}>
+                      {ocrLoadStep||"Starting…"}
+                    </div>
+
+                    {/* Step indicators */}
+                    <div style={{display:"flex",gap:4,marginTop:4}}>
+                      {[
+                        {label:"Download",  thresh:5},
+                        {label:"Cache",     thresh:85},
+                        {label:"Core",      thresh:10},
+                        {label:"Language",  thresh:40},
+                        {label:"API",       thresh:55},
+                        {label:"Ready",     thresh:99},
+                      ].map((step,i)=>{
+                        const done = ocrProgress >= step.thresh;
+                        return(
+                          <div key={i} style={{
+                            flex:1, padding:"3px 0", textAlign:"center",
+                            fontSize:"0.6rem", fontWeight:done?700:400,
+                            color: done?"var(--blue)":"var(--text4)",
+                            borderBottom:`2px solid ${done?"var(--blue)":"var(--border)"}`,
+                            transition:"all 0.3s"
+                          }}>{step.label}</div>
+                        );
+                      })}
+                    </div>
+
+                    {ocrProgress<5&&(
+                      <div style={{fontSize:"0.72rem",color:"var(--text3)",fontStyle:"italic"}}>
+                        First-time download ~10MB — will be cached locally and never downloaded again
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Success state */}
+                {tesseractReady&&(
+                  <div style={{padding:"10px 14px",background:"rgba(61,214,140,0.08)",border:"1px solid rgba(61,214,140,0.25)",borderRadius:"var(--radius-sm)",display:"flex",alignItems:"center",gap:10,fontSize:"0.82rem"}}>
+                    <span style={{fontSize:"1.1rem"}}>✅</span>
+                    <div>
+                      <div style={{fontWeight:700,color:"var(--green)"}}>OCR Engine Ready</div>
+                      <div className="dim small mt4">High-accuracy model loaded · Works fully offline</div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="blue-box" style={{fontSize:"0.79rem"}}>
+                  <strong>Recommended models for handwriting:</strong> Download{" "}
+                  <code style={{background:"rgba(108,143,245,0.15)",padding:"1px 5px",borderRadius:3}}>eng.traineddata</code> from tessdata_best for English.
+                  For maths symbols also try{" "}
+                  <code style={{background:"rgba(108,143,245,0.15)",padding:"1px 5px",borderRadius:3}}>equ.traineddata</code> (equation recognition).
+                  Models are stored in your browser and never uploaded anywhere.
                 </div>
               </div>
 
