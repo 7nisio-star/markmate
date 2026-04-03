@@ -2256,6 +2256,7 @@ document.querySelectorAll('script[src]').forEach(function(s){
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <!-- PDF.js for rendering PDF pages to canvas -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -2572,6 +2573,9 @@ function NovaVista() {
   const [saveStudentName,setSaveStudentName] = useState("");
   const [expandedPaper,setExpandedPaper] = useState(null);
   const [classView,setClassView] = useState("students");
+  const [folderSearch,setFolderSearch]   = useState("");   // search across folders
+  const [renamingFolder,setRenamingFolder] = useState(null); // pid being renamed
+  const [renameValue,setRenameValue]     = useState("");
   const [savingToFolder,setSavingToFolder] = useState(false);
   const [savingStep,setSavingStep] = useState("");
   const [schemeFileName,setSchemeFileName] = useState("");
@@ -2591,7 +2595,18 @@ function NovaVista() {
   const [captureFlash,setCaptureFlash]     = useState(false);   // green captured flash
 
   // API / Privacy mode
-  const [apiMode,setApiMode]               = useState("cloud"); // "cloud"|"proxy"|"gemini"|"openai"|"local"
+  const [apiMode,setApiMode]               = useState("cloud"); // "cloud"|"proxy"|"microsoft"|"gemini"|"openai"|"local"
+  // ── Microsoft / Azure OpenAI state ──────────────────────────────────────
+  const [msClientId,    setMsClientId]    = useState(() => localStorage.getItem("nv_ms_client_id")  || "");
+  const [msTenantId,    setMsTenantId]    = useState(() => localStorage.getItem("nv_ms_tenant_id")  || "common");
+  const [msEndpoint,    setMsEndpoint]    = useState(() => localStorage.getItem("nv_ms_endpoint")   || "");
+  const [msDeployment,  setMsDeployment]  = useState(() => localStorage.getItem("nv_ms_deployment") || "gpt-4o");
+  const [msApiVersion,  setMsApiVersion]  = useState(() => localStorage.getItem("nv_ms_api_ver")    || "2024-02-01");
+  const [msAccount,     setMsAccount]     = useState(null);
+  const [msToken,       setMsToken]       = useState(null);
+  const [msLoginBusy,   setMsLoginBusy]   = useState(false);
+  const [msLoginError,  setMsLoginError]  = useState("");
+  const msalRef = useRef(null);
   const [offlineMode,setOfflineMode]        = useState(false);  // demo/offline — no AI calls
   const [offlineTempFolders,setOfflineTempFolders] = useState({}); // session-only temp folders
   const [tesseractReady,setTesseractReady]   = useState(false);
@@ -2602,6 +2617,19 @@ function NovaVista() {
 
   // ── Offline Tools state ────────────────────────────────────────────────────
   const [offlineToolsTab,setOfflineToolsTab] = useState("rules");
+  // ── Topic Extractor state ──────────────────────────────────────────────
+  const [topicRows,setTopicRows]           = useState([]);
+  const [topicInput,setTopicInput]         = useState("");
+  const [topicSubject,setTopicSubject]     = useState("");
+  const [topicYear,setTopicYear]           = useState("");
+  const [topicExtractBusy,setTopicExtractBusy] = useState(false);
+  const [topicFiles,setTopicFiles]         = useState([]);   // uploaded files list
+  const [topicOcrBusy,setTopicOcrBusy]     = useState(false);
+  const [topicOcrProgress,setTopicOcrProgress] = useState(0);
+  const [topicOcrFile,setTopicOcrFile]     = useState("");   // current file being OCR'd
+  const [topicExtractionMode,setTopicExtractionMode] = useState("local"); // "local"|"ai"
+  const [topicSourceText,setTopicSourceText] = useState(""); // full combined raw text
+  const [topicDragOver,setTopicDragOver]   = useState(false);
   // 1. Auto-marking rules
   const [markingRules,setMarkingRules]       = useState({}); // {qId:[{id,type,conditions,marks,code}]}
   const [rulesEditQ,setRulesEditQ]           = useState("Q1");
@@ -2749,6 +2777,14 @@ function NovaVista() {
         if(p.webSearchKey)    setWebSearchKey(p.webSearchKey);
         if(p.webSearchCx)     setWebSearchCx(p.webSearchCx);
       }
+      // Load saved topics
+      const rawT = localStorage.getItem("nv_topics");
+      if (rawT) {
+        const t = JSON.parse(rawT);
+        if(t.rows?.length)   setTopicRows(t.rows);
+        if(t.subject)        setTopicSubject(t.subject);
+        if(t.year)           setTopicYear(t.year);
+      }
     } catch {}
   }, []);
 
@@ -2813,6 +2849,7 @@ function NovaVista() {
 
   useEffect(() => {
     try { localStorage.setItem("nv_prefs", JSON.stringify({apiMode,localEndpoint,localModel,proxyUrl,geminiKey,openaiKey,webSearchEnabled,webSearchEngine,webSearchKey,webSearchCx,offlineMode})); } catch {}
+    try { localStorage.setItem("nv_topics", JSON.stringify({rows:topicRows.slice(0,500),subject:topicSubject,year:topicYear})); } catch {}
   }, [apiMode,localEndpoint,localModel,proxyUrl,geminiKey,openaiKey]);
 
   const schoolFolderRef = useRef(null); // FileSystem API directory handle
@@ -3032,6 +3069,68 @@ function NovaVista() {
     });
     XLSX.writeFile(wb, `NovaVista_School_Analysis_${new Date().toISOString().slice(0,10)}.xlsx`);
   }, [buildSchoolAnalysis]);
+  // ── Microsoft SSO helpers ────────────────────────────────────────────────
+  const getMsalInstance = useCallback(() => {
+    if (!msClientId.trim()) throw new Error("Client ID not set — add it in Privacy & Data → Microsoft.");
+    if (!msalRef.current) {
+      msalRef.current = new msal.PublicClientApplication({
+        auth: {
+          clientId:   msClientId.trim(),
+          authority:  `https://login.microsoftonline.com/${msTenantId.trim()||"common"}`,
+          redirectUri: window.location.href.split("?")[0],
+        },
+        cache: { cacheLocation: "sessionStorage" },
+      });
+    }
+    return msalRef.current;
+  }, [msClientId, msTenantId]);
+
+  const msLogin = useCallback(async () => {
+    setMsLoginBusy(true); setMsLoginError("");
+    try {
+      const instance = getMsalInstance();
+      await instance.initialize();
+      const result = await instance.loginPopup({
+        scopes: ["https://cognitiveservices.azure.com/.default", "openid", "profile", "email"],
+        prompt: "select_account",
+      });
+      setMsAccount(result.account);
+      setMsToken(result.accessToken);
+      setApiMode("microsoft");
+    } catch(e) {
+      setMsLoginError(e.message || "Sign-in failed. Check Client ID and try again.");
+    } finally { setMsLoginBusy(false); }
+  }, [getMsalInstance]);
+
+  const msLogout = useCallback(async () => {
+    try {
+      const instance = getMsalInstance();
+      await instance.initialize();
+      await instance.logoutPopup({ account: msAccount });
+    } catch(_) {}
+    setMsAccount(null); setMsToken(null);
+    if (apiMode==="microsoft") setApiMode("cloud");
+  }, [getMsalInstance, msAccount, apiMode]);
+
+  const msGetToken = useCallback(async () => {
+    if (msToken) return msToken;
+    const instance = getMsalInstance();
+    await instance.initialize();
+    const result = await instance.acquireTokenSilent({
+      scopes: ["https://cognitiveservices.azure.com/.default"],
+      account: msAccount,
+    });
+    setMsToken(result.accessToken);
+    return result.accessToken;
+  }, [getMsalInstance, msAccount, msToken]);
+
+  // Persist Microsoft config to localStorage
+  useEffect(() => { localStorage.setItem("nv_ms_client_id",  msClientId);   }, [msClientId]);
+  useEffect(() => { localStorage.setItem("nv_ms_tenant_id",  msTenantId);   }, [msTenantId]);
+  useEffect(() => { localStorage.setItem("nv_ms_endpoint",   msEndpoint);   }, [msEndpoint]);
+  useEffect(() => { localStorage.setItem("nv_ms_deployment", msDeployment); }, [msDeployment]);
+  useEffect(() => { localStorage.setItem("nv_ms_api_ver",    msApiVersion); }, [msApiVersion]);
+
   const callAPI = useCallback(async(messages, system, maxTokens=1500) => {
 
     // ── OFFLINE MODE — mark locally using the mark scheme, no AI needed ──────
@@ -3449,6 +3548,26 @@ function NovaVista() {
       if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e?.error?.message||`OpenAI error ${res.status}`); }
       const d = await res.json();
       return d.choices?.[0]?.message?.content || "";
+
+    } else if (apiMode === "microsoft") {
+      // ── Microsoft Azure OpenAI (school SSO) ───────────────────────────────
+      if (!msEndpoint.trim()) throw new Error("Azure OpenAI endpoint not set — add it in Privacy & Data → Microsoft.");
+      if (!msAccount)         throw new Error("Not signed in — click 'Sign in with Microsoft' in Privacy & Data.");
+      let token;
+      try { token = await msGetToken(); }
+      catch(e) { throw new Error("Microsoft session expired — please sign in again. (" + e.message + ")"); }
+      const azureUrl = msEndpoint.trim().replace(/\/$/, "") + "/openai/deployments/" + (msDeployment.trim()||"gpt-4o") + "/chat/completions?api-version=" + (msApiVersion.trim()||"2024-02-01");
+      const azRes = await fetch(azureUrl, {
+        method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},
+        body:JSON.stringify({ max_tokens:maxTokens, messages:toOAI(messages,system) }),
+      });
+      if (!azRes.ok) {
+        const e=await azRes.json().catch(()=>({}));
+        throw new Error("Azure OpenAI error "+azRes.status+": "+(e?.error?.message||azRes.statusText));
+      }
+      const azData=await azRes.json();
+      return azData.choices?.[0]?.message?.content || "";
 
     } else {
       // ── Anthropic Claude direct ───────────────────────────────────────────
@@ -4067,7 +4186,7 @@ function NovaVista() {
 
   /* ══════════════════════════════════════════════════════════════════════
      ENHANCED LOCAL OCR SYSTEM
-     • tessdata_best LSTM model (much better on handwriting)
+     • tessdata_fast LSTM model (loads ~3x faster, good for print/neat handwriting)
      • IndexedDB cache — downloads once, works fully offline forever
      • Custom .traineddata upload from local folder
      • Advanced preprocessing: upscale → deskew → Otsu binarisation
@@ -4116,7 +4235,7 @@ function NovaVista() {
       return cached; // ArrayBuffer
     }
     // Not cached — download tessdata_best (much better LSTM model for handwriting)
-    const url = `https://github.com/tesseract-ocr/tessdata_best/raw/main/${modelName}.traineddata`;
+    const url = `https://github.com/tesseract-ocr/tessdata_fast/raw/main/${modelName}.traineddata`;
     onProgress && onProgress(5, `Downloading ${modelName} model…`);
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`Failed to fetch model: ${resp.status}`);
@@ -4168,16 +4287,16 @@ function NovaVista() {
         setOcrLoadStep("Loading from cache…"); setOcrProgress(20);
       } else {
         // First time — download tessdata_best
-        setMarkingStep("Downloading high-accuracy OCR model (~10MB, once only)…");
+        setMarkingStep("Downloading OCR model (~4MB, once only)…");
         setOcrLoadStep("Downloading model…"); setOcrProgress(2);
         try {
-          langData = await fetchTrainedData("eng", (pct, msg) => {
+          langData = await fetchTrainedData("eng_fast", (pct, msg) => {
             setOcrProgress(pct);
             setOcrLoadStep(msg || "Downloading…");
             setMarkingStep(msg || "Downloading OCR model…");
           });
           await idbSet(bestKey, langData);
-          modelLabel = "eng_best";
+          modelLabel = "eng_fast";
           setOcrLoadStep("Cached locally ✓"); setOcrProgress(85);
         } catch (dlErr) {
           // Fallback to standard model via CDN
@@ -4231,15 +4350,16 @@ function NovaVista() {
     }
   }, [idbGet, idbHas, idbSet, fetchTrainedData]);
 
-  // ── Advanced image preprocessing ─────────────────────────────────────
-  // upscale → deskew → Otsu binarisation
+  // ── Enhanced image preprocessing: CLAHE-lite + Otsu + deskew ──────────
+  // upscale → local contrast normalisation → Otsu binarisation → deskew
   const preprocessForOCR = useCallback((imageB64) => {
     return new Promise(resolve => {
       const img = new Image();
       img.onload = () => {
-        // Step 1: Upscale if small (OCR works better on larger images)
-        const minDim = 1200;
-        const scale  = img.width < minDim ? minDim / img.width : 1;
+        // Step 1: Upscale to 1400px min; cap at 2800px to avoid memory issues
+        const MIN_DIM = 1400, MAX_DIM = 2800;
+        let scale = img.width < MIN_DIM ? MIN_DIM / img.width : 1;
+        if (img.width * scale > MAX_DIM) scale = MAX_DIM / img.width;
         const W = Math.round(img.width  * scale);
         const H = Math.round(img.height * scale);
 
@@ -4258,10 +4378,29 @@ function NovaVista() {
           grey[j] = Math.round(0.299*d.data[i] + 0.587*d.data[i+1] + 0.114*d.data[i+2]);
         }
 
-        // Step 3: Otsu's threshold — finds optimal black/white split automatically
+        // Step 3: CLAHE-lite — tile-based local contrast normalisation
+        // Fixes uneven lighting from phone photos (shadow on one side, etc.)
+        const TILE = 64;
+        const normed = new Uint8Array(W * H);
+        for (let ty = 0; ty < H; ty += TILE) {
+          for (let tx = 0; tx < W; tx += TILE) {
+            const tw = Math.min(TILE, W - tx), th = Math.min(TILE, H - ty);
+            let mn = 255, mx = 0;
+            for (let y = ty; y < ty+th; y++)
+              for (let x = tx; x < tx+tw; x++) { const v=grey[y*W+x]; if(v<mn)mn=v; if(v>mx)mx=v; }
+            const range = mx - mn || 1;
+            for (let y = ty; y < ty+th; y++)
+              for (let x = tx; x < tx+tw; x++) {
+                const idx=y*W+x;
+                normed[idx]=Math.round(((grey[idx]-mn)/range)*255);
+              }
+          }
+        }
+
+        // Step 4: Otsu threshold on contrast-normalised image
         const hist = new Array(256).fill(0);
-        for (let i = 0; i < grey.length; i++) hist[grey[i]]++;
-        const total = grey.length;
+        for (let i = 0; i < normed.length; i++) hist[normed[i]]++;
+        const total = normed.length;
         let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
         let sumB = 0, wB = 0, wF = 0, maxVar = 0, threshold = 128;
         for (let t = 0; t < 256; t++) {
@@ -4273,22 +4412,19 @@ function NovaVista() {
           if (variance > maxVar) { maxVar = variance; threshold = t; }
         }
 
-        // Step 4: Apply threshold + slight dilation (makes thin strokes thicker)
+        // Step 5: Apply binary threshold using normed values
         for (let i = 0, j = 0; i < d.data.length; i += 4, j++) {
-          const v = grey[j] <= threshold ? 0 : 255;
+          const v = normed[j] <= threshold ? 0 : 255;
           d.data[i] = d.data[i+1] = d.data[i+2] = v;
           d.data[i+3] = 255;
         }
-
-        // Step 5: Simple deskew estimate — find dominant text angle
-        // (lightweight horizontal projection approach)
         ctx.putImageData(d, 0, 0);
 
-        // Step 6: Try to detect and correct rotation using horizontal variance
-        // Sample rows, find angle that maximises inter-row variance (text lines are horizontal)
+        // Step 6: Lightweight deskew — test 5 angles (±2° in 1° steps)
+        // Catches most real-world paper tilts without the cost of 13 rotations
         let bestAngle = 0;
         let bestVar   = -1;
-        const angles  = [-3,-2.5,-2,-1.5,-1,-0.5,0,0.5,1,1.5,2,2.5,3];
+        const angles  = [-2, -1, 0, 1, 2];
         for (const angle of angles) {
           const rad = angle * Math.PI / 180;
           const tc = document.createElement("canvas"); tc.width=W; tc.height=H;
@@ -4297,7 +4433,6 @@ function NovaVista() {
           tx.translate(W/2, H/2); tx.rotate(rad); tx.translate(-W/2,-H/2);
           tx.drawImage(c, 0, 0);
           const td = tx.getImageData(0,0,W,H);
-          // Compute row means
           const rowMeans = [];
           for (let y=0;y<H;y++){
             let s=0; for(let x=0;x<W;x++) s+=td.data[(y*W+x)*4];
@@ -4321,37 +4456,52 @@ function NovaVista() {
     });
   }, []);
 
-  // ── Multi-pass OCR — two PSM modes, take the better result ───────────
+  // ── Smart OCR — single pass by default, second pass only if needed ────
   const runTesseractOCR = useCallback(async (imageB64) => {
     const worker = await getTesseractWorker();
     setOcrProgress(0);
+    setOcrLoadStep("Reading handwriting…");
 
-    // Pass 1: PSM 1 — auto with OSD (good for full pages)
-    await worker.setParameters({ tessedit_pageseg_mode: "1" });
+    // Single pass: PSM 6 (uniform block) — fastest and works best for answer sheets
+    await worker.setParameters({ tessedit_pageseg_mode: "6" });
     const r1 = await worker.recognize(imageB64);
     const t1  = (r1.data.text || "").trim();
-    setOcrProgress(55);
+    setOcrProgress(70);
 
-    // Pass 2: PSM 6 — single block (good for single question answers)
-    await worker.setParameters({ tessedit_pageseg_mode: "6" });
-    const r2 = await worker.recognize(imageB64);
-    const t2  = (r2.data.text || "").trim();
+    // Only run second pass if first returned very little (< 15 chars) — likely OSD failure
+    let result = t1;
+    if (t1.length < 15) {
+      setOcrLoadStep("Trying full-page mode…");
+      await worker.setParameters({ tessedit_pageseg_mode: "1" });
+      const r2 = await worker.recognize(imageB64);
+      const t2  = (r2.data.text || "").trim();
+      result = t2.length > t1.length ? t2 : t1;
+    }
     setOcrProgress(100);
-
-    // Take whichever result is longer / has more useful content
-    // (longer usually means more text was extracted successfully)
-    const result = t1.length >= t2.length ? t1 : t2;
+    setOcrLoadStep("Done");
 
     // Clean common OCR artefacts from exam papers
     return result
-      .replace(/[|]{2,}/g, "")          // stray pipe characters
-      .replace(/\f/g, "\n")              // form feeds
-      .replace(/[ \t]{3,}/g, "  ")       // excessive spaces
-      .replace(/\n{3,}/g, "\n\n")        // excessive blank lines
+      .replace(/[|]{2,}/g, "")
+      .replace(/\f/g, "\n")
+      .replace(/[ \t]{3,}/g, "  ")
+      .replace(/\n{3,}/g, "\n\n")
       .trim();
   }, [getTesseractWorker]);
 
-  // ── Load custom .traineddata from local file ──────────────────────────
+  /* ── Pre-warm OCR worker silently when offline mode is enabled ─────── */
+  useEffect(() => {
+    if (!offlineMode || tesseractReady || tesseractLoading) return;
+    // Start loading in background — don't block UI
+    let cancelled = false;
+    const prewarm = async () => {
+      await new Promise(r => setTimeout(r, 800)); // small delay so UI settles
+      if (cancelled) return;
+      try { await getTesseractWorker(); } catch(e) { /* silent — will retry on first use */ }
+    };
+    prewarm();
+    return () => { cancelled = true; };
+  }, [offlineMode, tesseractReady, tesseractLoading, getTesseractWorker]);
   const loadCustomTrainedData = useCallback(async (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -4389,6 +4539,235 @@ function NovaVista() {
     }
     setTesseractReady(false);
   }, []);
+
+  /* ══════════════════════════════════════════════════════════════════════
+     TOPIC EXTRACTOR — parse uploaded text/scheme into structured topic table
+     Detects codes like: 1A), 1b), Q1a, 2.1, Topic 3 — Part A, Chapter 5.2
+     Works fully offline, no AI needed.
+  ══════════════════════════════════════════════════════════════════════ */
+  /* ── AI-powered topic extraction ────────────────────────────────────── */
+  const extractTopicsWithAI = useCallback(async (rawText) => {
+    const sys = `You are a curriculum expert. Extract every topic, question, or learning objective from the provided text.
+Return ONLY valid JSON — no preamble, no markdown:
+{"topics":[{"code":"1A","topic":"Solving two-step equations","section":"Algebra","marks":""},...]}
+
+Rules:
+- Preserve original codes exactly (1A, 1B, Q3a, 2.1, T4 etc.)
+- If no code exists, generate a sensible one (T1, T2...)
+- "section" = the heading/unit this topic belongs to (or "")
+- "marks" = mark value if stated (or "")
+- Include ALL topics — do not summarise or skip any
+- Topic descriptions should be concise but complete`;
+
+    const text = await callAPI(
+      [{role:"user", content:`Extract all topics from this document:\n\n${rawText.slice(0,12000)}`}],
+      sys, 2000
+    );
+    const parsed = parseJSON(text);
+    const rows = (parsed.topics||[]).map((t,i)=>({
+      id: Date.now()+i,
+      code: t.code||`T${i+1}`,
+      topic: t.topic||"",
+      section: t.section||"",
+      subject: topicSubject||subject||"",
+      year: topicYear,
+      marks: t.marks||"",
+    }));
+    return rows;
+  }, [callAPI, topicSubject, topicYear, subject]);
+
+  /* ── Process uploaded files for topic extraction ─────────────────────
+     Handles: PDF (render→OCR), DOCX (mammoth), TXT/CSV (plain text), images (OCR)
+  ──────────────────────────────────────────────────────────────────────── */
+  const processTopicFiles = useCallback(async (files) => {
+    let combined = "";
+    setTopicOcrBusy(true); setTopicOcrProgress(0);
+    const total = files.length;
+
+    for (let fi = 0; fi < files.length; fi++) {
+      const file = files[fi];
+      setTopicOcrFile(file.name);
+      setTopicOcrProgress(Math.round((fi/total)*100));
+
+      try {
+        const ext = file.name.split(".").pop().toLowerCase();
+
+        if (ext === "docx" || ext === "doc") {
+          if (typeof mammoth !== "undefined") {
+            const ab = await file.arrayBuffer();
+            const res = await mammoth.extractRawText({arrayBuffer:ab});
+            combined += `\n\n=== ${file.name} ===\n${res.value}`;
+          }
+        } else if (ext === "pdf") {
+          if (typeof pdfjsLib !== "undefined") {
+            const ab = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({data:ab}).promise;
+            let pdfText = "";
+            for (let p = 1; p <= Math.min(pdf.numPages, 20); p++) {
+              const page = await pdf.getPage(p);
+              // First try text layer (typed PDFs)
+              try {
+                const tc = await page.getTextContent();
+                const pageText = tc.items.map(i=>i.str).join(" ").trim();
+                if (pageText.length > 30) { pdfText += pageText + "\n"; continue; }
+              } catch {}
+              // Fall back to OCR for scanned PDFs
+              const vp = page.getViewport({scale:2.0});
+              const canvas = document.createElement("canvas");
+              canvas.width = vp.width; canvas.height = vp.height;
+              await page.render({canvasContext:canvas.getContext("2d"),viewport:vp}).promise;
+              const b64 = canvas.toDataURL("image/png");
+              const preprocessed = await preprocessForOCR(b64);
+              setTopicOcrProgress(Math.round(((fi + p/pdf.numPages)/total)*100));
+              const ocrText = await runTesseractOCR(preprocessed);
+              pdfText += ocrText + "\n";
+            }
+            combined += `\n\n=== ${file.name} ===\n${pdfText}`;
+          }
+        } else if (["jpg","jpeg","png","webp","bmp","gif"].includes(ext)) {
+          // Image — OCR it
+          const b64 = await new Promise(res=>{
+            const r = new FileReader();
+            r.onload = e => res(e.target.result);
+            r.readAsDataURL(file);
+          });
+          const preprocessed = await preprocessForOCR(b64);
+          const ocrText = await runTesseractOCR(preprocessed);
+          combined += `\n\n=== ${file.name} ===\n${ocrText}`;
+        } else {
+          // Plain text / CSV
+          const text = await file.text();
+          combined += `\n\n=== ${file.name} ===\n${text}`;
+        }
+      } catch (e) {
+        combined += `\n\n=== ${file.name} === [Error: ${e.message}]`;
+      }
+    }
+
+    setTopicOcrBusy(false); setTopicOcrProgress(100); setTopicOcrFile("");
+    return combined.trim();
+  }, [preprocessForOCR, runTesseractOCR]);
+
+  const extractTopics = useCallback((rawText) => {
+    const lines = (rawText||"").split(/\n/).map(l=>l.trim()).filter(Boolean);
+    const rows = [];
+    let seqNum = 1;
+
+    // Patterns for topic codes — ordered most specific first
+    const patterns = [
+      // 1A) or 1a) or 1B) — e.g. "1A) Solving two step equations"
+      { re: /^(\d+)\s*([A-Za-z])\s*[\)\.:\-]\s*(.+)$/,    code: (m)=>`${m[1]}${m[2].toUpperCase()}` },
+      // Q1a) or Q1b)
+      { re: /^Q(\d+)\s*([A-Za-z])\s*[\)\.:\-]\s*(.+)$/i,  code: (m)=>`Q${m[1]}${m[2].toUpperCase()}` },
+      // 1.1 or 2.3 — e.g. "1.1 Algebra basics"
+      { re: /^(\d+)\.(\d+)\s*[\)\.:\-]?\s*(.+)$/,          code: (m)=>`${m[1]}.${m[2]}` },
+      // 1) or 2) — simple numbered
+      { re: /^(\d+)\s*[\)\.:\-]\s*(.+)$/,                   code: (m,t)=>`${m[1]}`, topic: (m)=>m[2] },
+      // Topic 3 or Chapter 5
+      { re: /^(?:topic|chapter|unit|section|part)\s*(\d+[A-Za-z]?)[:\-\s]+(.+)$/i, code: (m)=>`T${m[1].toUpperCase()}`, topic:(m)=>m[2] },
+      // B1 B2 mark codes with content
+      { re: /^[BMACPEFbmacpef][0-9]\s+(.{8,})$/,            code: (m,_,i)=>`MK${i+1}`, topic:(m)=>m[1] },
+    ];
+
+    // Also try to detect section headers (all caps / bold-like lines with few words)
+    let currentSection = "";
+
+    lines.forEach((line, idx) => {
+      // Skip very short lines and pure code lines
+      if (line.length < 4) return;
+
+      // Detect section headers: short, no sentence-ending punctuation, caps or title case
+      const wordCount = line.split(/\s+/).length;
+      const isHeader = wordCount <= 6 &&
+        !line.match(/\)$/) &&
+        (line === line.toUpperCase() || /^[A-Z][a-z]+ [A-Z]/.test(line)) &&
+        !line.match(/^\d/);
+      if (isHeader && wordCount >= 2) {
+        currentSection = line.replace(/[:\-]+$/, "").trim();
+        return;
+      }
+
+      for (const p of patterns) {
+        const m = line.match(p.re);
+        if (m) {
+          const code = p.code(m, line, rows.length);
+          const topicText = p.topic ? p.topic(m) : (m[3]||m[2]||"").trim();
+          // Clean up common mark scheme noise
+          const clean = topicText
+            .replace(/\b[BMACPEF][0-9]\b/gi,"")
+            .replace(/\(\d+\s*marks?\)/gi,"")
+            .replace(/\[\d+\]/g,"")
+            .trim();
+          if (clean.length < 3) return;
+          rows.push({
+            id: seqNum++,
+            code,
+            topic: clean,
+            section: currentSection,
+            subject: topicSubject || subject || "",
+            year: topicYear,
+            marks: (line.match(/\b(\d+)\s*marks?\b/i)||[])[1] || "",
+          });
+          return; // matched — don't try other patterns
+        }
+      }
+
+      // Fallback: if line looks like a topic (long enough, starts with capital)
+      if (line.length > 15 && /^[A-Z]/.test(line) && !line.includes("{") && !line.includes("<")) {
+        rows.push({
+          id: seqNum++,
+          code: `T${seqNum-1}`,
+          topic: line.replace(/\b[BMACPEF][0-9]\b/gi,"").replace(/\(\d+\s*marks?\)/gi,"").trim(),
+          section: currentSection,
+          subject: topicSubject || subject || "",
+          year: topicYear,
+          marks: (line.match(/\b(\d+)\s*marks?\b/i)||[])[1] || "",
+        });
+      }
+    });
+
+    return rows;
+  }, [topicSubject, topicYear, subject]);
+
+  /* ── Export topic rows to Excel CSV ─────────────────────────────────── */
+  const exportTopicsToCSV = useCallback(() => {
+    if (!topicRows.length) return;
+    const header = ["Code","Topic","Section","Subject","Year Group","Marks"];
+    const csvRows = [
+      header.join(","),
+      ...topicRows.map(r=>[
+        `"${r.code}"`,
+        `"${r.topic.replace(/"/g,'""')}"`,
+        `"${r.section.replace(/"/g,'""')}"`,
+        `"${r.subject}"`,
+        `"${r.year}"`,
+        `"${r.marks}"`,
+      ].join(","))
+    ];
+    const blob = new Blob([csvRows.join("\n")], {type:"text/csv"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${topicSubject||"topics"}_${new Date().toLocaleDateString("en-GB").replace(/\//g,"-")}.csv`;
+    a.click();
+  }, [topicRows, topicSubject]);
+
+  /* ── Export topic rows to Excel XLSX ────────────────────────────────── */
+  const exportTopicsToXLSX = useCallback(() => {
+    if (!topicRows.length || typeof XLSX === "undefined") return;
+    const ws = XLSX.utils.json_to_sheet(topicRows.map(r=>({
+      "Code": r.code,
+      "Topic / Description": r.topic,
+      "Section / Unit": r.section,
+      "Subject": r.subject,
+      "Year Group": r.year,
+      "Marks Available": r.marks,
+    })));
+    // Column widths
+    ws["!cols"] = [{wch:10},{wch:55},{wch:20},{wch:14},{wch:12},{wch:14}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Topics");
+    XLSX.writeFile(wb, `${topicSubject||"topics"}_${new Date().toLocaleDateString("en-GB").replace(/\//g,"-")}.xlsx`);
+  }, [topicRows, topicSubject]);
 
   /* ── markWhole — full AI marking of an image ── */
   const markWhole=useCallback(async (img, extraAnswers)=>{
@@ -5107,8 +5486,7 @@ function NovaVista() {
           const qn = nm[1], qp = nm[2]||"";
           const lbl = `Q${qn}${qp.toLowerCase()}`;
           cur = { rawId: lbl, label: lbl, lines: [line] };
-          numbered.push(cur);
-        } else if (cur) {
+          numbered.push(cur);    } else if (cur) {
           cur.lines.push(line);
         } else {
           cur = { rawId:"general", label:"General", lines:[line] };
@@ -5336,9 +5714,7 @@ function NovaVista() {
       {/* ── Sidebar backdrop for mobile ── */}
       <div className={`sidebar-backdrop ${sidebarOpen?"visible":""}`} onClick={()=>setSidebarOpen(false)}/>
 
-      {/* ═══════════════════════════
-          PIN LOCK SCREEN
-      ═══════════════════════════ */}
+      {/* PINLOCKSCREEN */}
       {!pinUnlocked&&teacherPin&&(
         <div className="pin-screen">
           {teacherSchool&&<div className="pin-school">{teacherSchool}</div>}
@@ -5367,22 +5743,49 @@ function NovaVista() {
           <div className="spinner-lg"/>
           <div className="loading-text">{qmLoading?"Marking answer…":"NovaVista is marking…"}</div>
           {markingStep&&<div className="loading-sub">{markingStep}</div>}
+
           {/* OCR progress bar — shown during Tesseract runs */}
-          {ocrProgress>0&&ocrProgress<100&&(
-            <div style={{marginTop:14,width:240}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:5,fontSize:"0.72rem",color:"rgba(255,255,255,0.7)"}}>
+          {(ocrProgress>0||tesseractLoading)&&ocrProgress<100&&(
+            <div style={{marginTop:16,width:260}}>
+              {/* Label row */}
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6,fontSize:"0.74rem",color:"rgba(255,255,255,0.8)"}}>
                 <span>{ocrLoadStep||"Local OCR"}</span>
-                <span style={{fontWeight:700}}>{ocrProgress}%</span>
+                <span style={{fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{ocrProgress}%</span>
               </div>
-              <div style={{height:6,background:"rgba(255,255,255,0.15)",borderRadius:99,overflow:"hidden"}}>
-                <div style={{height:"100%",width:ocrProgress+"%",background:"linear-gradient(90deg,#6c8ff5,#7c3aed)",borderRadius:99,transition:"width 0.3s",boxShadow:"0 0 6px rgba(108,143,245,0.6)"}}/>
+              {/* Bar */}
+              <div style={{height:7,background:"rgba(255,255,255,0.15)",borderRadius:99,overflow:"hidden",marginBottom:8}}>
+                <div style={{
+                  height:"100%",
+                  width:(ocrProgress||3)+"%",
+                  background:"linear-gradient(90deg,#6c8ff5,#7c3aed)",
+                  borderRadius:99,
+                  transition:"width 0.4s ease",
+                  boxShadow:"0 0 8px rgba(108,143,245,0.7)"
+                }}/>
               </div>
+              {/* Contextual hint based on stage */}
+              <div style={{fontSize:"0.68rem",color:"rgba(255,255,255,0.45)",textAlign:"center",lineHeight:1.5}}>
+                {ocrProgress<15
+                  ?"First-time setup — loading OCR engine (~15–30s)"
+                  :ocrProgress<50
+                  ?"Loading language model — almost there…"
+                  :ocrProgress<80
+                  ?"Initialising — ready very soon"
+                  :"Reading handwriting from paper…"}
+              </div>
+              {/* First-time download note */}
+              {tesseractLoading&&ocrProgress<25&&(
+                <div style={{marginTop:8,padding:"6px 10px",background:"rgba(108,143,245,0.12)",borderRadius:6,fontSize:"0.68rem",color:"rgba(255,255,255,0.5)",textAlign:"center"}}>
+                  ℹ One-time setup · Will be instant next time
+                </div>
+              )}
             </div>
           )}
-          {tesseractLoading&&ocrProgress<5&&(
-            <div style={{marginTop:10,fontSize:"0.72rem",color:"rgba(255,255,255,0.5)",textAlign:"center",maxWidth:240}}>
-              Downloading high-accuracy OCR model (~10MB)<br/>
-              Cached permanently after this — works offline
+
+          {/* OCR complete — brief reading stage */}
+          {tesseractReady&&ocrProgress===0&&markingStep&&markingStep.includes("OCR")&&(
+            <div style={{marginTop:10,fontSize:"0.72rem",color:"rgba(255,255,255,0.5)"}}>
+              OCR engine ready · Reading handwriting…
             </div>
           )}
         </div>
@@ -5396,9 +5799,7 @@ function NovaVista() {
         </div>
       )}
 
-      {/* ═══════════════════════════
-          SIDEBAR
-      ═══════════════════════════ */}
+      {/* SIDEBAR */}
       <aside className={`sidebar${sidebarOpen?" open":""}`}>
         <div className="sidebar-logo">
           <div className="logo-mark">Nova<span>Vista</span></div>
@@ -5445,6 +5846,10 @@ function NovaVista() {
           <button className={`nav-item ${tab==="classes"?"active":""}`} onClick={()=>{setTab("classes");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.folder} size={16}/></span> Class Folders
             {totalStudents>0&&<span className="nav-badge">{totalStudents}</span>}
+          </button>
+          <button className={`nav-item ${tab==="topicextractor"?"active":""}`} onClick={()=>{setTab("topicextractor");setSidebarOpen(false);}}>
+            <span className="nav-icon"><Ic d={I.list} size={16}/></span> Topic Extractor
+            {topicRows.length>0&&<span className="nav-badge blue">{topicRows.length}</span>}
           </button>
 
           <div className="nav-divider"/>
@@ -5541,9 +5946,7 @@ function NovaVista() {
         </div>
       </aside>
 
-      {/* ═══════════════════════════
-          MAIN CONTENT
-      ═══════════════════════════ */}
+      {/* MAINCONTENT */}
       <main className="main">
 
         {/* Offline mode banner */}
@@ -5570,9 +5973,7 @@ function NovaVista() {
           </div>
         )}
 
-        {/* ─────────────────────────
-            SETUP
-        ───────────────────────── */}
+        {/* SETUP */}
         {tab==="setup"&&(
           <>
             <div className="topbar">
@@ -5702,9 +6103,7 @@ function NovaVista() {
           </>
         )}
 
-        {/* ─────────────────────────
-            QUICK MARK
-        ───────────────────────── */}
+        {/* QUICKMARK */}
         {tab==="quick"&&(
           <>
             <div className="topbar">
@@ -5978,9 +6377,7 @@ function NovaVista() {
           </>
         )}
 
-        {/* ─────────────────────────
-            LIVE MARK
-        ───────────────────────── */}
+        {/* LIVEMARK */}
         {tab==="mark"&&(
           <>
             <div className="topbar">
@@ -6208,9 +6605,7 @@ function NovaVista() {
           </>
         )}
 
-        {/* ─────────────────────────
-            SCAN
-        ───────────────────────── */}
+        {/* SCAN */}
         {tab==="scan"&&(
           <>
             <div className="topbar">
@@ -6336,7 +6731,6 @@ function NovaVista() {
                         <button className="btn btn-ghost" onClick={stopCamera}>Stop Camera</button>
                       </div>
                     ):(
-                      /* Manual mode controls */
                       <div className="col gap10">
                         <div className="row gap10" style={{justifyContent:"center"}}>
                           <button className="btn btn-ghost" onClick={stopCamera}>Stop Camera</button>
@@ -6457,9 +6851,7 @@ function NovaVista() {
           </>
         )}
 
-        {/* ─────────────────────────
-            BATCH UPLOAD & MARK
-        ───────────────────────── */}
+        {/* BATCHUPLOAD&MARK */}
         {tab==="batch"&&(
           <>
             <div className="topbar">
@@ -6713,9 +7105,7 @@ function NovaVista() {
           </>
         )}
 
-        {/* ─────────────────────────
-            REVIEW & MANUAL ASSIST
-        ───────────────────────── */}
+        {/* REVIEW&MANUALASSIST */}
         {reviewMode&&stitchedImage&&(
           <>
             <div className="topbar">
@@ -6913,9 +7303,7 @@ function NovaVista() {
           </>
         )}
 
-        {/* ─────────────────────────
-            RESULTS
-        ───────────────────────── */}
+        {/* RESULTS */}
         {tab==="results"&&results&&(
           <>
             <div className="topbar">
@@ -7062,9 +7450,7 @@ function NovaVista() {
           </>
         )}
 
-        {/* ─────────────────────────
-            MARK LOG
-        ───────────────────────── */}
+        {/* MARKLOG */}
         {tab==="log"&&(
           <>
             <div className="topbar">
@@ -7097,9 +7483,7 @@ function NovaVista() {
           </>
         )}
 
-        {/* ─────────────────────────
-            CLASSES
-        ───────────────────────── */}
+        {/* CLASSES */}
         {tab==="classes"&&(
           <>
             <div className="topbar">
@@ -7108,7 +7492,23 @@ function NovaVista() {
                   <div className="page-title">Class Folders</div>
                   <div className="page-sub">One folder per paper — student work, annotated papers, feedback and Excel reports</div>
                 </div>
-                {results&&<button className="btn btn-green btn-sm" onClick={()=>{setSavePaperName(subject||(offlineMode?`Offline ${new Date().toLocaleDateString("en-GB")}`:"")); setSaveStudentName(results?.studentName||studentName||"");setShowSaveModal(true);}}><Ic d={I.folderplus} size={14}/> Save Current Result</button>}
+                <div className="row gap8">
+                  {Object.keys(classes).length>0&&(
+                    <div style={{position:"relative"}}>
+                      <input
+                        value={folderSearch}
+                        onChange={e=>setFolderSearch(e.target.value)}
+                        placeholder="🔍 Search folders & students…"
+                        style={{width:220,paddingRight:folderSearch?28:12,fontSize:"0.82rem"}}
+                      />
+                      {folderSearch&&(
+                        <button onClick={()=>setFolderSearch("")}
+                          style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"1rem",lineHeight:1}}>×</button>
+                      )}
+                    </div>
+                  )}
+                  {results&&<button className="btn btn-green btn-sm" onClick={()=>{setSavePaperName(subject||(offlineMode?`Offline ${new Date().toLocaleDateString("en-GB")}`:"")); setSaveStudentName(results?.studentName||studentName||"");setShowSaveModal(true);}}><Ic d={I.folderplus} size={14}/> Save Current Result</button>}
+                </div>
               </div>
             </div>
             <div className="content col gap16">
@@ -7121,29 +7521,87 @@ function NovaVista() {
                   </div>
                 </div>
               ):(
-                Object.entries(classes).map(([pid,paper])=>{
+                <>
+                {/* Folder stats summary row */}
+                {!folderSearch&&(()=>{
+                  const totalFolders=Object.keys(classes).length;
+                  const totalStudents=Object.values(classes).reduce((s,p)=>s+(p.students||[]).length,0);
+                  const allPcts=Object.values(classes).flatMap(p=>(p.students||[]).map(s=>s.results?.percentage||0));
+                  const overallAvg=allPcts.length?Math.round(allPcts.reduce((a,b)=>a+b,0)/allPcts.length):0;
+                  return(
+                    <div className="g2 gap14" style={{marginBottom:4}}>
+                      {[
+                        {val:totalFolders,lbl:"Folders",color:"var(--gold)"},
+                        {val:totalStudents,lbl:"Students",color:"var(--blue)"},
+                        {val:overallAvg+"%",lbl:"Overall Avg",color:pctColor(overallAvg)},
+                      ].map((s,i)=>(
+                        <div key={i} className="card" style={{padding:"10px 16px",display:"flex",alignItems:"center",gap:12}}>
+                          <div style={{fontSize:"1.5rem",fontWeight:800,color:s.color,fontVariantNumeric:"tabular-nums"}}>{s.val}</div>
+                          <div style={{fontSize:"0.76rem",color:"var(--text3)"}}>{s.lbl}</div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {/* Filtered folder list */}
+                {(()=>{
+                  const q=(folderSearch||"").toLowerCase();
+                  const entries=Object.entries(classes).filter(([pid,paper])=>{
+                    if(!q) return true;
+                    if(paper.name.toLowerCase().includes(q)) return true;
+                    if((paper.subject||"").toLowerCase().includes(q)) return true;
+                    return (paper.students||[]).some(s=>s.name.toLowerCase().includes(q));
+                  });
+                  if(entries.length===0) return <div className="info-box">No folders match "<strong>{folderSearch}</strong>".</div>;
+                  return entries.map(([pid,paper])=>{
                   const isOpen=expandedPaper===pid;
                   const sts=paper.students||[];
-                  const avgPct=sts.length?Math.round(sts.reduce((s,st)=>s+(st.results.percentage||0),0)/sts.length):0;
+                  const filteredSts=q?sts.filter(s=>s.name.toLowerCase().includes(q)||paper.name.toLowerCase().includes(q)||(!q)):sts;
+                  const avgPct=sts.length?Math.round(sts.reduce((s,st)=>s+(st.results?.percentage||0),0)/sts.length):0;
                   const qIds=getAllQIds(sts);
                   return(
                     <div key={pid} className="paper-folder">
                       {/* Header */}
-                      <div className="paper-folder-header" onClick={()=>setExpandedPaper(isOpen?null:pid)}>
-                        <div className="folder-icon-wrap"><Ic d={I.folder} size={20} color={offlineTempFolders[pid]?"var(--gold)":"var(--gold)"}/></div>
+                      <div className="paper-folder-header" onClick={()=>{if(renamingFolder!==pid)setExpandedPaper(isOpen?null:pid);}}>
+                        <div className="folder-icon-wrap"><Ic d={I.folder} size={20} color="var(--gold)"/></div>
                         <div style={{flex:1}}>
-                          <div className="paper-name" style={{display:"flex",alignItems:"center",gap:8}}>
-                            {paper.name}
-                            {(offlineTempFolders[pid]||paper.offline)&&(
-                              <span style={{fontSize:"0.65rem",fontWeight:700,padding:"2px 7px",borderRadius:99,background:"rgba(245,200,66,0.18)",border:"1px solid rgba(245,200,66,0.4)",color:"#7a6000",letterSpacing:"0.5px"}}>
-                                ✈ TEMP
-                              </span>
-                            )}
-                          </div>
+                          {/* Rename inline */}
+                          {renamingFolder===pid?(
+                            <div className="row gap6" onClick={e=>e.stopPropagation()}>
+                              <input autoFocus value={renameValue} onChange={e=>setRenameValue(e.target.value)}
+                                onKeyDown={e=>{
+                                  if(e.key==="Enter"&&renameValue.trim()){
+                                    setClasses(prev=>({...prev,[pid]:{...prev[pid],name:renameValue.trim()}}));
+                                    setRenamingFolder(null);
+                                  }
+                                  if(e.key==="Escape") setRenamingFolder(null);
+                                }}
+                                style={{flex:1,fontWeight:700,fontSize:"0.95rem"}}/>
+                              <button className="btn btn-green btn-sm" onClick={()=>{
+                                if(renameValue.trim()){setClasses(prev=>({...prev,[pid]:{...prev[pid],name:renameValue.trim()}}));}
+                                setRenamingFolder(null);
+                              }}>Save</button>
+                              <button className="btn btn-ghost btn-sm" onClick={()=>setRenamingFolder(null)}>Cancel</button>
+                            </div>
+                          ):(
+                            <div className="paper-name" style={{display:"flex",alignItems:"center",gap:8}}>
+                              {paper.name}
+                              {(offlineTempFolders[pid]||paper.offline)&&(
+                                <span style={{fontSize:"0.65rem",fontWeight:700,padding:"2px 7px",borderRadius:99,background:"rgba(245,200,66,0.18)",border:"1px solid rgba(245,200,66,0.4)",color:"#7a6000",letterSpacing:"0.5px"}}>
+                                  ✈ TEMP
+                                </span>
+                              )}
+                              <button className="btn btn-ghost btn-sm" style={{fontSize:"0.68rem",padding:"1px 6px",marginLeft:2,opacity:0.5}}
+                                onClick={e=>{e.stopPropagation();setRenameValue(paper.name);setRenamingFolder(pid);}}>
+                                ✏ Rename
+                              </button>
+                            </div>
+                          )}
                           <div className="paper-meta-row">
                             {paper.subject&&<span className="paper-meta-item">📚 {paper.subject}</span>}
                             <span className="paper-meta-item">🗓 {paper.date}</span>
-                            {(offlineTempFolders[pid]||paper.offline)&&<span className="paper-meta-item" style={{color:"#b08a00"}}>📋 Offline mark scheme marking</span>}
+                            {(offlineTempFolders[pid]||paper.offline)&&<span className="paper-meta-item" style={{color:"#b08a00"}}>📋 Offline marking</span>}
                           </div>
                         </div>
                         <div className="row gap20">
@@ -7300,16 +7758,392 @@ function NovaVista() {
                       )}
                     </div>
                   );
-                })
+                  });
+                })()}
+                </>
               )}
             </div>
           </>
         )}
       </main>
 
-        {/* ─────────────────────────
-            ACCOUNT
-        ───────────────────────── */}
+        {/* TOPICEXTRACTOR—maintab */}
+        {tab==="topicextractor"&&(
+          <>
+            <div className="topbar">
+              <div className="page-header">
+                <div>
+                  <div className="page-title">📋 Topic Extractor</div>
+                  <div className="page-sub">Upload papers, mark schemes or syllabuses — extract topics into a table ready for Excel</div>
+                </div>
+                {topicRows.length>0&&(
+                  <div className="row gap8">
+                    <button className="btn btn-ghost btn-sm" onClick={()=>{setTopicRows([]);setTopicSourceText("");setTopicInput("");setTopicFiles([]);}}>
+                      <Ic d={I.trash} size={13}/> Clear All
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={()=>{
+                      if(!topicRows.length) return;
+                      const h=["Code","Topic / Description","Section","Subject","Year Group","Marks"];
+                      const rows=[h.join(","),...topicRows.map(r=>[`"${r.code}"`,`"${r.topic.replace(/"/g,'""')}"`,`"${(r.section||"").replace(/"/g,'""')}"`,`"${r.subject}"`,`"${r.year}"`,`"${r.marks}"`].join(","))];
+                      const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(rows.join("\n"));
+                      a.download=`${topicSubject||"topics"}_${new Date().toLocaleDateString("en-GB").replace(/\//g,"-")}.csv`;a.click();
+                    }}>⬇ CSV</button>
+                    <button className="btn btn-blue btn-sm" onClick={exportTopicsToXLSX}>
+                      <Ic d={I.xlsx} size={14}/> Export Excel
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="content col gap16">
+
+              {/* ── Top row: labels + mode ── */}
+              <div className="g2 gap12">
+                <div className="field">
+                  <div className="field-label">Subject</div>
+                  <input value={topicSubject} onChange={e=>setTopicSubject(e.target.value)} placeholder="e.g. Maths, Biology, History"/>
+                </div>
+                <div className="field">
+                  <div className="field-label">Year Group</div>
+                  <input value={topicYear} onChange={e=>setTopicYear(e.target.value)} placeholder="e.g. Year 10, KS4"/>
+                </div>
+              </div>
+
+              {/* ── Extraction mode ── */}
+              <div className="row gap10" style={{flexWrap:"wrap",alignItems:"center"}}>
+                <div style={{fontSize:"0.8rem",fontWeight:600,color:"var(--text2)"}}>Extraction method:</div>
+                <div className="toggle-group" style={{width:"auto"}}>
+                  <button className={`toggle-opt ${topicExtractionMode==="local"?"on":""}`} onClick={()=>setTopicExtractionMode("local")}>
+                    ✈ Local — instant, offline
+                  </button>
+                  <button className={`toggle-opt ${topicExtractionMode==="ai"?"on":""}`} onClick={()=>setTopicExtractionMode("ai")}>
+                    🤖 AI — smarter, needs key
+                  </button>
+                </div>
+                <div className="dim small" style={{flex:1}}>
+                  {topicExtractionMode==="local"
+                    ?"Detects numbered/lettered codes (1A, 2.1, Q3a) instantly — no internet needed"
+                    :"Claude reads the full document and extracts every topic intelligently — needs an API key"}
+                </div>
+              </div>
+
+              {/* ── File drop zone + paste area ── */}
+              <div className="g2 gap14" style={{alignItems:"start"}}>
+
+                {/* Left: file upload */}
+                <div className="col gap10">
+                  <div className="field-label">Upload Files</div>
+
+                  {/* Drop zone */}
+                  <div
+                    onDragOver={e=>{e.preventDefault();setTopicDragOver(true);}}
+                    onDragLeave={()=>setTopicDragOver(false)}
+                    onDrop={e=>{
+                      e.preventDefault(); setTopicDragOver(false);
+                      const dropped=Array.from(e.dataTransfer.files);
+                      setTopicFiles(prev=>[...prev,...dropped.filter(f=>!prev.some(p=>p.name===f.name))]);
+                    }}
+                    style={{
+                      border:`2px dashed ${topicDragOver?"var(--blue)":"var(--border)"}`,
+                      borderRadius:"var(--radius)",
+                      padding:"28px 20px",
+                      textAlign:"center",
+                      background: topicDragOver?"rgba(108,143,245,0.06)":"var(--inset)",
+                      transition:"all 0.18s",
+                      cursor:"pointer",
+                    }}>
+                    <div style={{fontSize:"2rem",marginBottom:8}}>📄</div>
+                    <div style={{fontWeight:600,fontSize:"0.85rem",color:"var(--text2)",marginBottom:4}}>
+                      Drop files here or click to browse
+                    </div>
+                    <div className="dim small" style={{marginBottom:12}}>
+                      PDF · Word (.docx) · Images (JPG, PNG) · TXT · CSV
+                    </div>
+                    <label style={{cursor:"pointer"}}>
+                      <input type="file" multiple accept=".pdf,.docx,.doc,.txt,.csv,.jpg,.jpeg,.png,.webp"
+                        style={{display:"none"}}
+                        onChange={e=>{
+                          const added=Array.from(e.target.files);
+                          setTopicFiles(prev=>[...prev,...added.filter(f=>!prev.some(p=>p.name===f.name))]);
+                          e.target.value="";
+                        }}/>
+                      <div className="btn btn-blue btn-sm" style={{display:"inline-flex",gap:6,cursor:"pointer"}}>
+                        <Ic d={I.upload} size={14}/> Choose Files
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* File queue */}
+                  {topicFiles.length>0&&(
+                    <div className="col gap6">
+                      {topicFiles.map((f,i)=>{
+                        const ext=f.name.split(".").pop().toLowerCase();
+                        const icon=ext==="pdf"?"📄":["jpg","jpeg","png","webp"].includes(ext)?"🖼️":ext==="docx"||ext==="doc"?"📝":"📋";
+                        return(
+                          <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:"var(--card)",borderRadius:"var(--radius-sm)",border:"1px solid var(--border)",fontSize:"0.8rem"}}>
+                            <span style={{fontSize:"1rem"}}>{icon}</span>
+                            <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"var(--text2)"}}>{f.name}</span>
+                            <span className="dim small">{(f.size/1024).toFixed(0)}KB</span>
+                            <button onClick={()=>setTopicFiles(prev=>prev.filter((_,j)=>j!==i))}
+                              style={{background:"none",border:"none",color:"var(--text4)",cursor:"pointer",fontSize:"0.9rem",padding:"0 2px",lineHeight:1}}>✕</button>
+                          </div>
+                        );
+                      })}
+                      <button className="btn btn-ghost btn-sm" onClick={()=>setTopicFiles([])}>Remove all</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: paste area */}
+                <div className="col gap10">
+                  <div className="field-label">Or Paste Text Directly</div>
+                  <textarea
+                    value={topicInput}
+                    onChange={e=>setTopicInput(e.target.value)}
+                    placeholder={`Paste a mark scheme, syllabus, or topic list:\n\n1A) Solving two step equations\n1B) Solving one step equations\n2A) Expanding single brackets\n2B) Factorising expressions\n\nOr from an exam spec:\n1.1 Number and place value\n1.2 Addition and subtraction\n2.1 Fractions, decimals, percentages\n\nThe extractor recognises:\n• 1A) 1B) 2C) — lettered sub-topics\n• 1.1 2.3 3.4 — decimal codes\n• Q1a) Q1b) — question format\n• Topic 3, Unit 4, Chapter 5`}
+                    style={{minHeight:220,fontFamily:"monospace",fontSize:"0.79rem",resize:"vertical",lineHeight:1.6}}
+                  />
+                  <div className="row gap6">
+                    <button className="btn btn-ghost btn-sm" style={{fontSize:"0.76rem"}}
+                      onClick={()=>setTopicInput(globalScheme||"")} disabled={!globalScheme}>
+                      ← Load from Setup scheme
+                    </button>
+                    {topicInput&&<button className="btn btn-ghost btn-sm" style={{fontSize:"0.76rem"}} onClick={()=>setTopicInput("")}>Clear</button>}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── OCR progress (shown while processing files) ── */}
+              {topicOcrBusy&&(
+                <div style={{padding:"14px 16px",background:"rgba(108,143,245,0.07)",border:"1px solid rgba(108,143,245,0.2)",borderRadius:"var(--radius-sm)"}}>
+                  <div className="row-between" style={{marginBottom:6}}>
+                    <span style={{fontSize:"0.82rem",fontWeight:600,color:"var(--blue)"}}>
+                      <span className="spinner-sm" style={{verticalAlign:"middle",marginRight:6}}/>
+                      Reading: {topicOcrFile}
+                    </span>
+                    <span style={{fontSize:"0.82rem",fontWeight:700,color:"var(--blue)"}}>{topicOcrProgress}%</span>
+                  </div>
+                  <div style={{height:6,background:"var(--inset)",borderRadius:99,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:topicOcrProgress+"%",background:"linear-gradient(90deg,#6c8ff5,#7c3aed)",borderRadius:99,transition:"width 0.3s"}}/>
+                  </div>
+                  <div className="dim small mt4">OCR is reading the document — this takes 10–30s per image/scanned page</div>
+                </div>
+              )}
+
+              {/* ── Extract button ── */}
+              {!topicOcrBusy&&(
+                <button
+                  className="btn btn-green"
+                  style={{alignSelf:"flex-start",padding:"10px 28px",fontSize:"0.88rem",gap:8}}
+                  disabled={topicExtractBusy||(!topicFiles.length&&!topicInput.trim())}
+                  onClick={async()=>{
+                    setTopicExtractBusy(true);
+                    try {
+                      let rawText = topicInput;
+                      // If files uploaded, process them first
+                      if(topicFiles.length>0){
+                        const fileText = await processTopicFiles(topicFiles);
+                        rawText = [rawText, fileText].filter(Boolean).join("\n\n");
+                        setTopicSourceText(rawText);
+                      }
+                      if(!rawText.trim()){setTopicExtractBusy(false);return;}
+                      let rows;
+                      if(topicExtractionMode==="ai"&&apiReady){
+                        rows = await extractTopicsWithAI(rawText);
+                      } else {
+                        // Small delay so UI shows "Extracting…"
+                        await new Promise(r=>setTimeout(r,80));
+                        rows = extractTopics(rawText);
+                      }
+                      setTopicRows(rows);
+                    } catch(e) {
+                      setError("Topic extraction failed: "+e.message);
+                    }
+                    setTopicExtractBusy(false);
+                  }}>
+                  {topicExtractBusy
+                    ?"⏳ Extracting…"
+                    :<><Ic d={I.zap} size={16}/>
+                      {topicFiles.length>0
+                        ?`Extract from ${topicFiles.length} file${topicFiles.length>1?"s":""}`
+                        :"Extract Topics"}</>}
+                </button>
+              )}
+
+              {/* ── Results table ── */}
+              {topicRows.length>0&&(
+                <div className="card card-pad col gap12">
+                  <div className="row-between" style={{flexWrap:"wrap",gap:8}}>
+                    <div>
+                      <div className="card-title" style={{marginBottom:2}}>
+                        {topicRows.length} topics extracted
+                        {topicSubject&&<span style={{marginLeft:8,fontSize:"0.8rem",color:"var(--text3)",fontWeight:400}}>— {topicSubject}{topicYear?" · "+topicYear:""}</span>}
+                      </div>
+                      <div className="dim small">All cells are editable. Click any code or topic to change it.</div>
+                    </div>
+                    <div className="row gap8">
+                      <button className="btn btn-ghost btn-sm" onClick={()=>setTopicRows([])}>Clear table</button>
+                      <button className="btn btn-ghost btn-sm" onClick={()=>{
+                        const h=["Code","Topic / Description","Section","Subject","Year Group","Marks"];
+                        const rows=[h.join(","),...topicRows.map(r=>[`"${r.code}"`,`"${r.topic.replace(/"/g,'""')}"`,`"${(r.section||"").replace(/"/g,'""')}"`,`"${r.subject}"`,`"${r.year}"`,`"${r.marks}"`].join(","))];
+                        const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(rows.join("\n"));
+                        a.download=`${topicSubject||"topics"}_${new Date().toLocaleDateString("en-GB").replace(/\//g,"-")}.csv`;a.click();
+                      }}>⬇ CSV</button>
+                      <button className="btn btn-blue btn-sm" onClick={exportTopicsToXLSX}>
+                        <Ic d={I.xlsx} size={14}/> Export Excel
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Table */}
+                  <div style={{overflowX:"auto",borderRadius:"var(--radius-sm)",border:"1px solid var(--border)"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.8rem"}}>
+                      <thead>
+                        <tr style={{background:"var(--inset)"}}>
+                          {[
+                            {h:"Code",       w:90},
+                            {h:"Topic / Description", w:"auto"},
+                            {h:"Section / Unit",      w:160},
+                            {h:"Marks",      w:72},
+                            {h:"",           w:36},
+                          ].map((col,i)=>(
+                            <th key={i} style={{padding:"9px 12px",textAlign:"left",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",whiteSpace:"nowrap",fontSize:"0.74rem",width:col.w}}>
+                              {col.h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {topicRows.map((row,ri)=>(
+                          <tr key={row.id} style={{borderBottom:"1px solid var(--border)",transition:"background 0.1s"}}
+                            onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.03)"}
+                            onMouseLeave={e=>e.currentTarget.style.background=""}>
+                            <td style={{padding:"5px 10px"}}>
+                              <input
+                                value={row.code}
+                                onChange={e=>setTopicRows(prev=>prev.map((r,i)=>i===ri?{...r,code:e.target.value}:r))}
+                                style={{width:74,fontFamily:"monospace",fontWeight:700,fontSize:"0.82rem",
+                                  background:"rgba(108,143,245,0.08)",border:"1px solid rgba(108,143,245,0.2)",
+                                  borderRadius:4,padding:"3px 7px",color:"var(--blue)",textAlign:"center"}}/>
+                            </td>
+                            <td style={{padding:"5px 10px"}}>
+                              <input
+                                value={row.topic}
+                                onChange={e=>setTopicRows(prev=>prev.map((r,i)=>i===ri?{...r,topic:e.target.value}:r))}
+                                style={{width:"100%",minWidth:240,fontSize:"0.8rem",background:"transparent",
+                                  border:"1px solid transparent",borderRadius:4,padding:"3px 6px",transition:"border-color 0.15s"}}
+                                onFocus={e=>e.target.style.borderColor="var(--blue)"}
+                                onBlur={e=>e.target.style.borderColor="transparent"}/>
+                            </td>
+                            <td style={{padding:"5px 10px"}}>
+                              <input
+                                value={row.section||""}
+                                onChange={e=>setTopicRows(prev=>prev.map((r,i)=>i===ri?{...r,section:e.target.value}:r))}
+                                placeholder="—"
+                                style={{width:"100%",fontSize:"0.76rem",color:"var(--text3)",background:"transparent",
+                                  border:"1px solid transparent",borderRadius:4,padding:"3px 6px",transition:"border-color 0.15s"}}
+                                onFocus={e=>e.target.style.borderColor="var(--border-md)"}
+                                onBlur={e=>e.target.style.borderColor="transparent"}/>
+                            </td>
+                            <td style={{padding:"5px 10px",textAlign:"center"}}>
+                              <input
+                                value={row.marks||""}
+                                onChange={e=>setTopicRows(prev=>prev.map((r,i)=>i===ri?{...r,marks:e.target.value}:r))}
+                                placeholder="—"
+                                style={{width:50,textAlign:"center",fontSize:"0.78rem",
+                                  background:"var(--inset)",border:"1px solid var(--border)",
+                                  borderRadius:4,padding:"3px 5px"}}/>
+                            </td>
+                            <td style={{padding:"5px 6px",textAlign:"center"}}>
+                              <button
+                                onClick={()=>setTopicRows(prev=>prev.filter((_,i)=>i!==ri))}
+                                style={{background:"none",border:"none",color:"var(--text4)",cursor:"pointer",
+                                  fontSize:"0.85rem",lineHeight:1,padding:"2px 5px",borderRadius:3,
+                                  transition:"color 0.1s"}}
+                                onMouseEnter={e=>e.target.style.color="var(--red)"}
+                                onMouseLeave={e=>e.target.style.color="var(--text4)"}
+                                title="Remove row">✕</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Add row + summary */}
+                  <div className="row-between" style={{flexWrap:"wrap",gap:8}}>
+                    <button className="btn btn-ghost btn-sm" onClick={()=>setTopicRows(prev=>[...prev,{
+                      id:Date.now(),code:`T${prev.length+1}`,topic:"",section:"",
+                      subject:topicSubject||subject||"",year:topicYear,marks:""
+                    }])}>+ Add Row</button>
+                    <div className="dim small">
+                      {topicRows.length} rows · Excel export includes: Code, Topic, Section, Subject, Year Group, Marks
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Empty / no-match state ── */}
+              {!topicExtractBusy&&!topicOcrBusy&&topicRows.length===0&&(topicInput.trim()||topicFiles.length>0)&&topicSourceText&&(
+                <div className="warn-box">
+                  No topic codes detected in the extracted text. Try <strong>AI mode</strong> for documents without
+                  numbered codes, or check that the text was extracted correctly below.
+                  <details style={{marginTop:8}}>
+                    <summary style={{cursor:"pointer",fontSize:"0.78rem",opacity:0.6}}>Show extracted text</summary>
+                    <pre style={{marginTop:8,fontSize:"0.72rem",maxHeight:200,overflow:"auto",whiteSpace:"pre-wrap",opacity:0.7}}>{topicSourceText.slice(0,3000)}</pre>
+                  </details>
+                </div>
+              )}
+
+              {/* ── How-to guide (shown when empty & nothing uploaded) ── */}
+              {!topicExtractBusy&&!topicOcrBusy&&topicRows.length===0&&!topicInput.trim()&&topicFiles.length===0&&(
+                <div className="g2 gap14">
+                  <div className="card card-pad col gap10">
+                    <div style={{fontWeight:700,fontSize:"0.88rem",color:"var(--text2)",marginBottom:4}}>📁 Supported file types</div>
+                    {[
+                      ["📄","PDF","Text layer extracted instantly · Scanned pages → OCR automatically"],
+                      ["📝","Word (.docx)","Full text extracted — tables, headings, all content"],
+                      ["🖼️","Images (JPG/PNG)","OCR reads printed or typed text from photos of papers"],
+                      ["📋","TXT / CSV","Direct text import — paste or upload"],
+                    ].map(([icon,type,desc])=>(
+                      <div key={type} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                        <span style={{fontSize:"1.2rem",flexShrink:0}}>{icon}</span>
+                        <div>
+                          <div style={{fontWeight:600,fontSize:"0.82rem",color:"var(--text2)"}}>{type}</div>
+                          <div className="dim small">{desc}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="card card-pad col gap10">
+                    <div style={{fontWeight:700,fontSize:"0.88rem",color:"var(--text2)",marginBottom:4}}>🔍 Detected code formats</div>
+                    <div style={{fontFamily:"monospace",fontSize:"0.76rem",lineHeight:2.1,background:"var(--inset)",padding:"10px 14px",borderRadius:"var(--radius-sm)"}}>
+                      {[
+                        ["1A)","1A) Solving two step equations"],
+                        ["1B)","1B) Solving one step equations"],
+                        ["2.1","2.1 Algebra and expressions"],
+                        ["Q3a","Q3a) Calculate the gradient"],
+                        ["T4","Topic 4: Waves and light"],
+                        ["C5","Chapter 5: Forces"],
+                      ].map(([code,ex])=>(
+                        <div key={code} style={{display:"flex",gap:12}}>
+                          <span style={{color:"var(--blue)",fontWeight:700,minWidth:40}}>{code}</span>
+                          <span style={{color:"var(--text3)"}}>{ex}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="dim small">AI mode works on any text format — even free-flowing paragraphs.</div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </>
+        )}
+
+        {/* ACCOUNT */}
         {tab==="account"&&(
           <>
             <div className="topbar">
@@ -7444,9 +8278,7 @@ function NovaVista() {
           </>
         )}
 
-        {/* ─────────────────────────
-            SCHOOL SYNC
-        ───────────────────────── */}
+        {/* SCHOOLSYNC */}
         {tab==="school"&&(
           <>
             <div className="topbar">
@@ -7558,9 +8390,7 @@ function NovaVista() {
           </>
         )}
 
-        {/* ─────────────────────────
-            AI TRAINING
-        ───────────────────────── */}
+        {/* AITRAINING */}
         {tab==="training"&&(
           <>
             <div className="topbar">
@@ -7753,9 +8583,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
           </>
         )}
 
-        {/* ─────────────────────────
-            PRIVACY & DATA
-        ───────────────────────── */}
+        {/* PRIVACY&DATA */}
         {tab==="privacy"&&(
           <>
             <div className="topbar">
@@ -7782,7 +8610,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                 <div className="muted small" style={{marginTop:-8,marginBottom:4}}>Choose your AI provider. Each has different pricing, accuracy, and privacy trade-offs.</div>
 
                 {/* 5-way provider grid */}
-                <div className="api-mode-grid" style={{gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
+                <div className="api-mode-grid" style={{gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
                   {/* 1 — Claude */}
                   <div className={`api-mode-card ${apiMode==="cloud"?"selected-cloud":""}`} onClick={()=>setApiMode("cloud")} style={{padding:"12px 10px"}}>
                     <div className="api-mode-card-badge badge-cloud">Best</div>
@@ -7816,6 +8644,15 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                     <div className="api-mode-card-icon">⬡</div>
                     <div className="api-mode-card-title" style={{fontSize:"0.82rem"}}>Copilot</div>
                     <div className="api-mode-card-desc">GPT-4o via OpenAI. Powers Microsoft Copilot.</div>
+                  </div>
+                                    {/* 5 — Microsoft Azure OpenAI */}
+                  <div className={`api-mode-card ${apiMode==="microsoft"?"selected-cloud":""}`}
+                    style={apiMode==="microsoft"?{borderColor:"#0078d4",background:"rgba(0,120,212,0.12)",padding:"12px 10px"}:{padding:"12px 10px"}}
+                    onClick={()=>setApiMode("microsoft")}>
+                    <div className="api-mode-card-badge" style={{background:"rgba(0,120,212,0.15)",color:"#0078d4",border:"1px solid rgba(0,120,212,0.3)"}}>School</div>
+                    <div className="api-mode-card-icon">🪟</div>
+                    <div className="api-mode-card-title" style={{fontSize:"0.82rem"}}>Microsoft</div>
+                    <div className="api-mode-card-desc">{msAccount?`Signed in: ${msAccount.username}`:"Sign in with school email"}</div>
                   </div>
                   {/* 5 — Local */}
                   <div className={`api-mode-card ${apiMode==="local"?"selected-local":""}`} onClick={()=>setApiMode("local")} style={{padding:"12px 10px"}}>
@@ -7893,7 +8730,100 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                 )}
 
                 {/* ── Local / Ollama config ── */}
-                {apiMode==="local"&&(
+                              {/* ── Microsoft Azure OpenAI config ── */}
+              {apiMode==="microsoft"&&(
+                <div className="card card-pad col gap14" style={{background:"var(--inset)",border:"1px solid rgba(0,120,212,0.3)"}}>
+                  <div className="row-between" style={{alignItems:"center"}}>
+                    <div className="field-label" style={{color:"#0078d4",marginBottom:0}}>🪟 Microsoft Azure OpenAI</div>
+                    {msAccount
+                      ?<div className="row gap8" style={{alignItems:"center"}}>
+                          <div style={{fontSize:"0.78rem",color:"var(--text3)"}}>{msAccount.username}</div>
+                          <button className="btn btn-ghost btn-sm" style={{color:"var(--red)",fontSize:"0.74rem",padding:"2px 8px"}} onClick={msLogout}>Sign out</button>
+                        </div>
+                      :<button className="btn btn-blue btn-sm" disabled={msLoginBusy||!msClientId.trim()||!msEndpoint.trim()} onClick={msLogin}>
+                          {msLoginBusy?<><span className="spinner-sm"/>&nbsp;Signing in…</>:"Sign in with Microsoft"}
+                        </button>}
+                  </div>
+                  {msLoginError&&<div className="warn-box" style={{fontSize:"0.8rem"}}>⚠ {msLoginError}</div>}
+                  {msAccount&&(
+                    <div className="col gap10">
+                      <div className="blue-box" style={{fontSize:"0.79rem"}}>
+                        ✓ Signed in as <strong>{msAccount.name||msAccount.username}</strong>. Your school's Azure OpenAI service will be used — no extra API key needed.
+                      </div>
+                      <div className="g2 gap10">
+                        <div className="field">
+                          <div className="field-label">Azure OpenAI Endpoint</div>
+                          <input value={msEndpoint} onChange={e=>setMsEndpoint(e.target.value)}
+                            placeholder="https://your-school.openai.azure.com"
+                            style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                          <div className="dim small mt4">Ask your IT admin for this URL</div>
+                        </div>
+                        <div className="field">
+                          <div className="field-label">Deployment Name</div>
+                          <input value={msDeployment} onChange={e=>setMsDeployment(e.target.value)}
+                            placeholder="gpt-4o"
+                            style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                        </div>
+                      </div>
+                      <div className="g2 gap10">
+                        <div className="field">
+                          <div className="field-label">Client (App) ID</div>
+                          <input value={msClientId} onChange={e=>{ setMsClientId(e.target.value); msalRef.current=null; }}
+                            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                            style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                          <div className="dim small mt4">From Azure App Registration</div>
+                        </div>
+                        <div className="field">
+                          <div className="field-label">Tenant ID (optional)</div>
+                          <input value={msTenantId} onChange={e=>{ setMsTenantId(e.target.value); msalRef.current=null; }}
+                            placeholder="common (or your tenant ID)"
+                            style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                        </div>
+                      </div>
+                      {msEndpoint.trim()&&<div className="info-box">✓ Ready — papers will be marked using your school's Azure OpenAI ({msDeployment||"gpt-4o"}).</div>}
+                    </div>
+                  )}
+                  {!msAccount&&(
+                    <div className="col gap10">
+                      <div className="blue-box" style={{fontSize:"0.82rem"}}>
+                        Enter your school's Azure details below, then click <strong>Sign in with Microsoft</strong> to authenticate with your school email.
+                      </div>
+                      <div className="field">
+                        <div className="field-label">Azure OpenAI Endpoint <span className="dim small">(from IT admin)</span></div>
+                        <input value={msEndpoint} onChange={e=>setMsEndpoint(e.target.value)}
+                          placeholder="https://your-school.openai.azure.com"
+                          style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                      </div>
+                      <div className="field">
+                        <div className="field-label">Deployment Name</div>
+                        <input value={msDeployment} onChange={e=>setMsDeployment(e.target.value)}
+                          placeholder="gpt-4o"
+                          style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                      </div>
+                      <div className="field">
+                        <div className="field-label">Client (App) ID <span className="dim small">(from IT admin)</span></div>
+                        <input value={msClientId} onChange={e=>{ setMsClientId(e.target.value); msalRef.current=null; }}
+                          placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                          style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                      </div>
+                      <details style={{border:"1px solid rgba(0,120,212,0.2)",borderRadius:"var(--radius-sm)",padding:"10px 14px"}}>
+                        <summary style={{cursor:"pointer",fontWeight:600,fontSize:"0.82rem",color:"#0078d4",userSelect:"none"}}>
+                          ℹ️ Setup guide — what to ask your IT admin
+                        </summary>
+                        <div className="col gap6" style={{marginTop:10,fontSize:"0.79rem",lineHeight:1.75,color:"var(--text2)"}}>
+                          <div><strong>Step 1:</strong> IT creates an <em>App Registration</em> in Azure Entra ID. They give you the <strong>Client (App) ID</strong>.</div>
+                          <div><strong>Step 2:</strong> IT enables <em>Azure OpenAI Service</em> and gives you the <strong>Endpoint URL</strong> and <strong>Deployment name</strong> (e.g. gpt-4o).</div>
+                          <div><strong>Step 3:</strong> IT enables public client flows and adds the redirect URI: <code style={{background:"var(--inset)",padding:"1px 5px",borderRadius:3,userSelect:"all",fontSize:"0.75rem"}}>{typeof window!=="undefined"?window.location.href.split("?")[0]:"[this page URL]"}</code></div>
+                          <div><strong>Step 4:</strong> Teachers sign in with their school Microsoft email — no API key needed.</div>
+                          <div className="warn-box" style={{fontSize:"0.77rem",marginTop:4}}><strong>Note:</strong> Microsoft Copilot (M365) and Azure OpenAI are separate services. Your school needs Azure OpenAI enabled to use this integration.</div>
+                        </div>
+                      </details>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {apiMode==="local"&&(
                   <div className="card card-pad col gap12" style={{background:"var(--inset)",border:"1px solid var(--border)"}}>
                     <div className="field-label">Ollama Endpoint</div>
                     <div className="endpoint-field">
@@ -8119,7 +9049,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
 
                     {ocrProgress<5&&(
                       <div style={{fontSize:"0.72rem",color:"var(--text3)",fontStyle:"italic"}}>
-                        First-time download ~10MB — will be cached locally and never downloaded again
+                        First-time download ~4MB — cached locally, works offline forever
                       </div>
                     )}
                   </div>
@@ -8138,7 +9068,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
 
                 <div className="blue-box" style={{fontSize:"0.79rem"}}>
                   <strong>Recommended models for handwriting:</strong> Download{" "}
-                  <code style={{background:"rgba(108,143,245,0.15)",padding:"1px 5px",borderRadius:3}}>eng.traineddata</code> from tessdata_best for English.
+                  <code style={{background:"rgba(108,143,245,0.15)",padding:"1px 5px",borderRadius:3}}>eng.traineddata</code> from tessdata_fast for English (fastest). For best handwriting accuracy, use tessdata_best.
                   For maths symbols also try{" "}
                   <code style={{background:"rgba(108,143,245,0.15)",padding:"1px 5px",borderRadius:3}}>equ.traineddata</code> (equation recognition).
                   Models are stored in your browser and never uploaded anywhere.
@@ -8217,9 +9147,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
           </>
         )}
 
-        {/* ═══════════════════════════════════════════════════════
-            OFFLINE SMART TOOLS (all 12 features)
-        ═══════════════════════════════════════════════════════ */}
+        {/* OFFLINESMARTTOOLS(all12features) */}
         {tab==="offlinetools"&&offlineMode&&(
           <>
             <div className="topbar">
@@ -8247,6 +9175,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                   {id:"reports", label:"10. Parent Reports"},
                   {id:"predict", label:"11. Grade Predictor"},
                   {id:"planner", label:"12. Session Planner"},
+                  {id:"topics",  label:"13. Topic Extractor"},
                 ].map(t=>(
                   <button key={t.id} className={`ot-tab ${offlineToolsTab===t.id?"active":""}`}
                     onClick={()=>setOfflineToolsTab(t.id)}>{t.label}</button>
@@ -8769,13 +9698,206 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                 </div>
               )}
 
+              )}
+
+              {/* ── 13. Topic Extractor ─────────────────────────────────── */}
+              {offlineToolsTab==="topics"&&(
+                <div className="col gap14">
+                  {/* Header card */}
+                  <div className="card card-pad col gap12">
+                    <div className="row-between">
+                      <div className="card-title" style={{marginBottom:0}}>📋 Topic Extractor</div>
+                      <span className="pill pill-blue" style={{fontSize:"0.7rem"}}>Excel Ready</span>
+                    </div>
+                    <div className="muted small">
+                      Paste a mark scheme, syllabus, or question list. NovaVista detects topic codes
+                      like <strong>1A) 1B) 2.1 Q3a</strong> and builds a table ready to export to Excel.
+                      Works fully offline — no AI needed.
+                    </div>
+
+                    {/* Labels */}
+                    <div className="g2 gap10">
+                      <div className="field">
+                        <div className="field-label">Subject</div>
+                        <input value={topicSubject} onChange={e=>setTopicSubject(e.target.value)}
+                          placeholder="e.g. Maths, Biology, History" style={{width:"100%"}}/>
+                      </div>
+                      <div className="field">
+                        <div className="field-label">Year Group</div>
+                        <input value={topicYear} onChange={e=>setTopicYear(e.target.value)}
+                          placeholder="e.g. Year 10, KS4" style={{width:"100%"}}/>
+                      </div>
+                    </div>
+
+                    {/* Input area */}
+                    <div className="field">
+                      <div className="field-label">Paste Mark Scheme / Syllabus / Topic List</div>
+                      <textarea
+                        value={topicInput}
+                        onChange={e=>setTopicInput(e.target.value)}
+                        placeholder={`Paste anything here — examples:\n\n1A) Solving two step equations\n1B) Solving one step equations\n2A) Expanding single brackets\n2B) Factorising expressions\n\nOr paste a full mark scheme:\nQ1a) Calculate the speed...\nQ1b) Explain the effect...\n\nOr a syllabus:\n1.1 Number and place value\n1.2 Addition and subtraction`}
+                        style={{minHeight:180,fontFamily:"monospace",fontSize:"0.8rem",resize:"vertical"}}
+                      />
+                    </div>
+
+                    {/* Upload file alternative */}
+                    <div className="row gap8" style={{flexWrap:"wrap"}}>
+                      <label style={{cursor:"pointer"}}>
+                        <input type="file" accept=".txt,.csv,.docx" style={{display:"none"}}
+                          onChange={async e=>{
+                            const file=e.target.files?.[0];
+                            if(!file) return;
+                            if(file.name.endsWith(".docx") && typeof mammoth!=="undefined"){
+                              const ab=await file.arrayBuffer();
+                              const res=await mammoth.extractRawText({arrayBuffer:ab});
+                              setTopicInput(res.value);
+                            } else {
+                              const text=await file.text();
+                              setTopicInput(text);
+                            }
+                            e.target.value="";
+                          }}/>
+                        <div className="btn btn-ghost btn-sm" style={{cursor:"pointer"}}>📄 Upload .txt / .docx</div>
+                      </label>
+
+                      <button className="btn btn-ghost btn-sm"
+                        onClick={()=>setTopicInput(globalScheme||"")}
+                        disabled={!globalScheme}>
+                        ← Use Current Mark Scheme
+                      </button>
+
+                      <button className="btn btn-green btn-sm" style={{marginLeft:"auto"}}
+                        disabled={topicExtractBusy||!topicInput.trim()}
+                        onClick={()=>{
+                          setTopicExtractBusy(true);
+                          setTimeout(()=>{
+                            const rows=extractTopics(topicInput);
+                            setTopicRows(rows);
+                            setTopicExtractBusy(false);
+                          },60);
+                        }}>
+                        {topicExtractBusy?"Extracting…":"⚡ Extract Topics"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Results table */}
+                  {topicRows.length>0&&(
+                    <div className="card card-pad col gap12">
+                      <div className="row-between">
+                        <div>
+                          <div className="card-title" style={{marginBottom:2}}>
+                            {topicRows.length} topics extracted
+                          </div>
+                          <div className="dim small">{topicSubject&&<strong>{topicSubject}</strong>}{topicYear&&<> · {topicYear}</>}</div>
+                        </div>
+                        <div className="row gap8">
+                          <button className="btn btn-ghost btn-sm" onClick={()=>setTopicRows([])}>Clear</button>
+                          <button className="btn btn-ghost btn-sm" onClick={exportTopicsToCSV}>⬇ CSV</button>
+                          <button className="btn btn-blue btn-sm" onClick={exportTopicsToXLSX}>
+                            <Ic d={I.dl} size={14}/> Excel
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Editable table */}
+                      <div style={{overflowX:"auto",borderRadius:"var(--radius-sm)",border:"1px solid var(--border)"}}>
+                        <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.8rem"}}>
+                          <thead>
+                            <tr style={{background:"var(--inset)"}}>
+                              {["Code","Topic / Description","Section","Marks",""].map((h,i)=>(
+                                <th key={i} style={{padding:"8px 12px",textAlign:"left",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",whiteSpace:"nowrap",fontSize:"0.74rem"}}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {topicRows.map((row,ri)=>(
+                              <tr key={row.id} style={{borderBottom:"1px solid var(--border)"}}>
+                                <td style={{padding:"6px 12px",whiteSpace:"nowrap"}}>
+                                  <input value={row.code}
+                                    onChange={e=>setTopicRows(prev=>prev.map((r,i)=>i===ri?{...r,code:e.target.value}:r))}
+                                    style={{width:64,fontFamily:"monospace",fontWeight:700,fontSize:"0.8rem",background:"var(--inset)",border:"1px solid var(--border)",borderRadius:4,padding:"2px 6px",color:"var(--blue)"}}/>
+                                </td>
+                                <td style={{padding:"6px 12px"}}>
+                                  <input value={row.topic}
+                                    onChange={e=>setTopicRows(prev=>prev.map((r,i)=>i===ri?{...r,topic:e.target.value}:r))}
+                                    style={{width:"100%",minWidth:200,fontSize:"0.8rem",background:"transparent",border:"1px solid transparent",borderRadius:4,padding:"2px 4px"}}
+                                    onFocus={e=>e.target.style.borderColor="var(--blue)"}
+                                    onBlur={e=>e.target.style.borderColor="transparent"}/>
+                                </td>
+                                <td style={{padding:"6px 12px",color:"var(--text3)",fontSize:"0.74rem",whiteSpace:"nowrap"}}>
+                                  {row.section||<span style={{opacity:0.3}}>—</span>}
+                                </td>
+                                <td style={{padding:"6px 12px",textAlign:"center",color:"var(--text3)",fontSize:"0.78rem"}}>
+                                  <input value={row.marks}
+                                    onChange={e=>setTopicRows(prev=>prev.map((r,i)=>i===ri?{...r,marks:e.target.value}:r))}
+                                    style={{width:44,textAlign:"center",fontSize:"0.78rem",background:"var(--inset)",border:"1px solid var(--border)",borderRadius:4,padding:"2px 4px"}}
+                                    placeholder="—"/>
+                                </td>
+                                <td style={{padding:"6px 8px",textAlign:"center"}}>
+                                  <button onClick={()=>setTopicRows(prev=>prev.filter((_,i)=>i!==ri))}
+                                    style={{background:"none",border:"none",color:"var(--text4)",cursor:"pointer",fontSize:"0.9rem",lineHeight:1,padding:"0 4px"}}
+                                    title="Remove row">✕</button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Add row manually */}
+                      <button className="btn btn-ghost btn-sm" style={{alignSelf:"flex-start"}}
+                        onClick={()=>setTopicRows(prev=>[...prev,{
+                          id:Date.now(),code:`T${prev.length+1}`,
+                          topic:"",section:"",subject:topicSubject||subject||"",year:topicYear,marks:""
+                        }])}>
+                        + Add Row
+                      </button>
+
+                      {/* Preview export format */}
+                      <div className="blue-box" style={{fontSize:"0.78rem"}}>
+                        <strong>Excel export</strong> includes columns: Code · Topic / Description · Section ·
+                        Subject · Year Group · Marks Available. Click <strong>Excel</strong> to download
+                        the .xlsx file directly. Edit any cell in the table above before exporting.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Empty state */}
+                  {topicRows.length===0&&topicInput.trim()&&!topicExtractBusy&&(
+                    <div className="warn-box">No topic codes detected. Try pasting text that includes patterns
+                    like <code style={{fontSize:"0.8rem"}}>1A)</code> <code style={{fontSize:"0.8rem"}}>2.1</code> <code style={{fontSize:"0.8rem"}}>Q1a</code>
+                    or numbered/lettered lists.</div>
+                  )}
+
+                  {/* Tip card */}
+                  {topicRows.length===0&&!topicInput.trim()&&(
+                    <div className="card card-pad col gap10" style={{borderStyle:"dashed",opacity:0.75}}>
+                      <div style={{fontWeight:700,fontSize:"0.85rem",color:"var(--text2)"}}>💡 What this tool is for</div>
+                      <div className="muted small" style={{lineHeight:1.7}}>
+                        Turn any mark scheme, exam spec, or topic list into a clean Excel-ready table.
+                        Great for:<br/>
+                        <strong>• Curriculum mapping</strong> — extract all topics from a spec with codes<br/>
+                        <strong>• Lesson planning</strong> — paste your scheme of work, get a topic list<br/>
+                        <strong>• Gap analysis</strong> — pair with class results to see which topics need reteaching<br/>
+                        <strong>• Admin reports</strong> — export topic coverage tables for department records
+                      </div>
+                      <div style={{fontWeight:600,fontSize:"0.78rem",color:"var(--text3)"}}>Supported formats:</div>
+                      <div style={{fontFamily:"monospace",fontSize:"0.76rem",color:"var(--text3)",lineHeight:2,background:"var(--inset)",padding:"8px 12px",borderRadius:"var(--radius-sm)"}}>
+                        1A) Solving two step equations &nbsp;→&nbsp; Code: <strong style={{color:"var(--blue)"}}>1A</strong><br/>
+                        1B) Solving one step equations &nbsp;&nbsp;→&nbsp; Code: <strong style={{color:"var(--blue)"}}>1B</strong><br/>
+                        2.1 Algebra and expressions &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→&nbsp; Code: <strong style={{color:"var(--blue)"}}>2.1</strong><br/>
+                        Q3a) Calculate the gradient &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→&nbsp; Code: <strong style={{color:"var(--blue)"}}>Q3A</strong><br/>
+                        Topic 4: Waves and light &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→&nbsp; Code: <strong style={{color:"var(--blue)"}}>T4</strong>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
           </>
         )}
-
-        {/* ─────────────────────────
-            CLEAR DATA CONFIRM
-        ───────────────────────── */}
         {showClearConfirm&&(
           <div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)setShowClearConfirm(false);}}>
             <div className="modal">
@@ -8906,9 +10028,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
         </div>
       )}
 
-      {/* ═══════════════════════════
-          QUICK MARK → SAVE TO CLASS MODAL
-      ═══════════════════════════ */}
+      {/* QUICKMARK→SAVETOCLASSMODAL */}
       {showQmSaveModal&&(
         <div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)setShowQmSaveModal(false);}}>
           <div className="modal">
@@ -8959,9 +10079,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
         </div>
       )}
 
-      {/* ═══════════════════════════
-          SAVE TO CLASS MODAL
-      ═══════════════════════════ */}
+      {/* SAVETOCLASSMODAL */}
       {showSaveModal&&(
         <div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)setShowSaveModal(false);}}>
           <div className="modal">
