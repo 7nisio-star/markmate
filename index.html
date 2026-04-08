@@ -2256,17 +2256,38 @@ document.querySelectorAll('script[src]').forEach(function(s){
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-<!-- PDF.js for rendering PDF pages to canvas -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>if(typeof pdfjsLib!=='undefined'){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
-<!-- mammoth.js for DOCX → text extraction -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-<!-- Tesseract.js for local in-browser OCR (handwriting + print, no server needed) -->
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-
+<script>
+(function(){
+  var host=window.location.hostname.toLowerCase();
+  var ok=(!host||host==='localhost'||
+    host.endsWith('.claudeusercontent.com')||
+    host.endsWith('.github.io')||
+    host.endsWith('.sch.uk')||
+    host.endsWith('.edu')||
+    host.endsWith('.ac.uk')||
+    host.endsWith('.edu.au')||
+    host.endsWith('.school.nz')||
+    !!localStorage.getItem('nv_licence'));
+  if(!ok){
+    document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;font-family:system-ui;background:#0b0c0f;color:#f08080;text-align:center;gap:16px">'+
+      '<div style="font-size:2rem">🔒</div>'+
+      '<div style="font-size:1.1rem;font-weight:700">MarkMate</div>'+
+      '<div style="max-width:360px;font-size:0.88rem;color:#a0a0b0">This copy of MarkMate is not authorised for use on this domain.<br><br>Contact your school administrator or visit <strong>novavista.ai</strong> for a licence.</div>'+
+    '</div>';
+  }
+})();
+</script>
 <script type="text/babel">
+
+  /* ── Security notice ──────────────────────────────────────────────────────
+     This application is proprietary software.
+     © DM Venture & Insights. All rights reserved.
+     Unauthorised copying, distribution, or modification is prohibited.
+     Licence required for use outside authorised institutions.
+  ── */
 const { useState, useRef, useEffect, useCallback } = React;
 
 /* ── Icon helper ───────────────────────────────────────── */
@@ -2418,10 +2439,10 @@ function BatchSummary({ done, batchPaper, subject, pctColor, initials, genFeedba
         </div>
       </div>
     </div>
+
+/* ── SchoolAnalysis ── */
   );
 }
-
-/* ── SchoolAnalysis: extracted to avoid IIFE brace issues ── */
 function SchoolAnalysis({ analysis, pctColor }) {
   if (!analysis) return null;
   return (
@@ -2664,6 +2685,8 @@ function NovaVista() {
   const [endpointTestResult,setEndpointTestResult] = useState(null); // null | "ok" | "fail"
   const [endpointTesting,setEndpointTesting] = useState(false);
   const [showClearConfirm,setShowClearConfirm] = useState(false);
+  const [showTerms,       setShowTerms]          = useState(false);
+  const [termsAccepted,   setTermsAccepted]      = useState(() => !!localStorage.getItem("nv_terms_v1"));
 
   // Learning from corrections
   // Each entry: { id, timestamp, subject, question, markScheme,
@@ -2761,11 +2784,15 @@ function NovaVista() {
         setPinUnlocked(true); // new user, no PIN yet
       }
     } catch { setPinUnlocked(true); }
+    // First-run terms check
+    if (!localStorage.getItem("nv_terms_v1")) { setTimeout(()=>setShowTerms(true),800); }
     try {
       const raw = localStorage.getItem("nv_prefs");
       if (raw) {
         const p=JSON.parse(raw);
         if(p.apiMode)      setApiMode(p.apiMode);
+        // Show T&C on first run
+        if (!localStorage.getItem("nv_terms_v1")) setShowTerms(true);
         if(p.offlineMode!==undefined) setOfflineMode(p.offlineMode);
         if(p.localEndpoint)setLocalEndpoint(p.localEndpoint);
         if(p.localModel)   setLocalModel(p.localModel);
@@ -2886,9 +2913,15 @@ function NovaVista() {
 
   const computeChecksum = (parts) => {
     const str = parts.join("-");
-    let sum = 0;
-    for (let i=0; i<str.length; i++) sum += str.charCodeAt(i);
-    return String(sum % 99).padStart(2,"0");
+    let h = 1314278733;
+    for (let i=0; i<str.length; i++) {
+      h = Math.imul(h ^ str.charCodeAt(i), 0x9e3779b9);
+      h ^= (h >>> 16);
+    }
+    const n = ((h >>> 0) % 9801);  // 0..9800 → two base-99 digits
+    const d1 = Math.floor(n / 99).toString(36).toUpperCase();
+    const d2 = (n % 99).toString(36).toUpperCase();
+    return (d1+d2).padStart(3,"0");
   };
 
   const validateLicence = useCallback((raw) => {
@@ -2939,9 +2972,8 @@ function NovaVista() {
   }, []);
 
   // Convenience: is School Sync unlocked?
-  // DEMO MODE — licence checks disabled
-  const syncUnlocked = true;
-  const anyLicence   = true;
+  const syncUnlocked = licenceStatus === "active" && (licenceTier === "Department" || licenceTier === "School");
+  const anyLicence   = licenceStatus === "active";
 
   // ── Generate a licence key (admin/you only — for issuing to schools) ──────
   const generateKey = useCallback((tier, year, month, school) => {
@@ -3130,6 +3162,18 @@ function NovaVista() {
   useEffect(() => { localStorage.setItem("nv_ms_endpoint",   msEndpoint);   }, [msEndpoint]);
   useEffect(() => { localStorage.setItem("nv_ms_deployment", msDeployment); }, [msDeployment]);
   useEffect(() => { localStorage.setItem("nv_ms_api_ver",    msApiVersion); }, [msApiVersion]);
+
+  const acceptTerms = useCallback(() => {
+    localStorage.setItem("nv_terms_v1", new Date().toISOString());
+    setTermsAccepted(true);
+    setShowTerms(false);
+  }, []);
+
+  const revokeTerms = useCallback(() => {
+    localStorage.removeItem("nv_terms_v1");
+    setTermsAccepted(false);
+    setShowTerms(true);
+  }, []);
 
   const callAPI = useCallback(async(messages, system, maxTokens=1500) => {
 
@@ -6104,6 +6148,237 @@ Rules:
         )}
 
         {/* QUICKMARK */}
+        
+
+        {/* LIVEMARK */}
+        {tab==="mark"&&(
+          <>
+            <div className="topbar">
+              <div className="page-header">
+                <div>
+                  <div className="page-title">Live Mark</div>
+                  <div className="page-sub">Point your camera at a student's paper — capture to mark, or enable Answer Overlay to see hints live</div>
+                </div>
+                <div className="row gap8">
+                  <span className={`pill ${cameraActive?"pill-green":"pill-ghost"}`}>
+                    <span className={`dot ${cameraActive?"dot-live":"dot-red"}`}/>
+                    {cameraActive?"Live":"Off"}
+                  </span>
+                  {overlayOn&&<span className="pill pill-green" style={{fontSize:"0.72rem"}}>🔍 Overlay ON</span>}
+                </div>
+              </div>
+            </div>
+            <div className="content">
+              <div className="g2 gap16" style={{alignItems:"start"}}>
+                <div className="col gap16">
+                  <div className="card card-pad col gap14">
+                    <div className="row-between">
+                      <div className="card-title" style={{marginBottom:0}}>Visualiser</div>
+                    </div>
+
+                    <div className="viewfinder">
+                      {cameraActive
+                        ?<>
+                           <video ref={videoRef} autoPlay playsInline muted style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                           {/* Edge/document boundary detection canvas */}
+                           <canvas ref={edgeCanvasRef} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none"}}/>
+                           <div className="guides"><div className="guide tl"/><div className="guide tr"/><div className="guide bl"/><div className="guide br"/></div>
+
+                           {/* ── Answer Overlay Layer — shown only after OCR completes ── */}
+                           {overlayOn&&liveOcrDone&&(
+                             <div className="vf-overlay-layer">
+                               <div className="vf-scan-line"/>
+                               {(()=>{
+                                 const selQ = parsedSchemeQs.find(q=>q.id===overlayQId);
+                                 const hints = overlayQId==="all"
+                                   ? parsedSchemeQs.flatMap(q=>q.hints).slice(0,8)
+                                   : (selQ?.hints||[]);
+                                 const qLabel = overlayQId==="all"?"All Questions":(selQ?.label||overlayQId);
+                                 return(
+                                   <>
+                                     <div className="vf-overlay-q-label">{qLabel}</div>
+                                     <div className="vf-overlay-badge" style={{top:10,right:10}}>
+                                       {hints.length} mark point{hints.length!==1?"s":""}
+                                     </div>
+                                     {liveOcrText&&(
+                                       <div style={{position:"absolute",bottom:48,left:8,right:8,background:"rgba(0,0,0,0.7)",borderRadius:6,padding:"6px 8px",fontSize:"0.7rem",color:"#e8e8f0",lineHeight:1.4,maxHeight:80,overflow:"hidden"}}>
+                                         <span style={{color:"#3dd68c",fontWeight:700}}>📖 Paper: </span>{liveOcrText.slice(0,200)}{liveOcrText.length>200?"…":""}
+                                       </div>
+                                     )}
+                                     {!globalScheme&&(
+                                       <div className="vf-overlay-no-scheme">⚠ Add a mark scheme in Setup to see hints</div>
+                                     )}
+                                     {globalScheme&&hints.length===0&&(
+                                       <div className="vf-overlay-no-hints">
+                                         No criteria found for {qLabel}<br/>
+                                         <span style={{fontSize:"0.72rem",opacity:0.7}}>Check mark scheme format</span>
+                                       </div>
+                                     )}
+                                     {hints.map((hint,i)=>(
+                                       <div key={i} className="vf-overlay-hint"
+                                         style={{left:hint.left, top:hint.top, borderColor:hint.col}}>
+                                         <div className="hint-code" style={{color:hint.col}}>{hint.code}</div>
+                                         <div className="hint-points">{hint.text}</div>
+                                       </div>
+                                     ))}
+                                   </>
+                                 );
+                               })()}
+                             </div>
+                           )}
+
+                           {/* OCR loading spinner — shown while reading paper */}
+                           {overlayOn&&liveOcrLoading&&(
+                             <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"rgba(13,11,20,0.72)",gap:10}}>
+                               <div className="spinner-sm" style={{width:28,height:28,borderWidth:3}}/>
+                               <div style={{color:"#e8e8f0",fontSize:"0.82rem",fontWeight:600}}>Reading paper…</div>
+                               <div style={{color:"#9b9aaa",fontSize:"0.72rem"}}>Scanning for questions & answers</div>
+                             </div>
+                           )}
+                         </>
+                        :<div className="viewfinder-idle"><Ic d={I.camera} size={52}/><p>Camera not started</p></div>}
+                    </div>
+
+                    <canvas ref={canvasRef} style={{display:"none"}}/>
+
+                    <div className="row gap10" style={{justifyContent:"center",flexWrap:"wrap"}}>
+                      {!cameraActive
+                        ?<button className="btn btn-red" onClick={startCamera}><Ic d={I.camera} size={15}/> Start Camera</button>
+                        :<><button className="btn btn-ghost" onClick={stopCamera}>Stop</button>
+                           <div className="capture-ring" onClick={async()=>{
+                             const img=captureFrame();
+                             if(img){setStitchedImage(img);setScannedPages([img]);setReviewMode("review");}
+                           }}>
+                             <div className="capture-core"><Ic d={I.circle} size={20} color="white" fill="white"/></div>
+                           </div>
+                           <span style={{fontSize:"0.75rem",color:"var(--text3)"}}>Capture & Mark</span></>}
+                    </div>
+                  </div>
+
+                  {/* ── Answer Overlay Toggle ── */}
+                  <div
+                    className={`overlay-toggle ${overlayOn?"active":""}`}
+                    onClick={async()=>{
+                      const next=!overlayOn;
+                      setOverlayOn(next);
+                      if(next&&cameraActive&&!liveOcrDone&&!liveOcrLoading){
+                        // OCR the paper FIRST before showing overlay
+                        await runLiveOcr();
+                      }
+                    }}>
+                    <div style={{flex:1}}>
+                      <div className="overlay-toggle-label">
+                        {liveOcrLoading?"⏳ Reading paper…":"🔍 Answer Overlay"}
+                      </div>
+                      <div className="overlay-toggle-sub">
+                        {overlayOn
+                          ? liveOcrDone
+                            ?"Active — camera read paper first, now showing mark criteria"
+                            :"Reading paper before showing overlay…"
+                          :"Toggle on — camera reads the paper first, then overlays the mark scheme"}
+                      </div>
+                    </div>
+                    <div className={`toggle-switch ${overlayOn?"on":""}`}/>
+                  </div>
+
+                  {/* Re-read paper button */}
+                  {overlayOn&&liveOcrDone&&cameraActive&&(
+                    <button className="btn btn-ghost btn-sm" style={{alignSelf:"flex-start"}} onClick={runLiveOcr}>
+                      <Ic d={I.refresh} size={13}/> Re-read paper
+                    </button>
+                  )}
+
+                  {/* ── Question Selector ── */}
+                  {overlayOn&&(
+                    <>
+                      {!globalScheme?(
+                        <div className="warn-box">
+                          No mark scheme set — <button className="btn btn-ghost btn-sm" style={{display:"inline",padding:"0 6px"}}
+                            onClick={()=>{setTab("setup");setSidebarOpen(false);}}>add one in Setup →</button>
+                        </div>
+                      ):parsedSchemeQs.length===0?(
+                        <div className="info-box">Parsing mark scheme…</div>
+                      ):(
+                        <div className="col gap8">
+                          <div className="overlay-q-bar">
+                            <span className="overlay-q-bar-label">Question:</span>
+                            <button
+                              className={`overlay-q-btn all ${overlayQId==="all"?"active":""}`}
+                              onClick={()=>setOverlayQId("all")}>
+                              All
+                            </button>
+                            {parsedSchemeQs.map(q=>(
+                              <button
+                                key={q.id}
+                                className={`overlay-q-btn ${overlayQId===q.id?"active":""}`}
+                                onClick={()=>setOverlayQId(q.id)}>
+                                {q.label}
+                              </button>
+                            ))}
+                          </div>
+                          {(()=>{
+                            const selQ = parsedSchemeQs.find(q=>q.id===overlayQId);
+                            const allHints = parsedSchemeQs.flatMap(q=>q.hints);
+                            const hints = overlayQId==="all" ? allHints.slice(0,8) : (selQ?.hints||[]);
+                            return(
+                              <div className="card card-pad col gap8" style={{background:"var(--inset)",padding:"10px 14px"}}>
+                                <div className="row-between">
+                                  <div className="field-label" style={{marginBottom:0}}>
+                                    {overlayQId==="all"?"All criteria":"Criteria for "+(selQ?.label||overlayQId)}
+                                  </div>
+                                  <span className="pill pill-ghost small">{hints.length} mark point{hints.length!==1?"s":""}</span>
+                                </div>
+                                {hints.length===0?(
+                                  <div className="dim small">No mark points found for this question — check your mark scheme formatting.</div>
+                                ):(
+                                  hints.map((h,i)=>(
+                                    <div key={i} className="row gap8" style={{fontSize:"0.8rem",alignItems:"flex-start",paddingBottom:4,borderBottom:i<hints.length-1?"1px solid var(--border)":"none"}}>
+                                      <span style={{fontWeight:800,color:h.col,minWidth:28,fontSize:"0.72rem",paddingTop:1}}>{h.code}</span>
+                                      <span style={{color:"var(--text2)",lineHeight:1.5}}>{h.text}</span>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            );
+                          })()}
+                          <div className="dim small" style={{paddingLeft:4}}>
+                            💡 Tap a question above, then hold the matching section of the student's paper under the camera. The floating labels on the video show exactly what to look for.
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div className="col gap16">
+                  <div className="card card-pad">
+                    <div className="card-title">How to use</div>
+                    <ol style={{color:"var(--text2)",fontSize:"0.85rem",lineHeight:2.1,paddingLeft:20}}>
+                      <li>Set your marking scheme in <strong>Setup</strong></li>
+                      <li>Click <strong>Start Camera</strong> and allow access</li>
+                      <li>Position camera above the student's paper</li>
+                      <li><strong>Optional:</strong> Toggle <em>Answer Overlay</em> to see scheme hints live</li>
+                      <li>Press the capture button to send to AI — or mark yourself using the hints</li>
+                    </ol>
+                  </div>
+                  <div className="card card-pad col gap10">
+                    <div className="card-title">Current Setup</div>
+                    {[["Subject",subject||"—"],["Total Marks",totalMarks||"—"],["Scheme",schemeReady?"✓ Ready":"⚠ Missing"]].map(([k,v])=>(
+                      <div key={k} className="row-between" style={{fontSize:"0.84rem"}}>
+                        <span className="dim">{k}</span>
+                        <strong style={{color:k==="Scheme"?(schemeReady?"var(--green)":"var(--red)"):"var(--text)"}}>{v}</strong>
+                      </div>
+                    ))}
+                    <div className="sep"/>
+                    <button className="btn btn-ghost btn-sm" onClick={()=>{setTab("setup");setSidebarOpen(false);}}>Edit Setup →</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* SCAN */}
         {tab==="quick"&&(
           <>
             <div className="topbar">
@@ -6376,236 +6651,6 @@ Rules:
             </div>
           </>
         )}
-
-        {/* LIVEMARK */}
-        {tab==="mark"&&(
-          <>
-            <div className="topbar">
-              <div className="page-header">
-                <div>
-                  <div className="page-title">Live Mark</div>
-                  <div className="page-sub">Point your camera at a student's paper — capture to mark, or enable Answer Overlay to see hints live</div>
-                </div>
-                <div className="row gap8">
-                  <span className={`pill ${cameraActive?"pill-green":"pill-ghost"}`}>
-                    <span className={`dot ${cameraActive?"dot-live":"dot-red"}`}/>
-                    {cameraActive?"Live":"Off"}
-                  </span>
-                  {overlayOn&&<span className="pill pill-green" style={{fontSize:"0.72rem"}}>🔍 Overlay ON</span>}
-                </div>
-              </div>
-            </div>
-            <div className="content">
-              <div className="g2 gap16" style={{alignItems:"start"}}>
-                <div className="col gap16">
-                  <div className="card card-pad col gap14">
-                    <div className="row-between">
-                      <div className="card-title" style={{marginBottom:0}}>Visualiser</div>
-                    </div>
-
-                    <div className="viewfinder">
-                      {cameraActive
-                        ?<>
-                           <video ref={videoRef} autoPlay playsInline muted style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                           {/* Edge/document boundary detection canvas */}
-                           <canvas ref={edgeCanvasRef} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none"}}/>
-                           <div className="guides"><div className="guide tl"/><div className="guide tr"/><div className="guide bl"/><div className="guide br"/></div>
-
-                           {/* ── Answer Overlay Layer — shown only after OCR completes ── */}
-                           {overlayOn&&liveOcrDone&&(
-                             <div className="vf-overlay-layer">
-                               <div className="vf-scan-line"/>
-                               {(()=>{
-                                 const selQ = parsedSchemeQs.find(q=>q.id===overlayQId);
-                                 const hints = overlayQId==="all"
-                                   ? parsedSchemeQs.flatMap(q=>q.hints).slice(0,8)
-                                   : (selQ?.hints||[]);
-                                 const qLabel = overlayQId==="all"?"All Questions":(selQ?.label||overlayQId);
-                                 return(
-                                   <>
-                                     <div className="vf-overlay-q-label">{qLabel}</div>
-                                     <div className="vf-overlay-badge" style={{top:10,right:10}}>
-                                       {hints.length} mark point{hints.length!==1?"s":""}
-                                     </div>
-                                     {liveOcrText&&(
-                                       <div style={{position:"absolute",bottom:48,left:8,right:8,background:"rgba(0,0,0,0.7)",borderRadius:6,padding:"6px 8px",fontSize:"0.7rem",color:"#e8e8f0",lineHeight:1.4,maxHeight:80,overflow:"hidden"}}>
-                                         <span style={{color:"#3dd68c",fontWeight:700}}>📖 Paper: </span>{liveOcrText.slice(0,200)}{liveOcrText.length>200?"…":""}
-                                       </div>
-                                     )}
-                                     {!globalScheme&&(
-                                       <div className="vf-overlay-no-scheme">⚠ Add a mark scheme in Setup to see hints</div>
-                                     )}
-                                     {globalScheme&&hints.length===0&&(
-                                       <div className="vf-overlay-no-hints">
-                                         No criteria found for {qLabel}<br/>
-                                         <span style={{fontSize:"0.72rem",opacity:0.7}}>Check mark scheme format</span>
-                                       </div>
-                                     )}
-                                     {hints.map((hint,i)=>(
-                                       <div key={i} className="vf-overlay-hint"
-                                         style={{left:hint.left, top:hint.top, borderColor:hint.col}}>
-                                         <div className="hint-code" style={{color:hint.col}}>{hint.code}</div>
-                                         <div className="hint-points">{hint.text}</div>
-                                       </div>
-                                     ))}
-                                   </>
-                                 );
-                               })()}
-                             </div>
-                           )}
-
-                           {/* OCR loading spinner — shown while reading paper */}
-                           {overlayOn&&liveOcrLoading&&(
-                             <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"rgba(13,11,20,0.72)",gap:10}}>
-                               <div className="spinner-sm" style={{width:28,height:28,borderWidth:3}}/>
-                               <div style={{color:"#e8e8f0",fontSize:"0.82rem",fontWeight:600}}>Reading paper…</div>
-                               <div style={{color:"#9b9aaa",fontSize:"0.72rem"}}>Scanning for questions & answers</div>
-                             </div>
-                           )}
-                         </>
-                        :<div className="viewfinder-idle"><Ic d={I.camera} size={52}/><p>Camera not started</p></div>}
-                    </div>
-
-                    <canvas ref={canvasRef} style={{display:"none"}}/>
-
-                    <div className="row gap10" style={{justifyContent:"center",flexWrap:"wrap"}}>
-                      {!cameraActive
-                        ?<button className="btn btn-red" onClick={startCamera}><Ic d={I.camera} size={15}/> Start Camera</button>
-                        :<><button className="btn btn-ghost" onClick={stopCamera}>Stop</button>
-                           <div className="capture-ring" onClick={async()=>{
-                             const img=captureFrame();
-                             if(img){setStitchedImage(img);setScannedPages([img]);setReviewMode("review");}
-                           }}>
-                             <div className="capture-core"><Ic d={I.circle} size={20} color="white" fill="white"/></div>
-                           </div>
-                           <span style={{fontSize:"0.75rem",color:"var(--text3)"}}>Capture & Mark</span></>}
-                    </div>
-                  </div>
-
-                  {/* ── Answer Overlay Toggle ── */}
-                  <div
-                    className={`overlay-toggle ${overlayOn?"active":""}`}
-                    onClick={async()=>{
-                      const next=!overlayOn;
-                      setOverlayOn(next);
-                      if(next&&cameraActive&&!liveOcrDone&&!liveOcrLoading){
-                        // OCR the paper FIRST before showing overlay
-                        await runLiveOcr();
-                      }
-                    }}>
-                    <div style={{flex:1}}>
-                      <div className="overlay-toggle-label">
-                        {liveOcrLoading?"⏳ Reading paper…":"🔍 Answer Overlay"}
-                      </div>
-                      <div className="overlay-toggle-sub">
-                        {overlayOn
-                          ? liveOcrDone
-                            ?"Active — camera read paper first, now showing mark criteria"
-                            :"Reading paper before showing overlay…"
-                          :"Toggle on — camera reads the paper first, then overlays the mark scheme"}
-                      </div>
-                    </div>
-                    <div className={`toggle-switch ${overlayOn?"on":""}`}/>
-                  </div>
-
-                  {/* Re-read paper button */}
-                  {overlayOn&&liveOcrDone&&cameraActive&&(
-                    <button className="btn btn-ghost btn-sm" style={{alignSelf:"flex-start"}} onClick={runLiveOcr}>
-                      <Ic d={I.refresh} size={13}/> Re-read paper
-                    </button>
-                  )}
-
-                  {/* ── Question Selector ── */}
-                  {overlayOn&&(
-                    <>
-                      {!globalScheme?(
-                        <div className="warn-box">
-                          No mark scheme set — <button className="btn btn-ghost btn-sm" style={{display:"inline",padding:"0 6px"}}
-                            onClick={()=>{setTab("setup");setSidebarOpen(false);}}>add one in Setup →</button>
-                        </div>
-                      ):parsedSchemeQs.length===0?(
-                        <div className="info-box">Parsing mark scheme…</div>
-                      ):(
-                        <div className="col gap8">
-                          <div className="overlay-q-bar">
-                            <span className="overlay-q-bar-label">Question:</span>
-                            <button
-                              className={`overlay-q-btn all ${overlayQId==="all"?"active":""}`}
-                              onClick={()=>setOverlayQId("all")}>
-                              All
-                            </button>
-                            {parsedSchemeQs.map(q=>(
-                              <button
-                                key={q.id}
-                                className={`overlay-q-btn ${overlayQId===q.id?"active":""}`}
-                                onClick={()=>setOverlayQId(q.id)}>
-                                {q.label}
-                              </button>
-                            ))}
-                          </div>
-                          {(()=>{
-                            const selQ = parsedSchemeQs.find(q=>q.id===overlayQId);
-                            const allHints = parsedSchemeQs.flatMap(q=>q.hints);
-                            const hints = overlayQId==="all" ? allHints.slice(0,8) : (selQ?.hints||[]);
-                            return(
-                              <div className="card card-pad col gap8" style={{background:"var(--inset)",padding:"10px 14px"}}>
-                                <div className="row-between">
-                                  <div className="field-label" style={{marginBottom:0}}>
-                                    {overlayQId==="all"?"All criteria":"Criteria for "+(selQ?.label||overlayQId)}
-                                  </div>
-                                  <span className="pill pill-ghost small">{hints.length} mark point{hints.length!==1?"s":""}</span>
-                                </div>
-                                {hints.length===0?(
-                                  <div className="dim small">No mark points found for this question — check your mark scheme formatting.</div>
-                                ):(
-                                  hints.map((h,i)=>(
-                                    <div key={i} className="row gap8" style={{fontSize:"0.8rem",alignItems:"flex-start",paddingBottom:4,borderBottom:i<hints.length-1?"1px solid var(--border)":"none"}}>
-                                      <span style={{fontWeight:800,color:h.col,minWidth:28,fontSize:"0.72rem",paddingTop:1}}>{h.code}</span>
-                                      <span style={{color:"var(--text2)",lineHeight:1.5}}>{h.text}</span>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            );
-                          })()}
-                          <div className="dim small" style={{paddingLeft:4}}>
-                            💡 Tap a question above, then hold the matching section of the student's paper under the camera. The floating labels on the video show exactly what to look for.
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                <div className="col gap16">
-                  <div className="card card-pad">
-                    <div className="card-title">How to use</div>
-                    <ol style={{color:"var(--text2)",fontSize:"0.85rem",lineHeight:2.1,paddingLeft:20}}>
-                      <li>Set your marking scheme in <strong>Setup</strong></li>
-                      <li>Click <strong>Start Camera</strong> and allow access</li>
-                      <li>Position camera above the student's paper</li>
-                      <li><strong>Optional:</strong> Toggle <em>Answer Overlay</em> to see scheme hints live</li>
-                      <li>Press the capture button to send to AI — or mark yourself using the hints</li>
-                    </ol>
-                  </div>
-                  <div className="card card-pad col gap10">
-                    <div className="card-title">Current Setup</div>
-                    {[["Subject",subject||"—"],["Total Marks",totalMarks||"—"],["Scheme",schemeReady?"✓ Ready":"⚠ Missing"]].map(([k,v])=>(
-                      <div key={k} className="row-between" style={{fontSize:"0.84rem"}}>
-                        <span className="dim">{k}</span>
-                        <strong style={{color:k==="Scheme"?(schemeReady?"var(--green)":"var(--red)"):"var(--text)"}}>{v}</strong>
-                      </div>
-                    ))}
-                    <div className="sep"/>
-                    <button className="btn btn-ghost btn-sm" onClick={()=>{setTab("setup");setSidebarOpen(false);}}>Edit Setup →</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* SCAN */}
         {tab==="scan"&&(
           <>
             <div className="topbar">
@@ -8274,6 +8319,21 @@ Rules:
                   <div className="dim small">Share the generated key with the school. They enter it in the Account → Licence section. It validates offline — no server call needed.</div>
                 </div>
               )}
+              {/* Terms & Data Privacy */}
+              <div className="card card-pad col gap10" style={{border:"1px solid rgba(108,143,245,0.2)"}}>
+                <div className="row-between">
+                  <div>
+                    <div className="card-title" style={{marginBottom:2}}>📋 Terms &amp; Data Privacy</div>
+                    <div className="dim small">{termsAccepted?"Accepted — "+new Date(localStorage.getItem("nv_terms_v1")||"").toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"}):"Not yet accepted"}</div>
+                  </div>
+                  <div className="row gap8">
+                    <button className="btn btn-ghost btn-sm" onClick={()=>setShowTerms(true)}>View Terms</button>
+                    {termsAccepted&&<button className="btn btn-ghost btn-sm" style={{color:"var(--red)"}} onClick={revokeTerms}>Revoke</button>}
+                  </div>
+                </div>
+                {!termsAccepted&&<div className="warn-box" style={{fontSize:"0.8rem"}}>⚠ You must accept the terms to use NovaVista.</div>}
+              </div>
+
             </div>
           </>
         )}
@@ -9898,6 +9958,63 @@ ollama create novavista-marker -f novavista-Modelfile</div>
             </div>
           </>
         )}
+
+        {showTerms&&(
+          <div className="modal-backdrop" style={{zIndex:9999,backdropFilter:"blur(8px)"}}>
+            <div className="modal" style={{maxWidth:600,maxHeight:"85vh",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+              <div className="modal-title" style={{fontSize:"1.1rem"}}>📋 NovaVista — Terms of Use &amp; Data Privacy</div>
+              <div className="modal-sub" style={{marginBottom:8}}>Please read and accept before using NovaVista.</div>
+              <div style={{overflowY:"auto",flex:1,padding:"0 2px",fontSize:"0.82rem",lineHeight:1.75,color:"var(--text2)"}}>
+                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:8}}>1. Who We Are</div>
+                <div>NovaVista is developed by DM Venture &amp; Insights. Queries: <strong>hello@novavista.ai</strong></div>
+                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>2. What This App Does</div>
+                <div>NovaVista helps teachers mark student papers using AI. Paper images and mark schemes are sent to your chosen AI provider for processing.</div>
+                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>3. Data We Process</div>
+                <div style={{paddingLeft:12,borderLeft:"2px solid var(--border)"}}>
+                  <div>• <strong>Student work images</strong> — sent to AI provider for marking. Not stored by us.</div>
+                  <div>• <strong>Teacher profile</strong> — name, school, subject, PIN — stored locally on your device only.</div>
+                  <div>• <strong>Class rosters &amp; results</strong> — stored locally on your device only.</div>
+                </div>
+                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>4. Legal Basis (UK GDPR)</div>
+                <div>Processing is carried out under UK GDPR Article 6(1)(e) — public task in education. By accepting you confirm:</div>
+                <div style={{paddingLeft:12,borderLeft:"2px solid var(--border)",marginTop:6}}>
+                  <div>• You are an authorised teacher or staff member at your institution</div>
+                  <div>• Your school has been informed that AI tools are used for marking assistance</div>
+                  <div>• You will not submit images containing sensitive special-category data</div>
+                  <div>• Results are AI-assisted and must be reviewed by a qualified teacher</div>
+                </div>
+                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>5. AI Provider Data Processing</div>
+                <div>Images are sent to your selected AI provider under their own privacy policy. For maximum UK GDPR compliance, use <strong>Microsoft Azure OpenAI</strong> (your school's instance) or <strong>Local mode</strong>.</div>
+                <div style={{paddingLeft:12,borderLeft:"2px solid var(--border)",marginTop:6}}>
+                  <div>• Anthropic: anthropic.com/privacy &nbsp;·&nbsp; Google: policies.google.com/privacy</div>
+                  <div>• OpenAI: openai.com/policies/privacy-policy &nbsp;·&nbsp; Microsoft: microsoft.com/en-gb/privacy</div>
+                </div>
+                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>6. Data Retention</div>
+                <div>All data is held <strong>on your device only</strong> in browser localStorage. Delete anytime via <em>Privacy &amp; Data → Danger Zone → Clear All Data</em>. No data is sent to DM Venture &amp; Insights servers.</div>
+                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>7. Your Rights (UK GDPR)</div>
+                <div>You have rights to access, rectification, erasure, portability, and objection. Since all data is local, exercise most rights by clearing browser data. For AI-provider data, contact the relevant provider.</div>
+                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>8. Safeguarding</div>
+                <div>Do not upload images containing student faces, full names on their own, or any safeguarding-sensitive content. NovaVista is for marking written academic work only.</div>
+                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>9. Licence</div>
+                <div>NovaVista is licenced software. Unauthorised copying, redistribution, or reverse engineering is prohibited under UK copyright law (CDPA 1988).</div>
+                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>10. Changes to These Terms</div>
+                <div>Material changes will require re-acceptance on next use. Last updated: April 2026.</div>
+                <div style={{marginTop:16,padding:"10px 14px",background:"rgba(108,143,245,0.08)",border:"1px solid rgba(108,143,245,0.2)",borderRadius:"var(--radius-sm)",fontSize:"0.79rem"}}>
+                  By clicking <strong>Accept &amp; Continue</strong> you confirm you are an authorised member of staff, you have read these terms, and you agree to use NovaVista in accordance with your school's data protection policy and UK GDPR obligations.
+                </div>
+              </div>
+              <div className="row gap10" style={{marginTop:14,paddingTop:12,borderTop:"1px solid var(--border)"}}>
+                <button className="btn btn-ghost btn-sm" style={{flex:1}} onClick={()=>setShowTerms(false)} disabled={!termsAccepted}>
+                  {termsAccepted?"Close":"Cancel"}
+                </button>
+                <button className="btn btn-blue" style={{flex:2}} onClick={acceptTerms}>
+                  ✓ Accept &amp; Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showClearConfirm&&(
           <div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)setShowClearConfirm(false);}}>
             <div className="modal">
@@ -10169,16 +10286,19 @@ ollama create novavista-marker -f novavista-Modelfile</div>
         pointerEvents:"none", userSelect:"none",
         flexWrap:"wrap", gap:"4px",
       }}>
-        <span>© DMA 2026 — NovaVista AI Paper Marking</span>
+        <span>© DM Venture &amp; Insights 2026 — NovaVista · Licenced software · Unauthorised use prohibited</span>
         <span style={{color:"rgba(255,255,255,0.15)"}}>All rights reserved · For educational use only</span>
       </div>
+
 
     </div>
   );
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<NovaVista/>);
+</script>
 
+<script>
 // Hide the boot screen now that React has mounted
 (function(){
   var boot = document.getElementById('boot-screen');
@@ -10194,158 +10314,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(<NovaVista/>);
 })();
 </script>
 
-<!-- ═══════════════════════════════════════════════════════
-     PWA SERVICE WORKER REGISTRATION
-═══════════════════════════════════════════════════════════ -->
-<script>
-(function() {
-  'use strict';
-
-  // ── Register Service Worker ──────────────────────────────────────────────
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function() {
-      navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
-        .then(function(reg) {
-          console.log('[NovaVista] Service Worker registered. Scope:', reg.scope);
-
-          // Check for updates every time the app loads
-          reg.addEventListener('updatefound', function() {
-            var newWorker = reg.installing;
-            if (!newWorker) return;
-            newWorker.addEventListener('statechange', function() {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // A new version is available — show update banner
-                showUpdateBanner();
-              }
-            });
-          });
-        })
-        .catch(function(err) {
-          console.warn('[NovaVista] Service Worker registration failed:', err);
-        });
-    });
-  }
-
-  // ── Update available banner ───────────────────────────────────────────────
-  function showUpdateBanner() {
-    var banner = document.createElement('div');
-    banner.id = 'nv-update-banner';
-    banner.style.cssText = [
-      'position:fixed;bottom:80px;left:50%;transform:translateX(-50%)',
-      'background:#f0edf8;border:1px solid rgba(232,71,63,0.4)',
-      'border-radius:12px;padding:12px 18px',
-      'display:flex;align-items:center;gap:12px',
-      'z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.5)',
-      'font-family:Inter,system-ui,sans-serif;font-size:0.84rem',
-      'color:#eeedf0;white-space:nowrap;animation:fadeUp 0.3s ease',
-    ].join(';');
-    banner.innerHTML = [
-      '<span>🔄 A new version of NovaVista is available</span>',
-      '<button onclick="window.location.reload()" style="',
-        'background:#e8473f;color:white;border:none;border-radius:6px',
-        ';padding:6px 14px;font-size:0.8rem;font-weight:600;cursor:pointer',
-        ';font-family:inherit">Update now</button>',
-      '<button onclick="this.parentNode.remove()" style="',
-        'background:transparent;border:none;color:rgba(255,255,255,0.5)',
-        ';cursor:pointer;font-size:1.1rem;padding:0 4px;line-height:1">×</button>',
-    ].join('');
-    document.body.appendChild(banner);
-  }
-
-  // ── Install prompt (Android Chrome) ──────────────────────────────────────
-  var deferredPrompt = null;
-
-  window.addEventListener('beforeinstallprompt', function(e) {
-    e.preventDefault();
-    deferredPrompt = e;
-    // Only show if not already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) return;
-    showInstallBanner();
-  });
-
-  function showInstallBanner() {
-    if (document.getElementById('nv-install-banner')) return;
-    var banner = document.createElement('div');
-    banner.id = 'nv-install-banner';
-    banner.style.cssText = [
-      'position:fixed;bottom:16px;left:50%;transform:translateX(-50%)',
-      'background:#f0edf8;border:1px solid rgba(120,80,180,0.25)',
-      'border-radius:14px;padding:14px 18px',
-      'display:flex;align-items:center;gap:12px',
-      'z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.6)',
-      'font-family:Inter,system-ui,sans-serif;font-size:0.84rem',
-      'color:#eeedf0;max-width:calc(100vw - 32px)',
-      'animation:fadeUp 0.35s cubic-bezier(0.34,1.56,0.64,1)',
-    ].join(';');
-    banner.innerHTML = [
-      '<img src="/icons/icon-72.png" style="width:36px;height:36px;border-radius:8px;flex-shrink:0"/>',
-      '<div style="flex:1;min-width:0">',
-        '<div style="font-weight:700;margin-bottom:1px">Install NovaVista</div>',
-        '<div style="font-size:0.75rem;color:rgba(255,255,255,0.5)">Add to Home Screen for the best experience</div>',
-      '</div>',
-      '<button id="nv-install-btn" style="',
-        'background:#e8473f;color:white;border:none;border-radius:8px',
-        ';padding:8px 16px;font-size:0.82rem;font-weight:700;cursor:pointer',
-        ';font-family:inherit;flex-shrink:0">Install</button>',
-      '<button onclick="this.parentNode.remove()" style="',
-        'background:transparent;border:none;color:rgba(255,255,255,0.4)',
-        ';cursor:pointer;font-size:1.2rem;padding:0 2px;line-height:1',
-        ';flex-shrink:0">×</button>',
-    ].join('');
-    document.body.appendChild(banner);
-
-    document.getElementById('nv-install-btn').addEventListener('click', function() {
-      banner.remove();
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then(function(result) {
-          console.log('[NovaVista] Install prompt result:', result.outcome);
-          deferredPrompt = null;
-        });
-      }
-    });
-  }
-
-  // ── iOS install hint (Safari doesn't support beforeinstallprompt) ─────────
-  var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-  var isStandalone = window.matchMedia('(display-mode: standalone)').matches
-                  || window.navigator.standalone === true;
-
-  if (isIOS && isSafari && !isStandalone) {
-    // Show after a short delay so it doesn't clash with boot screen
-    setTimeout(function() {
-      if (document.getElementById('nv-install-banner')) return;
-      var hint = document.createElement('div');
-      hint.id = 'nv-install-banner';
-      hint.style.cssText = [
-        'position:fixed;bottom:16px;left:50%;transform:translateX(-50%)',
-        'background:#f0edf8;border:1px solid rgba(120,80,180,0.25)',
-        'border-radius:14px;padding:14px 18px',
-        'display:flex;align-items:center;gap:12px',
-        'z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.6)',
-        'font-family:Inter,system-ui,sans-serif;font-size:0.84rem',
-        'color:#eeedf0;max-width:calc(100vw - 32px)',
-        'animation:fadeUp 0.35s ease',
-      ].join(';');
-      hint.innerHTML = [
-        '<img src="/icons/icon-72.png" style="width:36px;height:36px;border-radius:8px;flex-shrink:0"/>',
-        '<div style="flex:1;min-width:0">',
-          '<div style="font-weight:700;margin-bottom:2px">Install NovaVista</div>',
-          '<div style="font-size:0.75rem;color:rgba(255,255,255,0.5)">',
-            'Tap <strong style="color:#eeedf0">Share ↑</strong> then ',
-            '<strong style="color:#eeedf0">Add to Home Screen</strong>',
-          '</div>',
-        '</div>',
-        '<button onclick="this.parentNode.remove()" style="',
-          'background:transparent;border:none;color:rgba(255,255,255,0.4)',
-          ';cursor:pointer;font-size:1.2rem;padding:0 2px;line-height:1;flex-shrink:0">×</button>',
-      ].join('');
-      document.body.appendChild(hint);
-    }, 3000);
-  }
-
-})();
-</script>
+<!-- Service worker not used in single-file mode -->
 </body>
 </html>
