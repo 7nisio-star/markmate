@@ -2257,6 +2257,10 @@ document.querySelectorAll('script[src]').forEach(function(s){
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(typeof pdfjsLib!=="undefined")pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script>
@@ -2426,7 +2430,7 @@ function BatchSummary({ done, batchPaper, subject, pctColor, initials, genFeedba
               </div>
               <button className="btn btn-blue btn-sm"
                 onClick={()=>{
-                  const html=genFeedbackHTML(item.name,batchPaper||subject||"Paper",item.results);
+                  const html=genFeedbackHTML(item.name,batchPaper||subject||"Paper",item.results,item.markedImage||null);
                   const a=document.createElement("a");
                   a.href="data:text/html;charset=utf-8,"+encodeURIComponent(html);
                   a.download=`${item.name.replace(/\s+/g,"_")}_feedback.html`;
@@ -2443,7 +2447,8 @@ function BatchSummary({ done, batchPaper, subject, pctColor, initials, genFeedba
 /* ── SchoolAnalysis ── */
   );
 }
-function SchoolAnalysis({ analysis, pctColor }) {
+// SchoolAnalysis memoized — heavy table, only re-renders when analysis data changes
+const SchoolAnalysis = React.memo(function SchoolAnalysis({ analysis, pctColor }) {
   if (!analysis) return null;
   return (
     <div className="col gap14">
@@ -2517,7 +2522,7 @@ function SchoolAnalysis({ analysis, pctColor }) {
       </div>
     </div>
   );
-}
+}); // end React.memo
 
 function NovaVista() {
   /* state */
@@ -2632,7 +2637,8 @@ function NovaVista() {
   const [offlineTempFolders,setOfflineTempFolders] = useState({}); // session-only temp folders
   const [tesseractReady,setTesseractReady]   = useState(false);
   const [tesseractLoading,setTesseractLoading] = useState(false);
-  const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
+    const [ocrConfidence,   setOcrConfidence]   = useState(null);  // null | {avgConf, lowConfWords}
+const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
   const [ocrLoadStep,setOcrLoadStep]         = useState("");  // stage label
   const tesseractWorkerRef                   = useRef(null);
 
@@ -2882,13 +2888,14 @@ function NovaVista() {
   const schoolFolderRef = useRef(null); // FileSystem API directory handle
 
   // ── PIN helpers ──────────────────────────────────────────────────────────
-  const handlePinKey = useCallback((key) => {
+  const handlePinKey = useCallback(async (key) => {
     if (pinError) { setPinError(false); setPinEntry(""); }
     if (key === "del") { setPinEntry(p => p.slice(0,-1)); return; }
     const next = pinEntry + key;
     setPinEntry(next);
     if (next.length === 4) {
-      if (next === teacherPin) {
+      const match = await verifyPin(next, teacherPin);
+      if (match) {
         setPinUnlocked(true); setPinEntry(""); setPinError(false);
       } else {
         setPinError(true);
@@ -2897,11 +2904,27 @@ function NovaVista() {
     }
   }, [pinEntry, teacherPin, pinError]);
 
-  const saveAccount = useCallback((name, dept, school, pin, role) => {
+  // ── PIN hashing (SHA-256 via WebCrypto — runs offline, no server needed) ────
+  const hashPin = async (pin) => {
+    if (!pin) return "";
+    const enc = new TextEncoder().encode(pin + "nv-salt-2026");
+    const buf = await crypto.subtle.digest("SHA-256", enc);
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("").slice(0,16);
+  };
+
+  const verifyPin = async (entry, stored) => {
+    if (!stored) return true;           // no PIN set — always pass
+    // Support both legacy plain-text PINs and new hashed PINs
+    if (stored.length === 4) return entry === stored;   // legacy
+    return (await hashPin(entry)) === stored;
+  };
+
+  const saveAccount = useCallback(async (name, dept, school, pin, role) => {
+    const hashed = pin ? await hashPin(pin) : "";
     setTeacherName(name); setTeacherDept(dept);
-    setTeacherSchool(school); setTeacherPin(pin); setTeacherRole(role);
+    setTeacherSchool(school); setTeacherPin(hashed); setTeacherRole(role);
     if (!pin) setPinUnlocked(true);
-  }, []);
+  }, [hashPin]);
 
   // ── Licence validation ────────────────────────────────────────────────────
   // Key format: NV-[TIER]-[YYYY]-[MM]-[SCHOOLCODE]-[CHECKSUM]
@@ -3174,6 +3197,25 @@ function NovaVista() {
     setTermsAccepted(false);
     setShowTerms(true);
   }, []);
+
+  // ── Exponential backoff retry wrapper ───────────────────────────────────
+  const withRetry = async (fn, retries=2, baseDelay=800) => {
+    for (let attempt=0; attempt<=retries; attempt++) {
+      try { return await fn(); }
+      catch(e) {
+        const isRetryable = e.message && (
+          e.message.includes("529") ||   // Anthropic overloaded
+          e.message.includes("503") ||   // Service unavailable
+          e.message.includes("502") ||   // Bad gateway
+          e.message.includes("rate") ||  // Rate limited
+          e.message.includes("timeout")
+        );
+        if (!isRetryable || attempt === retries) throw e;
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random()*400;
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  };
 
   const callAPI = useCallback(async(messages, system, maxTokens=1500) => {
 
@@ -3616,11 +3658,11 @@ function NovaVista() {
     } else {
       // ── Anthropic Claude direct ───────────────────────────────────────────
       if (!apiKey.trim()) throw new Error("API key not set — click the key icon or switch provider in Privacy & Data.");
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await withRetry(() => fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
         headers:{"Content-Type":"application/json","x-api-key":apiKey.trim(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
         body:JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:maxTokens, system, messages }),
-      });
+      }));
       if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e?.error?.message||`API ${res.status}`); }
       const d = await res.json();
       return d.content.find(c=>c.type==="text")?.text || "";
@@ -3869,11 +3911,16 @@ function NovaVista() {
   // getMarkedImg only uses a ref (annotRef) so empty dep array is correct
   const getMarkedImg=useCallback(()=>annotRef.current?annotRef.current.toDataURL("image/jpeg",0.92):null,[]);
 
-  const genFeedbackHTML=useCallback((sName,pName,res)=>{
+  const genFeedbackHTML=useCallback((sName,pName,res,annotatedImage=null)=>{
     const date=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
     const pct=res.percentage??0,gc=res.grade==="A"?"#3dd68c":res.grade==="B"?"#f5c842":res.grade==="C"?"#f0956b":"#e8473f";
     const wrongs=(res.questions||[]).filter(q=>!q.correct);
-    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${wrongs.length?`<h2>🎯 What You Need to Do</h2><div class="todo"><h3>Focus on these areas:</h3>${wrongs.map(q=>`<div class="tdi">• <strong>${escHtml(q.id||'')}:</strong> ${escHtml(q.feedback||'')}</div>`).join("")}</div>`:""}${(res.improvements||[]).length?`<div style="margin-top:10px">${res.improvements.map(s=>`<span class="tag tr">${escHtml(s)}</span>`).join("")}</div>`:""}<div class="footer">© DMA 2026 · NovaVista AI Paper Marking · ${date}</div></div></body></html>`;
+    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${wrongs.length?`<h2>🎯 What You Need to Do</h2><div class="todo"><h3>Focus on these areas:</h3>${wrongs.map(q=>`<div class="tdi">• <strong>${escHtml(q.id||'')}:</strong> ${escHtml(q.feedback||'')}</div>`).join("")}</div>`:""}${(res.improvements||[]).length?`<div style="margin-top:10px">${res.improvements.map(s=>`<span class="tag tr">${escHtml(s)}</span>`).join("")}</div>`:""}<div class="footer">© DMA 2026 · NovaVista AI Paper Marking · ${date}</div>${annotatedImage ? `
+          <div style="margin-top:24px;padding:16px;background:white;border:1px solid #e0e0ef;border-radius:8px;">
+            <h2 style="font-size:1rem;margin:0 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:6px;">Annotated Script</h2>
+            <img src="${annotatedImage}" style="width:100%;border-radius:4px;border:1px solid #e0e0ef;" alt="Marked paper"/>
+          </div>` : ""}
+          ${annotatedImage?`<div style="margin-top:24px;padding:16px;background:white;border:1px solid #e0e0ef;border-radius:8px"><h2 style="font-size:1rem;margin:0 0 10px">📋 Annotated Script</h2><img src="${annotatedImage}" style="width:100%;border-radius:4px" alt="Marked paper"/></div>`:""}</div></body></html>`;
   },[]);
 
   const genCollectiveHTML=useCallback((paper)=>{
@@ -4413,7 +4460,11 @@ function NovaVista() {
         // Use crisp scaling for text
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
+        // CSS filter: contrast boost + slight sharpen before pixel-level processing
+        // This handles faint pencil marks and low-contrast phone photos
+        ctx.filter = "contrast(1.35) brightness(1.05)";
         ctx.drawImage(img, 0, 0, W, H);
+        ctx.filter = "none";  // reset filter
         const d = ctx.getImageData(0, 0, W, H);
 
         // Step 2: Convert to greyscale
@@ -4501,36 +4552,62 @@ function NovaVista() {
   }, []);
 
   // ── Smart OCR — single pass by default, second pass only if needed ────
-  const runTesseractOCR = useCallback(async (imageB64) => {
+  const runTesseractOCR = useCallback(async (imageB64, returnConfidence=false, subjectHint="") => {
     const worker = await getTesseractWorker();
     setOcrProgress(0);
     setOcrLoadStep("Reading handwriting…");
 
     // Single pass: PSM 6 (uniform block) — fastest and works best for answer sheets
-    await worker.setParameters({ tessedit_pageseg_mode: "6" });
+    // Domain-specific character whitelist boosts accuracy for structured subjects
+    const mathLike = /math|maths|physics|chemistry|numeracy/i.test(subjectHint||subject||"");
+    const ocrParams = { tessedit_pageseg_mode: "6" };
+    if (mathLike) {
+      // Math/Science: allow digits, operators, letters (for algebra), common symbols
+      ocrParams.tessedit_char_whitelist = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-*/=()[].,% ";
+    }
+    await worker.setParameters(ocrParams);
     const r1 = await worker.recognize(imageB64);
     const t1  = (r1.data.text || "").trim();
     setOcrProgress(70);
 
     // Only run second pass if first returned very little (< 15 chars) — likely OSD failure
+    let bestResult = r1;
     let result = t1;
     if (t1.length < 15) {
       setOcrLoadStep("Trying full-page mode…");
       await worker.setParameters({ tessedit_pageseg_mode: "1" });
       const r2 = await worker.recognize(imageB64);
       const t2  = (r2.data.text || "").trim();
-      result = t2.length > t1.length ? t2 : t1;
+      if (t2.length > t1.length) { bestResult = r2; result = t2; }
     }
     setOcrProgress(100);
     setOcrLoadStep("Done");
 
     // Clean common OCR artefacts from exam papers
-    return result
+    const cleaned = result
       .replace(/[|]{2,}/g, "")
       .replace(/\f/g, "\n")
       .replace(/[ \t]{3,}/g, "  ")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
+
+    if (!returnConfidence) return cleaned;
+
+    // Build confidence-annotated word list for the UI
+    // Tesseract provides per-word confidence 0-100; flag words below threshold
+    const CONF_THRESHOLD = 70;  // Raise to 70% — flag below this for Manual Review
+    const words = (bestResult.data.words || []).map(w => ({
+      text: w.text,
+      conf: w.confidence,
+      low:  w.confidence < CONF_THRESHOLD && w.text.trim().length > 1,
+    }));
+    const avgConf = words.length
+      ? Math.round(words.reduce((s,w)=>s+w.conf,0)/words.length) : 100;
+    const lowConfWords = words.filter(w=>w.low).map(w=>w.text);
+
+    return { text: cleaned, words, avgConf, lowConfWords,
+             hasLowConf: lowConfWords.length > 0,
+             needsManualReview: avgConf < CONF_THRESHOLD || lowConfWords.length > 3 };
   }, [getTesseractWorker]);
 
   /* ── Pre-warm OCR worker silently when offline mode is enabled ─────── */
@@ -4627,7 +4704,7 @@ Rules:
     let combined = "";
     setTopicOcrBusy(true); setTopicOcrProgress(0);
     const total = files.length;
-
+    try {
     for (let fi = 0; fi < files.length; fi++) {
       const file = files[fi];
       setTopicOcrFile(file.name);
@@ -4647,7 +4724,7 @@ Rules:
             const ab = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({data:ab}).promise;
             let pdfText = "";
-            for (let p = 1; p <= Math.min(pdf.numPages, 20); p++) {
+            for (let p = 1; p <= Math.min(pdf.numPages, 20) /* large PDFs: first 20 pages only — split before uploading for best results */; p++) {
               const page = await pdf.getPage(p);
               // First try text layer (typed PDFs)
               try {
@@ -4663,10 +4740,27 @@ Rules:
               const b64 = canvas.toDataURL("image/png");
               const preprocessed = await preprocessForOCR(b64);
               setTopicOcrProgress(Math.round(((fi + p/pdf.numPages)/total)*100));
-              const ocrText = await runTesseractOCR(preprocessed);
+              const ocrResult = await runTesseractOCR(preprocessed, true, subject);
+          const ocrText = typeof ocrResult === "string" ? ocrResult : ocrResult.text;
+          if (typeof ocrResult === "object" && ocrResult.hasLowConf) {
+            setOcrConfidence({
+            avgConf: ocrResult.avgConf,
+            lowConfWords: ocrResult.lowConfWords,
+            needsReview: ocrResult.needsManualReview,
+          });
+          if (ocrResult.needsManualReview) {
+            setMarkingStep("⚠ Low OCR confidence — please verify handwriting reading");
+          }
+          } else {
+            setOcrConfidence(null);
+          }
               pdfText += ocrText + "\n";
             }
-            combined += `\n\n=== ${file.name} ===\n${pdfText}`;
+            if (pdf.numPages > 20) {
+              combined += `\n\n=== ${file.name} === [Large PDF: showing pages 1-20 of ${pdf.numPages} — split the file for complete extraction]\n${pdfText}`;
+            } else {
+              combined += `\n\n=== ${file.name} ===\n${pdfText}`;
+            }
           }
         } else if (["jpg","jpeg","png","webp","bmp","gif"].includes(ext)) {
           // Image — OCR it
@@ -4676,7 +4770,7 @@ Rules:
             r.readAsDataURL(file);
           });
           const preprocessed = await preprocessForOCR(b64);
-          const ocrText = await runTesseractOCR(preprocessed);
+          const ocrText = await runTesseractOCR(preprocessed, false, topicSubject||subject||"");
           combined += `\n\n=== ${file.name} ===\n${ocrText}`;
         } else {
           // Plain text / CSV
@@ -4688,7 +4782,9 @@ Rules:
       }
     }
 
-    setTopicOcrBusy(false); setTopicOcrProgress(100); setTopicOcrFile("");
+    } finally {
+      setTopicOcrBusy(false); setTopicOcrProgress(100); setTopicOcrFile("");
+    }
     return combined.trim();
   }, [preprocessForOCR, runTesseractOCR]);
 
@@ -4815,7 +4911,13 @@ Rules:
 
   /* ── markWhole — full AI marking of an image ── */
   const markWhole=useCallback(async (img, extraAnswers)=>{
-    setMarking(true);setMarkingStep("Sending to AI marker…");
+    // ── Three-Tier Marking Pipeline ─────────────────────────────────────────
+    // Tier 1: Rule-Based (instant, offline)  → markingRules + calcChecks
+    // Tier 2: Local NLP (offline, keyword)   → stemMatch keyword engine
+    // Tier 3: Vision-LLM (cloud, highest accuracy) → callAPI with image
+    // The engine auto-selects the highest available tier.
+    // ────────────────────────────────────────────────────────────────────────
+    setMarking(true);setMarkingStep("Preparing paper for marking…");
     try{
       // ── Auto-fallback: if online mode but no API key, use local marking engine ──
       if(!offlineMode && !apiReady){
@@ -4898,13 +5000,13 @@ Rules:
       // Web search supplement
       let searchNote="";
       if(webSearchEnabled&&webSearchKey&&globalScheme){
-        setMarkingStep("Searching web for answer reference…");
+        setMarkingStep("Searching web for context…");
         const query=`${subject||""} exam mark scheme answers ${globalScheme.split("\n")[0].slice(0,80)}`;
         const hits=await searchWeb(query);
         if(hits&&hits.length>0){
           searchNote=`\n\nWEB REFERENCE (use only to supplement mark scheme — do not override it):\n${hits.map(h=>`• ${h.title}: ${h.snippet}`).join("\n")}`;
         }
-        setMarkingStep("Sending to AI marker…");
+        setMarkingStep("Reading student work…"); await new Promise(r=>setTimeout(r,250)); setMarkingStep("Sending to AI marker…");
       }
       const sys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}${studentName?`\nStudent: ${studentName}`:""}\nMARKING SCHEME: ${globalScheme||"Apply standard academic marking."}\n${globalMisconceptions?`MISCONCEPTIONS TO FLAG: ${globalMisconceptions}`:""}\n${answerNote}${searchNote}\nFor each question use B/M/A mark codes matching the marking scheme.\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"<B1|M1|A1 etc>","feedback":"","correct":<bool>,"misconception":null,"uncertain":<bool>}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
       // Build the typed answers note for offline engine
@@ -4955,7 +5057,7 @@ Rules:
           }
 
           // OCR succeeded — now run local marking against extracted text
-          setMarkingStep("OCR complete — matching against mark scheme…");
+          setMarkingStep("Handwriting extracted — comparing against mark scheme…");
           await new Promise(r=>setTimeout(r,300));
           // Reuse the callAPI offline path by passing the OCR text as answer
           const ocrResult = await callAPI(
@@ -4993,7 +5095,7 @@ Rules:
       setMarking(true); setMarkingStep("Running local OCR — reading paper…");
       try {
         const preprocessed = await preprocessForOCR(img);
-        const ocrText = await runTesseractOCR(preprocessed);
+        const ocrText = await runTesseractOCR(preprocessed, false, topicSubject||subject||"");
         // Build question list from scheme + OCR text
         const schemeLines=(globalScheme||"").split(/\n/).map(l=>l.trim()).filter(Boolean);
         const schemeQs=schemeLines.map((line,i)=>{
@@ -5303,7 +5405,7 @@ Rules:
             setBatchQueue(prev=>prev.map((it,idx)=>idx===i?{...it,status:"marking",ocrStatus:"Running local OCR…"}:it));
             try {
               const preprocessed = await preprocessForOCR(item.imageB64);
-              const ocrText = await runTesseractOCR(preprocessed);
+              const ocrText = await runTesseractOCR(preprocessed, false, topicSubject||subject||"");
               if(ocrText.length < 5){
                 parsed={
                   totalScore:0, maxScore:totalMarks?parseInt(totalMarks):1,
@@ -5593,8 +5695,9 @@ Rules:
     const markTypes = [hasB?"B (knowledge/fact)":"", hasM?"M (method)":"", hasA?"A (accuracy)":"", hasP?"P (process)":""].filter(Boolean).join(", ") || "B (knowledge), M (method), A (accuracy)";
     const sys=`You are an expert examiner marking a single student answer for a UK school.\n${subject?`Subject: ${subject}`:""}\n${qmQuestion?`Question: ${qmQuestion}`:""}\nMark Scheme: ${scheme||"Apply appropriate UK academic standards."}\n${globalMisconceptions?`Misconceptions to watch for: ${globalMisconceptions}`:""}\n\nANNOTATION STYLE:\nUse proper exam board annotation notation. Detected mark types in this scheme: ${markTypes}.\nFor each marking point assign the correct mark code (B1, B2, M1, M2, A1, A2, P1, P2 etc.).\n\nRespond ONLY with valid JSON, no markdown:\n{"marksAwarded":<n>,"marksAvailable":<n or null>,"percentage":<0-100>,"breakdown":[{"point":"<mark scheme point text>","code":"<B1|M1|A1|P1 etc>","awarded":<bool>,"comment":"<why awarded or not>"}],"annotations":[{"label":"<B1✓ or M1✗ etc>","type":"correct|incorrect|partial","placement":"<top-left|top-right|middle-left|middle-right|bottom-left|bottom-right>"}],"feedback":"<2-3 sentences directly to student>","misconceptions":[],"strengths":[],"improvements":[]}`;
     setQmAnnotReady(false);
-    setQmLoading(true);setQmResult(null);setError("");
+    setQmLoading(true);setQmResult(null);setError(""); setMarkingStep("Analysing student answer…");
     try{
+      setMarkingStep("Comparing answer to mark scheme…"); await new Promise(r=>setTimeout(r,200));
       const text=await callAPI([{role:"user",content:`Student answer:\n\n${answer}`}],sys,1200);
       const parsed=parseJSON(text);
       parsed._aiMarks    = parsed.marksAwarded;
@@ -5602,7 +5705,7 @@ Rules:
       setQmResult(parsed);setQmEditing(false);
     }
     catch(e){setError("Marking failed: "+e.message);}
-    finally{setQmLoading(false);}
+    finally{setQmLoading(false);setMarkingStep("");}
   },[callAPI,qmMode,qmOcr,qmOcrOriginal,qmPasted,qmDocText,qmScheme,globalScheme,globalMisconceptions,subject,qmQuestion,recordCorrection]);
 
   const handleAccept=useCallback(()=>{
@@ -5736,10 +5839,11 @@ Rules:
   const openaiSet = openaiKey.trim().startsWith("sk-");
   const apiReady  = offlineMode
     || apiMode==="local"
-    || (apiMode==="proxy"  && proxySet)
-    || (apiMode==="cloud"  && keySet)
-    || (apiMode==="gemini" && geminiSet)
-    || (apiMode==="openai" && openaiSet);
+    || (apiMode==="proxy"      && proxySet)
+    || (apiMode==="cloud"      && keySet)
+    || (apiMode==="gemini"     && geminiSet)
+    || (apiMode==="openai"     && openaiSet)
+    || (apiMode==="microsoft"  && !!msAccount);
   const totalStudents=Object.values(classes).reduce((s,p)=>s+p.students.length,0);
 
   /* ══════════════════════════════════════════════════════════
@@ -5852,23 +5956,23 @@ Rules:
 
         <nav className="nav-section">
           <div className="nav-label">General</div>
-          <button className={`nav-item ${tab==="setup"?"active":""}`} onClick={()=>{setTab("setup");setSidebarOpen(false);}}>
+          <button className={`nav-item ${tab==="setup"?"active":""}`} aria-label="Setup — mark scheme and subject" onClick={()=>{setTab("setup");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.cog} size={16}/></span> Setup
           </button>
 
           <div className="nav-label" style={{marginTop:8}}>Mark Papers</div>
-          <button className={`nav-item ${tab==="quick"?"active-blue":""}`} onClick={()=>{setTab("quick");setSidebarOpen(false);}}>
+          <button className={`nav-item ${tab==="quick"?"active-blue":""}`} aria-label="Quick Mark — mark a single answer" onClick={()=>{setTab("quick");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.zap} size={16}/></span> Quick Mark
             {saved.length>0&&<span className="nav-badge blue">{saved.length}</span>}
           </button>
-          <button className={`nav-item ${tab==="mark"?"active":""}`} onClick={()=>{setTab("mark");setSidebarOpen(false);}}>
+          <button className={`nav-item ${tab==="mark"?"active":""}`} aria-label="Live Mark — camera marking" onClick={()=>{setTab("mark");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.camera} size={16}/></span> Live Mark
           </button>
-          <button className={`nav-item ${tab==="scan"?"active":""}`} onClick={()=>{setTab("scan");setSidebarOpen(false);}}>
+          <button className={`nav-item ${tab==="scan"?"active":""}`} aria-label="Scan Mode — scan student papers" onClick={()=>{setTab("scan");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.scan} size={16}/></span> Scan Mode
             {scannedPages.length>0&&<span className="nav-badge">{scannedPages.length}</span>}
           </button>
-          <button className={`nav-item ${tab==="batch"?"active":""}`} onClick={()=>{setTab("batch");setSidebarOpen(false);}}>
+          <button className={`nav-item ${tab==="batch"?"active":""}`} aria-label="Batch Upload — mark multiple papers" onClick={()=>{setTab("batch");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.upload} size={16}/></span> Batch Upload
             {batchQueue.filter(it=>it.status==="done").length>0&&<span className="nav-badge">{batchQueue.filter(it=>it.status==="done").length}</span>}
           </button>
@@ -5876,10 +5980,10 @@ Rules:
           {(results||saved.length>0)&&<>
             <div className="nav-divider"/>
             <div className="nav-label">Results</div>
-            {results&&<button className={`nav-item ${tab==="results"?"active":""}`} onClick={()=>{setTab("results");setSidebarOpen(false);}}>
+            {results&&<button className={`nav-item ${tab==="results"?"active":""}`} aria-label="Results — current paper results" onClick={()=>{setTab("results");setSidebarOpen(false);}}>
               <span className="nav-icon"><Ic d={I.checksq} size={16}/></span> Marked Paper
             </button>}
-            {saved.length>0&&<button className={`nav-item ${tab==="log"?"active":""}`} onClick={()=>{setTab("log");setSidebarOpen(false);}}>
+            {saved.length>0&&<button className={`nav-item ${tab==="log"?"active":""}`} aria-label="Mark Log — saved results" onClick={()=>{setTab("log");setSidebarOpen(false);}}>
               <span className="nav-icon"><Ic d={I.list} size={16}/></span> Mark Log
               <span className="nav-badge blue">{saved.length}</span>
             </button>}
@@ -5887,33 +5991,33 @@ Rules:
 
           <div className="nav-divider"/>
           <div className="nav-label">Class Management</div>
-          <button className={`nav-item ${tab==="classes"?"active":""}`} onClick={()=>{setTab("classes");setSidebarOpen(false);}}>
+          <button className={`nav-item ${tab==="classes"?"active":""}`} aria-label="Class Folders — student records" onClick={()=>{setTab("classes");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.folder} size={16}/></span> Class Folders
             {totalStudents>0&&<span className="nav-badge">{totalStudents}</span>}
           </button>
-          <button className={`nav-item ${tab==="topicextractor"?"active":""}`} onClick={()=>{setTab("topicextractor");setSidebarOpen(false);}}>
+          <button className={`nav-item ${tab==="topicextractor"?"active":""}`} aria-label="Topic Extractor — extract topics from documents" onClick={()=>{setTab("topicextractor");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.list} size={16}/></span> Topic Extractor
             {topicRows.length>0&&<span className="nav-badge blue">{topicRows.length}</span>}
           </button>
 
           <div className="nav-divider"/>
-          <button className={`nav-item ${tab==="privacy"?"active":""}`} onClick={()=>{setTab("privacy");setSidebarOpen(false);}}>
+          <button className={`nav-item ${tab==="privacy"?"active":""}`} aria-label="Privacy and Data — AI provider settings" onClick={()=>{setTab("privacy");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.shield} size={16}/></span> Privacy & Data
           </button>
-          <button className={`nav-item ${tab==="training"?"active":""}`} onClick={()=>{setTab("training");setSidebarOpen(false);}}>
+          <button className={`nav-item ${tab==="training"?"active":""}`} aria-label="AI Training — correction training data" onClick={()=>{setTab("training");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.zap} size={16}/></span> AI Training
             {corrections.length>0&&<span className="nav-badge blue">{corrections.length}</span>}
           </button>
 
           <div className="nav-divider"/>
           <div className="nav-label">Your Account</div>
-          <button className={`nav-item ${tab==="account"?"active":""}`} onClick={()=>{setTab("account");setSidebarOpen(false);}}>
+          <button className={`nav-item ${tab==="account"?"active":""}`} aria-label="Your Account — profile and PIN" onClick={()=>{setTab("account");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.users} size={16}/></span>
             {teacherName||"Set up profile"}
           </button>
           <button
             className={`nav-item ${tab==="school"?"active":""}`}
-            onClick={()=>{setTab("school");setSidebarOpen(false);}}>
+            aria-label="School Sync — department data" onClick={()=>{setTab("school");setSidebarOpen(false);}}>
             <span className="nav-icon"><Ic d={I.database} size={16}/></span> School Sync
             {syncStatus==="done"&&loadedTeachers.length>0&&<span className="nav-badge">{loadedTeachers.length}</span>}
           </button>
@@ -5921,7 +6025,7 @@ Rules:
             <div className="nav-divider"/>
             <div className="nav-label" style={{color:"#b08a00",letterSpacing:"1.5px"}}>✈ OFFLINE TOOLS</div>
             <button className={`nav-item ${tab==="offlinetools"?"active":""}`}
-              onClick={()=>{setTab("offlinetools");setSidebarOpen(false);}}
+              aria-label="Smart Tools — offline analysis tools" onClick={()=>{setTab("offlinetools");setSidebarOpen(false);}}
               style={{color:tab==="offlinetools"?"#5a4400":"#8a7440",
                 background:tab==="offlinetools"?"rgba(245,200,66,0.22)":"rgba(245,200,66,0.06)",
                 border:"1px solid "+(tab==="offlinetools"?"rgba(245,200,66,0.5)":"rgba(245,200,66,0.18)"),
@@ -6885,6 +6989,17 @@ Rules:
                       : `Stitch & Review ${scannedPages.length} Page${scannedPages.length>1?"s":""}`}
                   </button>
 
+              {ocrConfidence&&ocrConfidence.lowConfWords.length>0&&(
+                <div className="warn-box" style={{fontSize:"0.8rem",display:"flex",gap:10,alignItems:"flex-start",marginBottom:8}}>
+                  <span>⚠</span>
+                  <div>
+                    <strong>{ocrConfidence.needsReview?"⚠ Manual Review Recommended":"Low OCR confidence"} ({ocrConfidence.avgConf}% avg)</strong>
+                    {" — "}these words may be misread:{" "}
+                    <em style={{color:"var(--red)"}}>{ocrConfidence.lowConfWords.slice(0,8).join(", ")}{ocrConfidence.lowConfWords.length>8?" …":""}</em>.
+                    {ocrConfidence.needsReview&&<div style={{marginTop:6,fontWeight:600}}>Please verify the extracted text above before accepting the AI mark.</div>}
+                  </div>
+                </div>
+              )}
                   {scannedPages.length>0&&(
                     <div className="blue-box">
                       Pages will be joined top-to-bottom and sent to the AI as one complete paper. The result will be saved with the student name above.
@@ -7977,11 +8092,17 @@ Rules:
               )}
 
               {/* ── Extract button ── */}
-              {!topicOcrBusy&&(
+              {topicOcrBusy&&(
+                <button className="btn btn-ghost btn-sm" style={{alignSelf:"flex-start"}}
+                  onClick={()=>{setTopicOcrBusy(false);setTopicExtractBusy(false);}}>
+                  ✕ Cancel
+                </button>
+              )}
+              {(
                 <button
                   className="btn btn-green"
                   style={{alignSelf:"flex-start",padding:"10px 28px",fontSize:"0.88rem",gap:8}}
-                  disabled={topicExtractBusy||(!topicFiles.length&&!topicInput.trim())}
+                  disabled={topicExtractBusy||topicOcrBusy||(!topicFiles.length&&!topicInput.trim())}
                   onClick={async()=>{
                     setTopicExtractBusy(true);
                     try {
