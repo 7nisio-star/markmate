@@ -2430,7 +2430,7 @@ function BatchSummary({ done, batchPaper, subject, pctColor, initials, genFeedba
               </div>
               <button className="btn btn-blue btn-sm"
                 onClick={()=>{
-                  const html=genFeedbackHTML(item.name,batchPaper||subject||"Paper",item.results,item.markedImage||null);
+                  const html=genFeedbackHTML(item.name,batchPaper||subject||"Paper",item.results);
                   const a=document.createElement("a");
                   a.href="data:text/html;charset=utf-8,"+encodeURIComponent(html);
                   a.download=`${item.name.replace(/\s+/g,"_")}_feedback.html`;
@@ -3911,16 +3911,11 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
   // getMarkedImg only uses a ref (annotRef) so empty dep array is correct
   const getMarkedImg=useCallback(()=>annotRef.current?annotRef.current.toDataURL("image/jpeg",0.92):null,[]);
 
-  const genFeedbackHTML=useCallback((sName,pName,res,annotatedImage=null)=>{
+  const genFeedbackHTML=useCallback((sName,pName,res)=>{
     const date=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
     const pct=res.percentage??0,gc=res.grade==="A"?"#3dd68c":res.grade==="B"?"#f5c842":res.grade==="C"?"#f0956b":"#e8473f";
     const wrongs=(res.questions||[]).filter(q=>!q.correct);
-    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${wrongs.length?`<h2>🎯 What You Need to Do</h2><div class="todo"><h3>Focus on these areas:</h3>${wrongs.map(q=>`<div class="tdi">• <strong>${escHtml(q.id||'')}:</strong> ${escHtml(q.feedback||'')}</div>`).join("")}</div>`:""}${(res.improvements||[]).length?`<div style="margin-top:10px">${res.improvements.map(s=>`<span class="tag tr">${escHtml(s)}</span>`).join("")}</div>`:""}<div class="footer">© DMA 2026 · NovaVista AI Paper Marking · ${date}</div>${annotatedImage ? `
-          <div style="margin-top:24px;padding:16px;background:white;border:1px solid #e0e0ef;border-radius:8px;">
-            <h2 style="font-size:1rem;margin:0 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:6px;">Annotated Script</h2>
-            <img src="${annotatedImage}" style="width:100%;border-radius:4px;border:1px solid #e0e0ef;" alt="Marked paper"/>
-          </div>` : ""}
-          ${annotatedImage?`<div style="margin-top:24px;padding:16px;background:white;border:1px solid #e0e0ef;border-radius:8px"><h2 style="font-size:1rem;margin:0 0 10px">📋 Annotated Script</h2><img src="${annotatedImage}" style="width:100%;border-radius:4px" alt="Marked paper"/></div>`:""}</div></body></html>`;
+    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${wrongs.length?`<h2>🎯 What You Need to Do</h2><div class="todo"><h3>Focus on these areas:</h3>${wrongs.map(q=>`<div class="tdi">• <strong>${escHtml(q.id||'')}:</strong> ${escHtml(q.feedback||'')}</div>`).join("")}</div>`:""}${(res.improvements||[]).length?`<div style="margin-top:10px">${res.improvements.map(s=>`<span class="tag tr">${escHtml(s)}</span>`).join("")}</div>`:""}<div class="footer">© DMA 2026 · NovaVista AI Paper Marking · ${date}</div></div></body></html>`;
   },[]);
 
   const genCollectiveHTML=useCallback((paper)=>{
@@ -4460,11 +4455,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
         // Use crisp scaling for text
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
-        // CSS filter: contrast boost + slight sharpen before pixel-level processing
-        // This handles faint pencil marks and low-contrast phone photos
-        ctx.filter = "contrast(1.35) brightness(1.05)";
         ctx.drawImage(img, 0, 0, W, H);
-        ctx.filter = "none";  // reset filter
         const d = ctx.getImageData(0, 0, W, H);
 
         // Step 2: Convert to greyscale
@@ -4552,20 +4543,13 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
   }, []);
 
   // ── Smart OCR — single pass by default, second pass only if needed ────
-  const runTesseractOCR = useCallback(async (imageB64, returnConfidence=false, subjectHint="") => {
+  const runTesseractOCR = useCallback(async (imageB64, returnConfidence=false) => {
     const worker = await getTesseractWorker();
     setOcrProgress(0);
     setOcrLoadStep("Reading handwriting…");
 
     // Single pass: PSM 6 (uniform block) — fastest and works best for answer sheets
-    // Domain-specific character whitelist boosts accuracy for structured subjects
-    const mathLike = /math|maths|physics|chemistry|numeracy/i.test(subjectHint||subject||"");
-    const ocrParams = { tessedit_pageseg_mode: "6" };
-    if (mathLike) {
-      // Math/Science: allow digits, operators, letters (for algebra), common symbols
-      ocrParams.tessedit_char_whitelist = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-*/=()[].,% ";
-    }
-    await worker.setParameters(ocrParams);
+    await worker.setParameters({ tessedit_pageseg_mode: "6" });
     const r1 = await worker.recognize(imageB64);
     const t1  = (r1.data.text || "").trim();
     setOcrProgress(70);
@@ -4595,7 +4579,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
 
     // Build confidence-annotated word list for the UI
     // Tesseract provides per-word confidence 0-100; flag words below threshold
-    const CONF_THRESHOLD = 70;  // Raise to 70% — flag below this for Manual Review
+    const CONF_THRESHOLD = 60;
     const words = (bestResult.data.words || []).map(w => ({
       text: w.text,
       conf: w.confidence,
@@ -4606,8 +4590,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
     const lowConfWords = words.filter(w=>w.low).map(w=>w.text);
 
     return { text: cleaned, words, avgConf, lowConfWords,
-             hasLowConf: lowConfWords.length > 0,
-             needsManualReview: avgConf < CONF_THRESHOLD || lowConfWords.length > 3 };
+             hasLowConf: lowConfWords.length > 0 };
   }, [getTesseractWorker]);
 
   /* ── Pre-warm OCR worker silently when offline mode is enabled ─────── */
@@ -4740,17 +4723,10 @@ Rules:
               const b64 = canvas.toDataURL("image/png");
               const preprocessed = await preprocessForOCR(b64);
               setTopicOcrProgress(Math.round(((fi + p/pdf.numPages)/total)*100));
-              const ocrResult = await runTesseractOCR(preprocessed, true, subject);
+              const ocrResult = await runTesseractOCR(preprocessed, true);
           const ocrText = typeof ocrResult === "string" ? ocrResult : ocrResult.text;
           if (typeof ocrResult === "object" && ocrResult.hasLowConf) {
-            setOcrConfidence({
-            avgConf: ocrResult.avgConf,
-            lowConfWords: ocrResult.lowConfWords,
-            needsReview: ocrResult.needsManualReview,
-          });
-          if (ocrResult.needsManualReview) {
-            setMarkingStep("⚠ Low OCR confidence — please verify handwriting reading");
-          }
+            setOcrConfidence({ avgConf: ocrResult.avgConf, lowConfWords: ocrResult.lowConfWords });
           } else {
             setOcrConfidence(null);
           }
@@ -4770,7 +4746,7 @@ Rules:
             r.readAsDataURL(file);
           });
           const preprocessed = await preprocessForOCR(b64);
-          const ocrText = await runTesseractOCR(preprocessed, false, topicSubject||subject||"");
+          const ocrText = await runTesseractOCR(preprocessed);
           combined += `\n\n=== ${file.name} ===\n${ocrText}`;
         } else {
           // Plain text / CSV
@@ -4911,12 +4887,6 @@ Rules:
 
   /* ── markWhole — full AI marking of an image ── */
   const markWhole=useCallback(async (img, extraAnswers)=>{
-    // ── Three-Tier Marking Pipeline ─────────────────────────────────────────
-    // Tier 1: Rule-Based (instant, offline)  → markingRules + calcChecks
-    // Tier 2: Local NLP (offline, keyword)   → stemMatch keyword engine
-    // Tier 3: Vision-LLM (cloud, highest accuracy) → callAPI with image
-    // The engine auto-selects the highest available tier.
-    // ────────────────────────────────────────────────────────────────────────
     setMarking(true);setMarkingStep("Preparing paper for marking…");
     try{
       // ── Auto-fallback: if online mode but no API key, use local marking engine ──
@@ -5095,7 +5065,7 @@ Rules:
       setMarking(true); setMarkingStep("Running local OCR — reading paper…");
       try {
         const preprocessed = await preprocessForOCR(img);
-        const ocrText = await runTesseractOCR(preprocessed, false, topicSubject||subject||"");
+        const ocrText = await runTesseractOCR(preprocessed);
         // Build question list from scheme + OCR text
         const schemeLines=(globalScheme||"").split(/\n/).map(l=>l.trim()).filter(Boolean);
         const schemeQs=schemeLines.map((line,i)=>{
@@ -5405,7 +5375,7 @@ Rules:
             setBatchQueue(prev=>prev.map((it,idx)=>idx===i?{...it,status:"marking",ocrStatus:"Running local OCR…"}:it));
             try {
               const preprocessed = await preprocessForOCR(item.imageB64);
-              const ocrText = await runTesseractOCR(preprocessed, false, topicSubject||subject||"");
+              const ocrText = await runTesseractOCR(preprocessed);
               if(ocrText.length < 5){
                 parsed={
                   totalScore:0, maxScore:totalMarks?parseInt(totalMarks):1,
@@ -6993,10 +6963,9 @@ Rules:
                 <div className="warn-box" style={{fontSize:"0.8rem",display:"flex",gap:10,alignItems:"flex-start",marginBottom:8}}>
                   <span>⚠</span>
                   <div>
-                    <strong>{ocrConfidence.needsReview?"⚠ Manual Review Recommended":"Low OCR confidence"} ({ocrConfidence.avgConf}% avg)</strong>
-                    {" — "}these words may be misread:{" "}
+                    <strong>Low OCR confidence ({ocrConfidence.avgConf}% avg)</strong> — these words may be misread:{" "}
                     <em style={{color:"var(--red)"}}>{ocrConfidence.lowConfWords.slice(0,8).join(", ")}{ocrConfidence.lowConfWords.length>8?" …":""}</em>.
-                    {ocrConfidence.needsReview&&<div style={{marginTop:6,fontWeight:600}}>Please verify the extracted text above before accepting the AI mark.</div>}
+                    {" "}Verify the text before accepting the mark.
                   </div>
                 </div>
               )}
