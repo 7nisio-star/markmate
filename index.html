@@ -2447,8 +2447,7 @@ function BatchSummary({ done, batchPaper, subject, pctColor, initials, genFeedba
 /* ── SchoolAnalysis ── */
   );
 }
-// SchoolAnalysis memoized — heavy table, only re-renders when analysis data changes
-const SchoolAnalysis = React.memo(function SchoolAnalysis({ analysis, pctColor }) {
+function SchoolAnalysis({ analysis, pctColor }) {
   if (!analysis) return null;
   return (
     <div className="col gap14">
@@ -2522,7 +2521,7 @@ const SchoolAnalysis = React.memo(function SchoolAnalysis({ analysis, pctColor }
       </div>
     </div>
   );
-}); // end React.memo
+}
 
 function NovaVista() {
   /* state */
@@ -2637,8 +2636,7 @@ function NovaVista() {
   const [offlineTempFolders,setOfflineTempFolders] = useState({}); // session-only temp folders
   const [tesseractReady,setTesseractReady]   = useState(false);
   const [tesseractLoading,setTesseractLoading] = useState(false);
-    const [ocrConfidence,   setOcrConfidence]   = useState(null);  // null | {avgConf, lowConfWords}
-const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
+  const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
   const [ocrLoadStep,setOcrLoadStep]         = useState("");  // stage label
   const tesseractWorkerRef                   = useRef(null);
 
@@ -4543,7 +4541,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
   }, []);
 
   // ── Smart OCR — single pass by default, second pass only if needed ────
-  const runTesseractOCR = useCallback(async (imageB64, returnConfidence=false) => {
+  const runTesseractOCR = useCallback(async (imageB64) => {
     const worker = await getTesseractWorker();
     setOcrProgress(0);
     setOcrLoadStep("Reading handwriting…");
@@ -4555,42 +4553,24 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
     setOcrProgress(70);
 
     // Only run second pass if first returned very little (< 15 chars) — likely OSD failure
-    let bestResult = r1;
     let result = t1;
     if (t1.length < 15) {
       setOcrLoadStep("Trying full-page mode…");
       await worker.setParameters({ tessedit_pageseg_mode: "1" });
       const r2 = await worker.recognize(imageB64);
       const t2  = (r2.data.text || "").trim();
-      if (t2.length > t1.length) { bestResult = r2; result = t2; }
+      result = t2.length > t1.length ? t2 : t1;
     }
     setOcrProgress(100);
     setOcrLoadStep("Done");
 
     // Clean common OCR artefacts from exam papers
-    const cleaned = result
+    return result
       .replace(/[|]{2,}/g, "")
       .replace(/\f/g, "\n")
       .replace(/[ \t]{3,}/g, "  ")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
-
-    if (!returnConfidence) return cleaned;
-
-    // Build confidence-annotated word list for the UI
-    // Tesseract provides per-word confidence 0-100; flag words below threshold
-    const CONF_THRESHOLD = 60;
-    const words = (bestResult.data.words || []).map(w => ({
-      text: w.text,
-      conf: w.confidence,
-      low:  w.confidence < CONF_THRESHOLD && w.text.trim().length > 1,
-    }));
-    const avgConf = words.length
-      ? Math.round(words.reduce((s,w)=>s+w.conf,0)/words.length) : 100;
-    const lowConfWords = words.filter(w=>w.low).map(w=>w.text);
-
-    return { text: cleaned, words, avgConf, lowConfWords,
-             hasLowConf: lowConfWords.length > 0 };
   }, [getTesseractWorker]);
 
   /* ── Pre-warm OCR worker silently when offline mode is enabled ─────── */
@@ -4707,7 +4687,7 @@ Rules:
             const ab = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({data:ab}).promise;
             let pdfText = "";
-            for (let p = 1; p <= Math.min(pdf.numPages, 20) /* large PDFs: first 20 pages only — split before uploading for best results */; p++) {
+            for (let p = 1; p <= Math.min(pdf.numPages, 20); p++) {
               const page = await pdf.getPage(p);
               // First try text layer (typed PDFs)
               try {
@@ -4723,20 +4703,10 @@ Rules:
               const b64 = canvas.toDataURL("image/png");
               const preprocessed = await preprocessForOCR(b64);
               setTopicOcrProgress(Math.round(((fi + p/pdf.numPages)/total)*100));
-              const ocrResult = await runTesseractOCR(preprocessed, true);
-          const ocrText = typeof ocrResult === "string" ? ocrResult : ocrResult.text;
-          if (typeof ocrResult === "object" && ocrResult.hasLowConf) {
-            setOcrConfidence({ avgConf: ocrResult.avgConf, lowConfWords: ocrResult.lowConfWords });
-          } else {
-            setOcrConfidence(null);
-          }
+              const ocrText = await runTesseractOCR(preprocessed);
               pdfText += ocrText + "\n";
             }
-            if (pdf.numPages > 20) {
-              combined += `\n\n=== ${file.name} === [Large PDF: showing pages 1-20 of ${pdf.numPages} — split the file for complete extraction]\n${pdfText}`;
-            } else {
-              combined += `\n\n=== ${file.name} ===\n${pdfText}`;
-            }
+            combined += `\n\n=== ${file.name} ===\n${pdfText}`;
           }
         } else if (["jpg","jpeg","png","webp","bmp","gif"].includes(ext)) {
           // Image — OCR it
@@ -4887,7 +4857,7 @@ Rules:
 
   /* ── markWhole — full AI marking of an image ── */
   const markWhole=useCallback(async (img, extraAnswers)=>{
-    setMarking(true);setMarkingStep("Preparing paper for marking…");
+    setMarking(true);setMarkingStep("Sending to AI marker…");
     try{
       // ── Auto-fallback: if online mode but no API key, use local marking engine ──
       if(!offlineMode && !apiReady){
@@ -4970,13 +4940,13 @@ Rules:
       // Web search supplement
       let searchNote="";
       if(webSearchEnabled&&webSearchKey&&globalScheme){
-        setMarkingStep("Searching web for context…");
+        setMarkingStep("Searching web for answer reference…");
         const query=`${subject||""} exam mark scheme answers ${globalScheme.split("\n")[0].slice(0,80)}`;
         const hits=await searchWeb(query);
         if(hits&&hits.length>0){
           searchNote=`\n\nWEB REFERENCE (use only to supplement mark scheme — do not override it):\n${hits.map(h=>`• ${h.title}: ${h.snippet}`).join("\n")}`;
         }
-        setMarkingStep("Reading student work…"); await new Promise(r=>setTimeout(r,250)); setMarkingStep("Sending to AI marker…");
+        setMarkingStep("Sending to AI marker…");
       }
       const sys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}${studentName?`\nStudent: ${studentName}`:""}\nMARKING SCHEME: ${globalScheme||"Apply standard academic marking."}\n${globalMisconceptions?`MISCONCEPTIONS TO FLAG: ${globalMisconceptions}`:""}\n${answerNote}${searchNote}\nFor each question use B/M/A mark codes matching the marking scheme.\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"<B1|M1|A1 etc>","feedback":"","correct":<bool>,"misconception":null,"uncertain":<bool>}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
       // Build the typed answers note for offline engine
@@ -5027,7 +4997,7 @@ Rules:
           }
 
           // OCR succeeded — now run local marking against extracted text
-          setMarkingStep("Handwriting extracted — comparing against mark scheme…");
+          setMarkingStep("OCR complete — matching against mark scheme…");
           await new Promise(r=>setTimeout(r,300));
           // Reuse the callAPI offline path by passing the OCR text as answer
           const ocrResult = await callAPI(
@@ -5665,9 +5635,8 @@ Rules:
     const markTypes = [hasB?"B (knowledge/fact)":"", hasM?"M (method)":"", hasA?"A (accuracy)":"", hasP?"P (process)":""].filter(Boolean).join(", ") || "B (knowledge), M (method), A (accuracy)";
     const sys=`You are an expert examiner marking a single student answer for a UK school.\n${subject?`Subject: ${subject}`:""}\n${qmQuestion?`Question: ${qmQuestion}`:""}\nMark Scheme: ${scheme||"Apply appropriate UK academic standards."}\n${globalMisconceptions?`Misconceptions to watch for: ${globalMisconceptions}`:""}\n\nANNOTATION STYLE:\nUse proper exam board annotation notation. Detected mark types in this scheme: ${markTypes}.\nFor each marking point assign the correct mark code (B1, B2, M1, M2, A1, A2, P1, P2 etc.).\n\nRespond ONLY with valid JSON, no markdown:\n{"marksAwarded":<n>,"marksAvailable":<n or null>,"percentage":<0-100>,"breakdown":[{"point":"<mark scheme point text>","code":"<B1|M1|A1|P1 etc>","awarded":<bool>,"comment":"<why awarded or not>"}],"annotations":[{"label":"<B1✓ or M1✗ etc>","type":"correct|incorrect|partial","placement":"<top-left|top-right|middle-left|middle-right|bottom-left|bottom-right>"}],"feedback":"<2-3 sentences directly to student>","misconceptions":[],"strengths":[],"improvements":[]}`;
     setQmAnnotReady(false);
-    setQmLoading(true);setQmResult(null);setError(""); setMarkingStep("Analysing student answer…");
+    setQmLoading(true);setQmResult(null);setError("");
     try{
-      setMarkingStep("Comparing answer to mark scheme…"); await new Promise(r=>setTimeout(r,200));
       const text=await callAPI([{role:"user",content:`Student answer:\n\n${answer}`}],sys,1200);
       const parsed=parseJSON(text);
       parsed._aiMarks    = parsed.marksAwarded;
@@ -5675,7 +5644,7 @@ Rules:
       setQmResult(parsed);setQmEditing(false);
     }
     catch(e){setError("Marking failed: "+e.message);}
-    finally{setQmLoading(false);setMarkingStep("");}
+    finally{setQmLoading(false);}
   },[callAPI,qmMode,qmOcr,qmOcrOriginal,qmPasted,qmDocText,qmScheme,globalScheme,globalMisconceptions,subject,qmQuestion,recordCorrection]);
 
   const handleAccept=useCallback(()=>{
@@ -6959,16 +6928,6 @@ Rules:
                       : `Stitch & Review ${scannedPages.length} Page${scannedPages.length>1?"s":""}`}
                   </button>
 
-              {ocrConfidence&&ocrConfidence.lowConfWords.length>0&&(
-                <div className="warn-box" style={{fontSize:"0.8rem",display:"flex",gap:10,alignItems:"flex-start",marginBottom:8}}>
-                  <span>⚠</span>
-                  <div>
-                    <strong>Low OCR confidence ({ocrConfidence.avgConf}% avg)</strong> — these words may be misread:{" "}
-                    <em style={{color:"var(--red)"}}>{ocrConfidence.lowConfWords.slice(0,8).join(", ")}{ocrConfidence.lowConfWords.length>8?" …":""}</em>.
-                    {" "}Verify the text before accepting the mark.
-                  </div>
-                </div>
-              )}
                   {scannedPages.length>0&&(
                     <div className="blue-box">
                       Pages will be joined top-to-bottom and sent to the AI as one complete paper. The result will be saved with the student name above.
