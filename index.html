@@ -2656,6 +2656,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
   const [newRuleConds,setNewRuleConds]       = useState([{field:"answer",op:"contains",value:""}]);
   const [calcChecks,setCalcChecks]           = useState({}); // {qId:{answer,tolerance,units}}
   const [gradeBounds,setGradeBounds]         = useState({A:70,B:55,C:40,D:25});
+  const [aoMode,setAoMode]                   = useState(""); // ""|"GCSE"|"A-Level"|"Primary"
   const [csvPreview,setCsvPreview]           = useState([]);
   const [studentGroups,setStudentGroups]     = useState({}); // {studentName:groupName}
   const [groupNames,setGroupNames]           = useState(["Set 1","Set 2","Intervention","G&T"]);
@@ -2767,6 +2768,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
         if(p.apiMode)      setApiMode(p.apiMode);
         if (!localStorage.getItem("nv_terms_v1")) setShowTerms(true);
         if(p.offlineMode!==undefined) setOfflineMode(p.offlineMode);
+        if(p.aoMode)          setAoMode(p.aoMode);
         if(p.localEndpoint)setLocalEndpoint(p.localEndpoint);
         if(p.localModel)   setLocalModel(p.localModel);
         if(p.proxyUrl)     setProxyUrl(p.proxyUrl);
@@ -2844,7 +2846,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
   }, [teacherName,teacherDept,teacherSchool,teacherPin,teacherRole]);
 
   useEffect(() => {
-    try { localStorage.setItem("nv_prefs", JSON.stringify({apiMode,localEndpoint,localModel,proxyUrl,geminiKey,openaiKey,webSearchEnabled,webSearchEngine,webSearchKey,webSearchCx,offlineMode})); } catch {}
+    try { localStorage.setItem("nv_prefs", JSON.stringify({apiMode,localEndpoint,localModel,proxyUrl,geminiKey,openaiKey,webSearchEnabled,webSearchEngine,webSearchKey,webSearchCx,offlineMode,aoMode})); } catch {}
     try { localStorage.setItem("nv_topics", JSON.stringify({rows:topicRows.slice(0,500),subject:topicSubject,year:topicYear})); } catch {}
   }, [apiMode,localEndpoint,localModel,proxyUrl,geminiKey,openaiKey]);
 
@@ -3799,7 +3801,14 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
     const date=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
     const pct=res.percentage??0,gc=res.grade==="A"?"#3dd68c":res.grade==="B"?"#f5c842":res.grade==="C"?"#f0956b":"#e8473f";
     const wrongs=(res.questions||[]).filter(q=>!q.correct);
-    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${wrongs.length?`<h2>🎯 What You Need to Do</h2><div class="todo"><h3>Focus on these areas:</h3>${wrongs.map(q=>`<div class="tdi">• <strong>${escHtml(q.id||'')}:</strong> ${escHtml(q.feedback||'')}</div>`).join("")}</div>`:""}${(res.improvements||[]).length?`<div style="margin-top:10px">${res.improvements.map(s=>`<span class="tag tr">${escHtml(s)}</span>`).join("")}</div>`:""}<div class="footer">© DMA 2026 · NovaVista AI Paper Marking · ${date}</div>${annotatedImage ? `
+    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${res.questions?.some(q=>q.ao)?`
+          <div style="margin:20px 0;padding:16px;background:white;border:1px solid #e0e0ef;border-radius:8px">
+            <h2 style="font-size:0.95rem;margin:0 0 10px;color:#1a1a2e">Assessment Objective Breakdown</h2>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              ${(()=>{const t={};(res.questions||[]).forEach(q=>{if(q.ao)Object.entries(q.ao).forEach(([k,v])=>{t[k]=(t[k]||0)+v;});});return Object.entries(t).filter(([,v])=>v>0).map(([k,v])=>`<div style="flex:1;min-width:90px;padding:10px;border-radius:6px;background:${k==='AO1'?'#eef1ff':k==='AO2'?'#edfdf4':'#fefce8'};border:1px solid ${k==='AO1'?'rgba(108,143,245,0.3)':k==='AO2'?'rgba(61,214,140,0.3)':'rgba(245,200,66,0.3)'}"><div style="font-size:1.4rem;font-weight:800;color:${k==='AO1'?'#6c8ff5':k==='AO2'?'#3dd68c':'#d4a800'}">${v}</div><div style="font-size:0.72rem;font-weight:700;color:#333">${k}</div><div style="font-size:0.63rem;color:#888">${k==='AO1'?'Knowledge':k==='AO2'?'Method':'Reasoning'}</div></div>`).join('');})()}
+            </div>
+          </div>`:``}
+          ${wrongs.length?`<h2>🎯 What You Need to Do</h2><div class="todo"><h3>Focus on these areas:</h3>${wrongs.map(q=>`<div class="tdi">• <strong>${escHtml(q.id||'')}:</strong> ${escHtml(q.feedback||'')}</div>`).join("")}</div>`:""}${(res.improvements||[]).length?`<div style="margin-top:10px">${res.improvements.map(s=>`<span class="tag tr">${escHtml(s)}</span>`).join("")}</div>`:""}<div class="footer">© DMA 2026 · NovaVista AI Paper Marking · ${date}</div>${annotatedImage ? `
           <div style="margin-top:24px;padding:16px;background:white;border:1px solid #e0e0ef;border-radius:8px;">
             <h2 style="font-size:1rem;margin:0 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:6px;">Annotated Script</h2>
             <img src="${annotatedImage}" style="width:100%;border-radius:4px;border:1px solid #e0e0ef;" alt="Marked paper"/>
@@ -4806,7 +4815,10 @@ Rules:
         }
         setMarkingStep("Reading student work…"); await new Promise(r=>setTimeout(r,250)); setMarkingStep("Sending to AI marker…");
       }
-      const sys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}${studentName?`\nStudent: ${studentName}`:""}\nMARKING SCHEME: ${globalScheme||"Apply standard academic marking."}\n${globalMisconceptions?`MISCONCEPTIONS TO FLAG: ${globalMisconceptions}`:""}\n${answerNote}${searchNote}\nFor each question use B/M/A mark codes matching the marking scheme.\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"<B1|M1|A1 etc>","feedback":"","correct":<bool>,"misconception":null,"uncertain":<bool>}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
+      const aoInstructions=aoMode==="GCSE"?`\nASSESSMENT OBJECTIVES — mark each question against:\nAO1 (Knowledge & Understanding): recall, definitions, facts.\nAO2 (Application & Method): applying knowledge, correct method/working shown.\nAO3 (Analysis & Evaluation): reasoning, explaining, evaluating, justifying.\nInclude "ao" field in each question: {"AO1":<n>,"AO2":<n>,"AO3":<n>} showing marks awarded per AO.`
+:aoMode==="A-Level"?`\nASSESSMENT OBJECTIVES:\nAO1 (Knowledge): accurate recall and understanding of content.\nAO2 (Application): applying knowledge to novel contexts and problems.\nAO3 (Analysis/Evaluation): critical analysis, evaluation of evidence, justified conclusions.\nInclude "ao":{"AO1":<n>,"AO2":<n>,"AO3":<n>} in each question result.`
+:"";
+const sys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}${studentName?`\nStudent: ${studentName}`:""}\nMARKING SCHEME: ${globalScheme||"Apply standard academic marking."}\n${globalMisconceptions?`MISCONCEPTIONS TO FLAG: ${globalMisconceptions}`:""}\n${aoInstructions}${answerNote}${searchNote}\nUse B/M/A mark codes. For method marks (M1): award even if final answer wrong if working is shown.\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"<B1|M1|A1>","feedback":"","correct":<bool>,"misconception":null,"uncertain":<bool>,"ao":null}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
       const typedAnswerText = extraAnswers && Object.keys(extraAnswers).length>0
         ? Object.entries(extraAnswers).map(([id,ans])=>`${id}: ${ans}`).join("\n")
         : "";
@@ -5893,6 +5905,17 @@ Rules:
                     <div className="field">
                       <div className="field-label">Subject / Paper</div>
                       <input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="e.g. GCSE Biology Paper 1"/>
+                    </div>
+                    <div className="field">
+                      <div className="field-label">Assessment Level</div>
+                      <div className="toggle-group" style={{width:"100%"}}>
+                        {["","GCSE","A-Level","Primary"].map(m=>(
+                          <button key={m} className={`toggle-opt ${aoMode===m?"on":""}`} onClick={()=>setAoMode(m)}>
+                            {m||"Standard"}
+                          </button>
+                        ))}
+                      </div>
+                      {aoMode&&<div className="dim small mt4">AO1/AO2/AO3 breakdown will be shown in results and feedback.</div>}
                     </div>
                     <div className="g2 gap12">
                       <div className="field">
@@ -7280,6 +7303,31 @@ Rules:
                     </div>
                   </div>
 
+                  {/* AO breakdown summary */}
+                  {aoMode&&results.questions?.some(q=>q.ao)&&(()=>{
+                    const totals={};
+                    results.questions.forEach(q=>{if(q.ao)Object.entries(q.ao).forEach(([k,v])=>{totals[k]=(totals[k]||0)+v;});});
+                    const entries=Object.entries(totals).filter(([,v])=>v>0);
+                    if(!entries.length)return null;
+                    return(
+                      <div className="card card-pad col gap8">
+                        <div className="card-title" style={{marginBottom:2}}>Assessment Objective Breakdown</div>
+                        <div className="dim small" style={{marginBottom:6}}>Marks awarded per AO — helps identify where to focus revision.</div>
+                        <div className="row gap10" style={{flexWrap:"wrap"}}>
+                          {entries.map(([k,v])=>(
+                            <div key={k} style={{flex:1,minWidth:120,padding:"10px 14px",borderRadius:"var(--radius-sm)",
+                              background:k==="AO1"?"rgba(108,143,245,0.1)":k==="AO2"?"rgba(61,214,140,0.1)":"rgba(245,200,66,0.1)",
+                              border:`1px solid ${k==="AO1"?"rgba(108,143,245,0.25)":k==="AO2"?"rgba(61,214,140,0.25)":"rgba(245,200,66,0.25)"}`}}>
+                              <div style={{fontSize:"1.3rem",fontWeight:800,color:k==="AO1"?"var(--blue)":k==="AO2"?"var(--green)":"var(--gold)"}}>{v}</div>
+                              <div style={{fontSize:"0.72rem",fontWeight:700,color:"var(--text2)"}}>{k}</div>
+                              <div style={{fontSize:"0.65rem",color:"var(--text3)"}}>{k==="AO1"?"Knowledge":k==="AO2"?"Method/Application":"Analysis/Reasoning"}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Q breakdown */}
                   <div className="card card-pad col gap10">
                     <div className="row-between">
@@ -7299,6 +7347,17 @@ Rules:
                             <div className="q-desc">{q.description}</div>
                             <div className="q-feedback">{q.feedback}</div>
                             {q.misconception&&<span className="misconception-tag">⚠ {q.misconception}</span>}
+                             {q.ao&&aoMode&&(
+                               <div className="row gap6 mt4" style={{flexWrap:"wrap"}}>
+                                 {Object.entries(q.ao).filter(([,v])=>v>0).map(([k,v])=>(
+                                   <span key={k} style={{fontSize:"0.65rem",fontWeight:700,padding:"1px 7px",borderRadius:99,
+                                     background:k==="AO1"?"rgba(108,143,245,0.15)":k==="AO2"?"rgba(61,214,140,0.15)":"rgba(245,200,66,0.15)",
+                                     color:k==="AO1"?"var(--blue)":k==="AO2"?"var(--green)":"var(--gold)"}}>
+                                     {k}: {v}mk
+                                   </span>
+                                 ))}
+                               </div>
+                             )}
                           </div>
                           <button className="q-override-btn" onClick={()=>setOverridingQ(overridingQ===q.id?null:q.id)}>
                             {overridingQ===q.id?"✓ Done":"✏️"}
