@@ -2552,6 +2552,7 @@ function NovaVista() {
   const [uncertainQs,setUncertainQs]           = useState([]);    // questions AI couldn't read
   const [manualAnswers,setManualAnswers]        = useState({});    // {id: answerText}
   const [overridingQ,setOverridingQ]           = useState(null);  // question id being overridden
+  const [similarPrompt,setSimilarPrompt]     = useState(null);  // {qId,marksAwarded,feedback,count,pid,studentIds}
 
   const [batchQueue,setBatchQueue]   = useState([]); // [{id,name,imageB64,status,results,error}]
   const [batchRunning,setBatchRunning] = useState(false);
@@ -3290,6 +3291,10 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
         const marksAwarded = Math.min(allPoints.filter(p=>p.awarded).length, marksAvailable);
         const percentage   = marksAvailable > 0 ? Math.round((marksAwarded / marksAvailable) * 100) : 0;
         const grade        = percentage>=(gradeBounds.A||70)?"A":percentage>=(gradeBounds.B||55)?"B":percentage>=(gradeBounds.C||40)?"C":percentage>=(gradeBounds.D||25)?"D":"F";
+        const ao1=calcResults.some(r=>r.awarded)||ruleResults.some(r=>r.awarded)?1:0;
+        const ao2=kwPoints.some(p=>p.awarded&&p.code&&(p.code[0]==="M"||p.code[0]==="P"))?1:0;
+        const ao3=kwPoints.some(p=>p.awarded&&p.code&&p.code[0]==="E")?1:0;
+        const localAO=aoMode?{AO1:ao1,AO2:ao2,AO3:ao3}:null;
 
         const misconceptions = [];
         Object.values(errorsDB).flat().forEach(err=>{
@@ -3301,7 +3306,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
 
         const strengths    = allPoints.filter(p=>p.awarded).map(p=>p.text).slice(0,3);
         const improvements = allPoints.filter(p=>!p.awarded).map(p=>`Include: ${p.text}`).slice(0,3);
-        return {marksAwarded,marksAvailable,percentage,grade,awardedPoints:allPoints,strengths,improvements,misconceptions};
+        return {marksAwarded,marksAvailable,percentage,grade,awardedPoints:allPoints,strengths,improvements,misconceptions,localAO};
       };
 
       const getAnswerText = () => {
@@ -4795,7 +4800,7 @@ Rules:
           improvements:marked.filter(p=>!p.awarded).map(p=>`Include: ${p.text}`).slice(0,3),
           _fallback:true, image:img
         };
-        setResults(fallbackResult);
+        setResults({...fallbackResult,_studentId:studentName||Date.now()});
         setReviewMode(null);setUncertainQs([]);setManualAnswers({});
         setTab("results");
         return;
@@ -4818,7 +4823,7 @@ Rules:
       const aoInstructions=aoMode==="GCSE"?`\nASSESSMENT OBJECTIVES — mark each question against:\nAO1 (Knowledge & Understanding): recall, definitions, facts.\nAO2 (Application & Method): applying knowledge, correct method/working shown.\nAO3 (Analysis & Evaluation): reasoning, explaining, evaluating, justifying.\nInclude "ao" field in each question: {"AO1":<n>,"AO2":<n>,"AO3":<n>} showing marks awarded per AO.`
 :aoMode==="A-Level"?`\nASSESSMENT OBJECTIVES:\nAO1 (Knowledge): accurate recall and understanding of content.\nAO2 (Application): applying knowledge to novel contexts and problems.\nAO3 (Analysis/Evaluation): critical analysis, evaluation of evidence, justified conclusions.\nInclude "ao":{"AO1":<n>,"AO2":<n>,"AO3":<n>} in each question result.`
 :"";
-const sys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}${studentName?`\nStudent: ${studentName}`:""}\nMARKING SCHEME: ${globalScheme||"Apply standard academic marking."}\n${globalMisconceptions?`MISCONCEPTIONS TO FLAG: ${globalMisconceptions}`:""}\n${aoInstructions}${answerNote}${searchNote}\nUse B/M/A mark codes. For method marks (M1): award even if final answer wrong if working is shown.\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"<B1|M1|A1>","feedback":"","correct":<bool>,"misconception":null,"uncertain":<bool>,"ao":null}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
+const sys=`You are a strict UK examiner. Follow these rules without exception:\n1. Only award marks explicitly justified by the student's work — never assume or infer missing steps.\n2. If unsure whether a mark is deserved, do NOT award it. Set uncertain:true and confidence below 0.7.\n3. Mark priority: AO1=correct final answer · AO2=valid method shown (even if answer wrong) · AO3=reasoning/explanation given.\n4. If answer matches a known common error, name it explicitly in reason_for_loss.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}${studentName?`\nStudent: ${studentName}`:""}\nMARKING SCHEME:\n${globalScheme||"Apply standard marking."}\n${globalMisconceptions?`KNOWN ERRORS TO PRIORITISE: ${globalMisconceptions}\n`:""}${aoInstructions}${answerNote}${searchNote}\nRespond ONLY with valid JSON:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"B1|M1|A1","feedback":"","reason_for_loss":"","correct":<bool>,"misconception":null,"uncertain":<bool>,"confidence":0.9,"ao":null}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment","tone":"e.g. Good working shown ✓ | Check this – method error ✗"}]}`;
       const typedAnswerText = extraAnswers && Object.keys(extraAnswers).length>0
         ? Object.entries(extraAnswers).map(([id,ans])=>`${id}: ${ans}`).join("\n")
         : "";
@@ -4871,13 +4876,13 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
           const ocrParsed = parseJSON(ocrResult);
           ocrParsed._ocrText = ocrText;
           ocrParsed.image = img;
-          setResults(ocrParsed);
+          setResults({...ocrParsed,_studentId:studentName||Date.now()});
           setReviewMode(null); setUncertainQs([]); setManualAnswers({});
           setTab("results");
           return;
         }
 
-      setResults({...parsed,image:img});
+      setResults({...parsed,image:img,_studentId:studentName||Date.now()});
       setReviewMode(null); setUncertainQs([]); setManualAnswers({});
       setTab("results");
     }catch(e){
@@ -5609,6 +5614,14 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
   /* ══════════════════════════════════════════════════════════
      RENDER
   ══════════════════════════════════════════════════════════ */
+  const S={
+    mono:{fontFamily:"monospace",fontSize:"0.82rem"},
+    secH:{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12},
+    wc:{width:"100%",justifyContent:"center"},
+    s0:{color:"var(--green)"},
+    s1:{background:"var(--border)",padding:"1px 5px",borderRadius:3},
+    s2:{flex:1,justifyContent:"center"},
+  };
   return (
     <div className="shell">
 
@@ -6363,7 +6376,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                     </div>
                   </div>
 
-                  <button className="btn btn-blue btn-lg" style={{width:"100%",justifyContent:"center"}}
+                  <button className="btn btn-blue btn-lg" style={S.wc}
                     disabled={qmLoading||qmDocLoading||(qmMode==="image"?(!qmOcr.trim()||qmOcrLoading):qmMode==="doc"?!qmDocText.trim():!qmPasted.trim())}
                     onClick={handleMark}>
                     <Ic d={I.zap} size={17}/>
@@ -6633,7 +6646,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
 
                     {/* Controls */}
                     {!cameraActive?(
-                      <button className="btn btn-red btn-lg" style={{width:"100%",justifyContent:"center"}}
+                      <button className="btn btn-red btn-lg" style={S.wc}
                         onClick={scanMode==="auto"?startAutoScan:startCamera}>
                         <Ic d={I.camera} size={16}/>
                         {scanMode==="auto"?"Start Auto-Scan":"Start Camera"}
@@ -6641,10 +6654,10 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                     ):scanMode==="auto"?(
                       <div className="row gap10" style={{justifyContent:"center"}}>
                         {!autoActive
-                          ?<button className="btn btn-green btn-lg" style={{flex:1,justifyContent:"center"}} onClick={()=>setAutoActive(true)}>
+                          ?<button className="btn btn-green btn-lg" style={S.s2} onClick={()=>setAutoActive(true)}>
                              ▶ Resume Auto-Scan
                            </button>
-                          :<button className="btn btn-gold btn-lg" style={{flex:1,justifyContent:"center"}} onClick={stopAutoScan}>
+                          :<button className="btn btn-gold btn-lg" style={S.s2} onClick={stopAutoScan}>
                              ⏸ Pause
                            </button>}
                         <button className="btn btn-ghost" onClick={stopCamera}>Stop Camera</button>
@@ -6750,7 +6763,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                   {/* Stitch button */}
                   <button
                     className="btn btn-green btn-lg"
-                    style={{width:"100%",justifyContent:"center"}}
+                    style={S.wc}
                     disabled={scannedPages.length===0}
                     onClick={stitchAndReview}>
                     <Ic d={I.checksq} size={17}/>
@@ -6990,7 +7003,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                       <>
                         <button
                           className="btn btn-red btn-lg"
-                          style={{flex:1,justifyContent:"center"}}
+                          style={S.s2}
                           disabled={!batchQueue.filter(i=>i.status==="pending"||i.status==="failed").length}
                           onClick={batchMark}>
                           <Ic d={I.checksq} size={17}/>
@@ -7008,7 +7021,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                         )}
                       </>
                     ):(
-                      <button className="btn btn-ghost btn-lg" style={{flex:1,justifyContent:"center"}}
+                      <button className="btn btn-ghost btn-lg" style={S.s2}
                         onClick={()=>{batchStopRef.current=true;setBatchRunning(false);}}>
                         ⏹ Stop
                       </button>
@@ -7151,7 +7164,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                         </button>
                       </div>
 
-                      <button className="btn btn-green btn-lg" style={{width:"100%",justifyContent:"center"}}
+                      <button className="btn btn-green btn-lg" style={S.wc}
                         onClick={()=>markWhole(stitchedImage)}>
                         <Ic d={I.checksq} size={17}/>
                         {offlineMode?"✈ Mark with Scheme (Offline)"
@@ -7217,12 +7230,12 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
 
                       <button
                         className="btn btn-green btn-lg"
-                        style={{width:"100%",justifyContent:"center"}}
+                        style={S.wc}
                         onClick={()=>markWhole(stitchedImage, manualAnswers)}>
                         <Ic d={I.checksq} size={17}/> Mark with My Answers
                       </button>
 
-                      <button className="btn btn-ghost" style={{width:"100%",justifyContent:"center"}} onClick={()=>markWhole(stitchedImage)}>
+                      <button className="btn btn-ghost" style={S.wc} onClick={()=>markWhole(stitchedImage)}>
                         Skip — Auto-Mark Anyway
                       </button>
                     </>
@@ -7290,7 +7303,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                   {/* Strengths & improvements */}
                   <div className="g2 gap14">
                     <div className="card card-pad col gap8">
-                      <div className="card-subtitle" style={{color:"var(--green)"}}>✓ Strengths</div>
+                      <div className="card-subtitle" style={S.s0}>✓ Strengths</div>
                       <div className="row gap4" style={{flexWrap:"wrap"}}>
                         {(results.strengths||[]).map((s,i)=><span key={i} className="pill pill-green">{s}</span>)}
                       </div>
@@ -7311,7 +7324,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                     if(!entries.length)return null;
                     return(
                       <div className="card card-pad col gap8">
-                        <div className="card-title" style={{marginBottom:2}}>Assessment Objective Breakdown</div>
+                        <div className="card-title">Assessment Objective Breakdown</div>
                         <div className="dim small" style={{marginBottom:6}}>Marks awarded per AO — helps identify where to focus revision.</div>
                         <div className="row gap10" style={{flexWrap:"wrap"}}>
                           {entries.map(([k,v])=>(
@@ -7347,12 +7360,13 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                             <div className="q-desc">{q.description}</div>
                             <div className="q-feedback">{q.feedback}</div>
                             {q.misconception&&<span className="misconception-tag">⚠ {q.misconception}</span>}
+                             {q.reason_for_loss&&!q.correct&&<div className="q-feedback" style={{color:"var(--red)",fontStyle:"italic"}}>Lost marks: {q.reason_for_loss}</div>}
+                             {q.confidence!=null&&q.confidence<0.7&&<span className="pill pill-gold">⚠ Needs review ({Math.round(q.confidence*100)}%)</span>}
+                             {q._edited&&<span className="pill pill-blue">✏ Edited by teacher</span>}
                              {q.ao&&aoMode&&(
                                <div className="row gap6 mt4" style={{flexWrap:"wrap"}}>
                                  {Object.entries(q.ao).filter(([,v])=>v>0).map(([k,v])=>(
-                                   <span key={k} style={{fontSize:"0.65rem",fontWeight:700,padding:"1px 7px",borderRadius:99,
-                                     background:k==="AO1"?"rgba(108,143,245,0.15)":k==="AO2"?"rgba(61,214,140,0.15)":"rgba(245,200,66,0.15)",
-                                     color:k==="AO1"?"var(--blue)":k==="AO2"?"var(--green)":"var(--gold)"}}>
+                                   <span key={k} className={`pill ${k==="AO1"?"pill-blue":k==="AO2"?"pill-green":"pill-gold"}`}>
                                      {k}: {v}mk
                                    </span>
                                  ))}
@@ -7375,7 +7389,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                                   defaultValue={q.marksAwarded}
                                   onChange={e=>{
                                     const v=parseInt(e.target.value)||0;
-                                    const updated=results.questions.map((qq,ii)=>ii===i?{...qq,marksAwarded:v,correct:v>0,percentage:q.marksAvailable?Math.round(v/q.marksAvailable*100):0}:qq);
+                                    const updated=results.questions.map((qq,ii)=>ii===i?{...qq,_edited:true,marksAwarded:v,correct:v>0,percentage:q.marksAvailable?Math.round(v/q.marksAvailable*100):0}:qq);
                                     recalcResults(updated);
                                   }}
                                 />
@@ -7387,7 +7401,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                                   defaultValue={q.feedback}
                                   placeholder="Leave blank to keep AI feedback…"
                                   onChange={e=>{
-                                    const updated=results.questions.map((qq,ii)=>ii===i?{...qq,feedback:e.target.value||qq.feedback}:qq);
+                                    const updated=results.questions.map((qq,ii)=>ii===i?{...qq,_edited:true,feedback:e.target.value||qq.feedback}:qq);
                                     setResults(p=>({...p,questions:updated}));
                                   }}
                                 />
@@ -7720,52 +7734,99 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                               </div>
                             </div>
                           )}
-                          {classView==="mistakes"&&sts.length>0&&(
-                            <div className="col gap12">
-                              <div style={{fontSize:"0.78rem",color:"var(--text2)",marginBottom:4}}>Most common mistakes across {sts.length} students. <strong style={{color:"var(--red)"}}>Red = less than 50% correct.</strong></div>
-                              {qIds.map(qid=>{
-                                const allQs=sts.map(st=>(st.results?.questions||[]).find(q=>q.id===qid)).filter(Boolean);
-                                if(!allQs.length)return null;
-                                const wrong=allQs.filter(q=>!q.correct);
-                                const wrongPct=Math.round((wrong.length/allQs.length)*100);
-                                const misconceptions=allQs.map(q=>q.misconception).filter(Boolean);
-                                const miscCounts={};misconceptions.forEach(m=>{miscCounts[m]=(miscCounts[m]||0)+1;});
-                                const topMisc=Object.entries(miscCounts).sort((a,b)=>b[1]-a[1]).slice(0,3);
-                                const avgMarks=allQs.length?Math.round(allQs.reduce((s,q)=>s+(q.marksAwarded||0),0)/allQs.length*10)/10:0;
-                                const maxMarks=allQs[0]?.marksAvailable||0;
-                                const isWeak=wrongPct>=50;
-                                return(
-                                  <div key={qid} className="card card-pad" style={{borderLeft:`3px solid ${isWeak?"var(--red)":"var(--border)"}`}}>
-                                    <div className="row-between" style={{marginBottom:topMisc.length?8:0}}>
-                                      <div>
-                                        <span style={{fontWeight:700,fontSize:"0.9rem"}}>{qid}</span>
-                                        <span style={{marginLeft:10,fontSize:"0.78rem",color:"var(--text3)"}}>{avgMarks}/{maxMarks} avg</span>
-                                        {isWeak&&<span style={{marginLeft:8,fontSize:"0.68rem",fontWeight:700,padding:"1px 6px",borderRadius:99,background:"rgba(232,71,63,0.12)",color:"var(--red)"}}>WEAK POINT</span>}
-                                      </div>
-                                      <div style={{fontSize:"0.85rem",fontWeight:700,color:isWeak?"var(--red)":"var(--text2)"}}>
-                                        {wrongPct}% incorrect
-                                      </div>
-                                    </div>
-                                    {topMisc.length>0&&(
-                                      <div className="col gap4">
-                                        {topMisc.map(([m,count],i)=>(
-                                          <div key={i} style={{fontSize:"0.78rem",display:"flex",gap:8,alignItems:"center"}}>
-                                            <span style={{color:"var(--red)",fontWeight:700,minWidth:18}}>{count}×</span>
-                                            <span style={{color:"var(--text2)"}}>{m}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                    {!topMisc.length&&wrong.length>0&&(
-                                      <div style={{fontSize:"0.75rem",color:"var(--text3)"}}>
-                                        {wrong.length} student{wrong.length!==1?"s":""} answered incorrectly — no specific misconception data recorded.
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
+                          {classView==="mistakes"&&sts.length>0&&(()=>{
+            const aoTotals={AO1:0,AO2:0,AO3:0},aoMax={AO1:0,AO2:0,AO3:0};
+            sts.forEach(st=>(st.results?.questions||[]).forEach(q=>{
+              if(q.ao)Object.entries(q.ao).forEach(([k,v])=>{aoTotals[k]=(aoTotals[k]||0)+v;aoMax[k]=(aoMax[k]||0)+(q.marksAvailable||1);});
+            }));
+            const aoPct=k=>aoMax[k]>0?Math.round(aoTotals[k]/aoMax[k]*100):null;
+            const top3=([...sts].sort((a,b)=>(b.results?.percentage||0)-(a.results?.percentage||0))).slice(0,3);
+            const bot3=([...sts].sort((a,b)=>(a.results?.percentage||0)-(b.results?.percentage||0))).slice(0,3);
+            const weakAOs=["AO1","AO2","AO3"].filter(k=>aoPct(k)!=null&&aoPct(k)<60);
+            return(<div className="col gap14">
+              <div style={{fontSize:"0.78rem",color:"var(--text2)"}}>Class analytics across {sts.length} students. <strong style={{color:"var(--red)"}}>Red = under 50% correct.</strong></div>
+              {(aoTotals.AO1||aoTotals.AO2||aoTotals.AO3)>0&&(
+              <div className="card card-pad col gap10">
+                <div className="card-title" style={{marginBottom:2}}>AO Performance</div>
+                {["AO1","AO2","AO3"].map(k=>{const p=aoPct(k);if(p==null)return null;const col=p>=70?"var(--green)":p>=50?"var(--gold)":"var(--red)";return(
+                  <div key={k} style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:44,fontSize:"0.72rem",fontWeight:700,color:"var(--text2)"}}>{k}</div>
+                    <div style={{flex:1,height:10,background:"var(--inset)",borderRadius:5,overflow:"hidden"}}>
+                      <div style={{width:`${p}%`,height:"100%",background:col,borderRadius:5,transition:"width 0.4s"}}/>
+                    </div>
+                    <div style={{width:38,fontSize:"0.8rem",fontWeight:700,color:col}}>{p}%</div>
+                    <div style={{fontSize:"0.65rem",color:"var(--text3)"}}>{k==="AO1"?"Knowledge":k==="AO2"?"Method":"Reasoning"}</div>
+                  </div>
+                )})}
+              </div>
+              )}
+              {(top3.length>0||bot3.length>0)&&(
+              <div className="g2 gap10">
+                <div className="card card-pad col gap6">
+                  <div className="card-subtitle" style={S.s0}>🏆 Top performers</div>
+                  {top3.map(st=><div key={st.id} style={{fontSize:"0.8rem",display:"flex",justifyContent:"space-between"}}><span>{st.name}</span><strong style={S.s0}>{st.results?.percentage||0}%</strong></div>)}
+                </div>
+                <div className="card card-pad col gap6">
+                  <div className="card-subtitle" style={{color:"var(--red)"}}>🎯 Needs support</div>
+                  {bot3.map(st=><div key={st.id} style={{fontSize:"0.8rem",display:"flex",justifyContent:"space-between"}}><span>{st.name}</span><strong style={{color:"var(--red)"}}>{st.results?.percentage||0}%</strong></div>)}
+                </div>
+              </div>
+              )}
+              {weakAOs.length>0&&(
+              <div className="card card-pad col gap6" style={{borderLeft:"3px solid var(--red)"}}>
+                <div className="card-title" style={{marginBottom:2}}>💡 Recommended interventions</div>
+                {weakAOs.map(k=>(
+                  <div key={k} style={{fontSize:"0.8rem",color:"var(--text2)"}}>
+                    <strong style={{color:"var(--red)"}}>{k} ({k==="AO1"?"Knowledge":k==="AO2"?"Method":"Reasoning"})</strong> is weak — focus revision here.
+                  </div>
+                ))}
+              </div>
+              )}
+              <div style={{fontSize:"0.78rem",fontWeight:700,color:"var(--text2)",marginTop:4}}>Question breakdown</div>
+              {qIds.map(qid=>{
+                const allQs=sts.map(st=>(st.results?.questions||[]).find(q=>q.id===qid)).filter(Boolean);
+                if(!allQs.length)return null;
+                const wrong=allQs.filter(q=>!q.correct);
+                const wrongPct=Math.round((wrong.length/allQs.length)*100);
+                const misconceptions=allQs.map(q=>q.misconception).filter(Boolean);
+                const miscCounts={};misconceptions.forEach(m=>{miscCounts[m]=(miscCounts[m]||0)+1;});
+                const topMisc=Object.entries(miscCounts).sort((a,b)=>b[1]-a[1]).slice(0,3);
+                const avgMarks=allQs.length?Math.round(allQs.reduce((s,q)=>s+(q.marksAwarded||0),0)/allQs.length*10)/10:0;
+                const maxMarks=allQs[0]?.marksAvailable||0;
+                const isWeak=wrongPct>=50;
+                return(
+                  <div key={qid} className="card card-pad" style={{borderLeft:`3px solid ${isWeak?"var(--red)":"var(--border)"}`}}>
+                    <div className="row-between" style={{marginBottom:topMisc.length?8:0}}>
+                      <div>
+                        <span style={{fontWeight:700,fontSize:"0.9rem"}}>{qid}</span>
+                        <span style={{marginLeft:10,fontSize:"0.78rem",color:"var(--text3)"}}>{avgMarks}/{maxMarks} avg</span>
+                        {isWeak&&<span style={{marginLeft:8,fontSize:"0.68rem",fontWeight:700,padding:"1px 6px",borderRadius:99,background:"rgba(232,71,63,0.12)",color:"var(--red)"}}>WEAK POINT</span>}
+                      </div>
+                      <div style={{fontSize:"0.85rem",fontWeight:700,color:isWeak?"var(--red)":"var(--text2)"}}>
+                        {wrongPct}% incorrect
+                      </div>
+                    </div>
+                    {topMisc.length>0&&(
+                      <div className="col gap4">
+                        {topMisc.map(([m,count],i)=>(
+                          <div key={i} style={{fontSize:"0.78rem",display:"flex",gap:8,alignItems:"center"}}>
+                            <span style={{color:"var(--red)",fontWeight:700,minWidth:18}}>{count}×</span>
+                            <span style={{color:"var(--text2)"}}>{m}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {!topMisc.length&&wrong.length>0&&(
+                      <div style={{fontSize:"0.75rem",color:"var(--text3)"}}>
+                        {wrong.length} student{wrong.length!==1?"s":""} answered incorrectly — no specific misconception data recorded.
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+                          );
+                          })()}
                           {classView==="table"&&sts.length===0&&<div className="info-box">Add students to see the topic breakdown table.</div>}
                         </div>
                       )}
@@ -8261,7 +8322,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
               {window.location.hash==="#admin-keygen"&&(
                 <div className="card card-pad col gap14" style={{borderColor:"rgba(163,131,250,0.3)",background:"rgba(163,131,250,0.04)"}}>
                   <div className="card-title" style={{color:"var(--purple)"}}>🔑 Key Generator (Admin Only)</div>
-                  <div className="dim small">Generate licence keys to issue to schools. Visit <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>#admin-keygen</code> to access this panel.</div>
+                  <div className="dim small">Generate licence keys to issue to schools. Visit <code style={S.s1}>#admin-keygen</code> to access this panel.</div>
                   <div className="g2 gap12">
                     <div className="field"><div className="field-label">Tier</div>
                       <select id="kg-tier"><option value="TCH">Teacher (TCH)</option><option value="DEP">Department (DEP)</option><option value="SCH">School (SCH)</option></select>
@@ -8452,7 +8513,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                       <div className="dim small">Downloads a config file with your corrections baked in. Rebuild your local Ollama model in 2 minutes.</div>
                     </div>
                   </div>
-                  <button className="btn btn-blue" style={{width:"100%",justifyContent:"center"}} onClick={generateModelfile}>
+                  <button className="btn btn-blue" style={S.wc} onClick={generateModelfile}>
                     <Ic d={I.server} size={16}/> Download Modelfile
                   </button>
                   <div className="dim small">Works with 0 corrections — generates a strong base model. Gets better every time you correct a result.</div>
@@ -8466,7 +8527,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                       <div className="dim small">Downloads a JSONL file of all your corrections for deep fine-tuning with Unsloth.</div>
                     </div>
                   </div>
-                  <button className="btn btn-green" style={{width:"100%",justifyContent:"center"}} onClick={exportTrainingData} disabled={corrections.length===0}>
+                  <button className="btn btn-green" style={S.wc} onClick={exportTrainingData} disabled={corrections.length===0}>
                     <Ic d={I.dl} size={16}/> Export {corrections.length>0?`${corrections.length} Corrections`:"(no corrections yet)"}
                   </button>
                   <div className="dim small">{corrections.length===0?"Mark papers, then edit any results — corrections appear here automatically.":corrections.length<50?`${corrections.length} corrections saved. Aim for 50+ before fine-tuning.`:`✓ ${corrections.length} corrections — good amount for fine-tuning!`}</div>
@@ -8488,7 +8549,7 @@ const sys=`You are an expert examiner marking a student paper.\nSubject: ${subje
                   <div className="training-stat-lbl">Mark Corrections</div>
                 </div>
                 <div className="training-stat">
-                  <div className="training-stat-num" style={{color:"var(--green)"}}>{corrections.filter(c=>c.type==="feedback").length}</div>
+                  <div className="training-stat-num" style={S.s0}>{corrections.filter(c=>c.type==="feedback").length}</div>
                   <div className="training-stat-lbl">Feedback Corrections</div>
                 </div>
               </div>
@@ -8529,11 +8590,11 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                   <div>
                     <div className="field-label" style={{marginBottom:6}}>Step 2 — Verify the new model exists:</div>
                     <div className="step-code">ollama list</div>
-                    <div className="dim small mt4">You should see <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>novavista-marker</code> in the list.</div>
+                    <div className="dim small mt4">You should see <code style={S.s1}>novavista-marker</code> in the list.</div>
                   </div>
                   <div>
                     <div className="field-label" style={{marginBottom:6}}>Step 3 — Update NovaVista to use it:</div>
-                    <div className="dim small">Go to Privacy & Data → Local Ollama → set Model Name to <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>novavista-marker</code></div>
+                    <div className="dim small">Go to Privacy & Data → Local Ollama → set Model Name to <code style={S.s1}>novavista-marker</code></div>
                   </div>
                 </div>
 
@@ -8712,14 +8773,14 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                 {/* ── Proxy config ── */}
                 {apiMode==="proxy"&&(
                   <div className="card card-pad col gap12" style={{background:"var(--inset)",border:"1px solid rgba(61,214,140,0.25)"}}>
-                    <div className="field-label" style={{color:"var(--green)"}}>Proxy Server URL</div>
+                    <div className="field-label" style={S.s0}>Proxy Server URL</div>
                     <input value={proxyUrl} onChange={e=>setProxyUrl(e.target.value)}
                       placeholder="https://novavista-proxy.YOUR-USERNAME.workers.dev"/>
                     {proxySet
                       ?<div className="info-box">✓ Proxy configured — no key needed in browser.</div>
                       :<div className="warn-box">Paste your Cloudflare Worker URL above.</div>}
                     <div className="blue-box" style={{fontSize:"0.8rem"}}>
-                      Deploy with <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>wrangler secret put ANTHROPIC_API_KEY</code> then <code style={{background:"var(--border)",padding:"1px 5px",borderRadius:3}}>wrangler deploy</code>
+                      Deploy with <code style={S.s1}>wrangler secret put ANTHROPIC_API_KEY</code> then <code style={S.s1}>wrangler deploy</code>
                     </div>
                   </div>
                 )}
@@ -8786,14 +8847,14 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                           <div className="field-label">Azure OpenAI Endpoint</div>
                           <input value={msEndpoint} onChange={e=>setMsEndpoint(e.target.value)}
                             placeholder="https://your-school.openai.azure.com"
-                            style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                            style={S.mono}/>
                           <div className="dim small mt4">Ask your IT admin for this URL</div>
                         </div>
                         <div className="field">
                           <div className="field-label">Deployment Name</div>
                           <input value={msDeployment} onChange={e=>setMsDeployment(e.target.value)}
                             placeholder="gpt-4o"
-                            style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                            style={S.mono}/>
                         </div>
                       </div>
                       <div className="g2 gap10">
@@ -8801,14 +8862,14 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                           <div className="field-label">Client (App) ID</div>
                           <input value={msClientId} onChange={e=>{ setMsClientId(e.target.value); msalRef.current=null; }}
                             placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                            style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                            style={S.mono}/>
                           <div className="dim small mt4">From Azure App Registration</div>
                         </div>
                         <div className="field">
                           <div className="field-label">Tenant ID (optional)</div>
                           <input value={msTenantId} onChange={e=>{ setMsTenantId(e.target.value); msalRef.current=null; }}
                             placeholder="common (or your tenant ID)"
-                            style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                            style={S.mono}/>
                         </div>
                       </div>
                       {msEndpoint.trim()&&<div className="info-box">✓ Ready — papers will be marked using your school's Azure OpenAI ({msDeployment||"gpt-4o"}).</div>}
@@ -8823,19 +8884,19 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                         <div className="field-label">Azure OpenAI Endpoint <span className="dim small">(from IT admin)</span></div>
                         <input value={msEndpoint} onChange={e=>setMsEndpoint(e.target.value)}
                           placeholder="https://your-school.openai.azure.com"
-                          style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                          style={S.mono}/>
                       </div>
                       <div className="field">
                         <div className="field-label">Deployment Name</div>
                         <input value={msDeployment} onChange={e=>setMsDeployment(e.target.value)}
                           placeholder="gpt-4o"
-                          style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                          style={S.mono}/>
                       </div>
                       <div className="field">
                         <div className="field-label">Client (App) ID <span className="dim small">(from IT admin)</span></div>
                         <input value={msClientId} onChange={e=>{ setMsClientId(e.target.value); msalRef.current=null; }}
                           placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                          style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                          style={S.mono}/>
                       </div>
                       <details style={{border:"1px solid rgba(0,120,212,0.2)",borderRadius:"var(--radius-sm)",padding:"10px 14px"}}>
                         <summary style={{cursor:"pointer",fontWeight:600,fontSize:"0.82rem",color:"#0078d4",userSelect:"none"}}>
@@ -9134,7 +9195,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                       <div className="row gap8">
                         <input type="password" value={webSearchKey} onChange={e=>setWebSearchKey(e.target.value.trim())}
                           placeholder={webSearchEngine==="google"?"AIzaSy…":"Your Bing API subscription key…"}
-                          style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                          style={S.mono}/>
                         {webSearchKey&&<span className="pill pill-green" style={{flexShrink:0}}>✓ Set</span>}
                       </div>
                       {webSearchEngine==="google"&&<div className="dim small mt4">Free tier: 100 searches/day. Get key at <a href="https://console.cloud.google.com" target="_blank" style={{color:"var(--blue)"}}>console.cloud.google.com</a> → Enable <em>Custom Search API</em>.</div>}
@@ -9146,7 +9207,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                         <div className="row gap8">
                           <input value={webSearchCx} onChange={e=>setWebSearchCx(e.target.value.trim())}
                             placeholder="e.g. 017576662512468239146:omuauf_lfve"
-                            style={{fontFamily:"monospace",fontSize:"0.82rem"}}/>
+                            style={S.mono}/>
                           {webSearchCx&&<span className="pill pill-green" style={{flexShrink:0}}>✓ Set</span>}
                         </div>
                         <div className="dim small mt4">Create a programmable search engine at <a href="https://programmablesearchengine.google.com" target="_blank" style={{color:"var(--blue)"}}>programmablesearchengine.google.com</a> — set it to search the whole web.</div>
@@ -9497,7 +9558,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                             {s.topWeak.length>0?(<>
                               <div className="field-label" style={{color:"var(--red)"}}>Focus areas:</div>
                               {s.topWeak.map(([t,c])=><div key={t} className="spaced-row" style={{padding:"6px 10px"}}><span style={{fontSize:"0.83rem"}}>{t}</span><span className="pill pill-red" style={{fontSize:"0.68rem"}}>Missed {c}×</span></div>)}
-                            </>):<div className="dim small" style={{color:"var(--green)"}}>✓ No consistent weak areas</div>}
+                            </>):<div className="dim small" style={S.s0}>✓ No consistent weak areas</div>}
                           </div>
                         ))}
                         <button className="btn btn-ghost btn-sm" onClick={()=>{
@@ -9938,15 +9999,15 @@ ollama create novavista-marker -f novavista-Modelfile</div>
               <div style={{overflowY:"auto",flex:1,padding:"0 2px",fontSize:"0.82rem",lineHeight:1.75,color:"var(--text2)"}}>
                 <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:8}}>1. Who We Are</div>
                 <div>NovaVista is developed by DM Venture &amp; Insights. Queries: <strong>hello@novavista.ai</strong></div>
-                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>2. What This App Does</div>
+                <div style={S.secH}>2. What This App Does</div>
                 <div>NovaVista helps teachers mark student papers using AI. Paper images and mark schemes are sent to your chosen AI provider for processing.</div>
-                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>3. Data We Process</div>
+                <div style={S.secH}>3. Data We Process</div>
                 <div style={{paddingLeft:12,borderLeft:"2px solid var(--border)"}}>
                   <div>• <strong>Student work images</strong> — sent to AI provider for marking. Not stored by us.</div>
                   <div>• <strong>Teacher profile</strong> — name, school, subject, PIN — stored locally on your device only.</div>
                   <div>• <strong>Class rosters &amp; results</strong> — stored locally on your device only.</div>
                 </div>
-                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>4. Legal Basis (UK GDPR)</div>
+                <div style={S.secH}>4. Legal Basis (UK GDPR)</div>
                 <div>Processing is carried out under UK GDPR Article 6(1)(e) — public task in education. By accepting you confirm:</div>
                 <div style={{paddingLeft:12,borderLeft:"2px solid var(--border)",marginTop:6}}>
                   <div>• You are an authorised teacher or staff member at your institution</div>
@@ -9954,21 +10015,21 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                   <div>• You will not submit images containing sensitive special-category data</div>
                   <div>• Results are AI-assisted and must be reviewed by a qualified teacher</div>
                 </div>
-                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>5. AI Provider Data Processing</div>
+                <div style={S.secH}>5. AI Provider Data Processing</div>
                 <div>Images are sent to your selected AI provider under their own privacy policy. For maximum UK GDPR compliance, use <strong>Microsoft Azure OpenAI</strong> (your school's instance) or <strong>Local mode</strong>.</div>
                 <div style={{paddingLeft:12,borderLeft:"2px solid var(--border)",marginTop:6}}>
                   <div>• Anthropic: anthropic.com/privacy &nbsp;·&nbsp; Google: policies.google.com/privacy</div>
                   <div>• OpenAI: openai.com/policies/privacy-policy &nbsp;·&nbsp; Microsoft: microsoft.com/en-gb/privacy</div>
                 </div>
-                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>6. Data Retention</div>
+                <div style={S.secH}>6. Data Retention</div>
                 <div>All data is held <strong>on your device only</strong> in browser localStorage. Delete anytime via <em>Privacy &amp; Data → Danger Zone → Clear All Data</em>. No data is sent to DM Venture &amp; Insights servers.</div>
-                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>7. Your Rights (UK GDPR)</div>
+                <div style={S.secH}>7. Your Rights (UK GDPR)</div>
                 <div>You have rights to access, rectification, erasure, portability, and objection. Since all data is local, exercise most rights by clearing browser data. For AI-provider data, contact the relevant provider.</div>
-                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>8. Safeguarding</div>
+                <div style={S.secH}>8. Safeguarding</div>
                 <div>Do not upload images containing student faces, full names on their own, or any safeguarding-sensitive content. NovaVista is for marking written academic work only.</div>
-                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>9. Licence</div>
+                <div style={S.secH}>9. Licence</div>
                 <div>NovaVista is licenced software. Unauthorised copying, redistribution, or reverse engineering is prohibited under UK copyright law (CDPA 1988).</div>
-                <div style={{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12}}>10. Changes to These Terms</div>
+                <div style={S.secH}>10. Changes to These Terms</div>
                 <div>Material changes will require re-acceptance on next use. Last updated: April 2026.</div>
                 <div style={{marginTop:16,padding:"10px 14px",background:"rgba(108,143,245,0.08)",border:"1px solid rgba(108,143,245,0.2)",borderRadius:"var(--radius-sm)",fontSize:"0.79rem"}}>
                   By clicking <strong>Accept &amp; Continue</strong> you confirm you are an authorised member of staff, you have read these terms, and you agree to use NovaVista in accordance with your school's data protection policy and UK GDPR obligations.
@@ -9981,6 +10042,28 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                 <button className="btn btn-blue" style={{flex:2}} onClick={acceptTerms}>
                   ✓ Accept &amp; Continue
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {similarPrompt&&(
+          <div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)setSimilarPrompt(null);}}>
+            <div className="modal">
+              <div className="modal-title">⚡ Apply to Similar Responses</div>
+              <div className="modal-sub">{similarPrompt.count} other student{similarPrompt.count!==1?"s":""} answered this question differently. Apply your correction?</div>
+              <div className="warn-box" style={{fontSize:"0.8rem"}}>Q{similarPrompt.qId}: set to <strong>{similarPrompt.marksAwarded} marks</strong>{similarPrompt.feedback?` — "${similarPrompt.feedback}"`:""}</div>
+              <div className="row gap10" style={{marginTop:14}}>
+                <button className="btn btn-ghost btn-sm" style={S.s2} onClick={()=>setSimilarPrompt(null)}>Cancel</button>
+                <button className="btn btn-gold" style={S.s2} onClick={()=>{
+                  const{pid,qId,marksAwarded,feedback,studentIds}=similarPrompt;
+                  setClasses(prev=>{const paper={...prev[pid],students:(prev[pid].students||[]).map(st=>{
+                    if(!studentIds.includes(st.id))return st;
+                    const uqs=(st.results?.questions||[]).map(q=>q.id===qId?{...q,_edited:true,marksAwarded,feedback:feedback||q.feedback}:q);
+                    return{...st,results:{...st.results,questions:uqs}};
+                  })};return{...prev,[pid]:paper};});
+                  setSimilarPrompt(null);
+                }}>✓ Apply to all</button>
               </div>
             </div>
           </div>
@@ -10050,7 +10133,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
             {/* Proxy */}
             {apiMode==="proxy"&&(
               <div className="field">
-                <div className="field-label" style={{color:"var(--green)"}}>Proxy Server URL</div>
+                <div className="field-label" style={S.s0}>Proxy Server URL</div>
                 <input value={proxyUrl} onChange={e=>setProxyUrl(e.target.value)} placeholder="https://novavista-proxy.….workers.dev"/>
                 {proxySet?<div className="info-box mt8">✓ Proxy set — no key needed</div>
                   :<div className="dim small mt4">Deploy your Cloudflare Worker — see Privacy &amp; Data for instructions.</div>}
