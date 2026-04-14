@@ -2266,14 +2266,10 @@ document.querySelectorAll('script[src]').forEach(function(s){
 <script>
 (function(){
   var host=window.location.hostname.toLowerCase();
-  var ok=(!host||host==='localhost'||
+  var ok=(host==='notavista.school'||
+    host.endsWith('.notavista.school')||
+    host==='localhost'||
     host.endsWith('.claudeusercontent.com')||
-    host.endsWith('.github.io')||
-    host.endsWith('.sch.uk')||
-    host.endsWith('.edu')||
-    host.endsWith('.ac.uk')||
-    host.endsWith('.edu.au')||
-    host.endsWith('.school.nz')||
     !!localStorage.getItem('nv_licence'));
   if(!ok){
     document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;font-family:system-ui;background:#0b0c0f;color:#f08080;text-align:center;gap:16px">'+
@@ -2342,6 +2338,17 @@ const I = {
 
 /* ── Helpers ───────────────────────────────────────────── */
 function rrect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();}
+const normaliseAns=s=>{
+  if(!s)return"";let v=String(s).trim().toLowerCase().replace(/\s+/g," ");
+  const wu=v.replace(/\s*(cm|mm|m|km|kg|g|ml|l|°c|°|%|mph|m\/s)\s*$/i,"").trim();
+  const fm=wu.match(/^(-?\d+)\s*\/\s*(-?\d+)$/);
+  if(fm){const d=parseFloat(fm[1])/parseFloat(fm[2]);if(!isNaN(d))v=String(Math.round(d*10000)/10000);}
+  v=v.replace(/\s*\+\s*/g,"+").replace(/\s*-\s*/g,"-").replace(/\s*\*\s*/g,"*");
+  v=v.replace(/(\d)\s+([a-z])/g,"$1$2").replace(/([a-z])\s+(\d)/g,"$2$1");
+  return v;
+};
+const withinTol=(ans,target,tol=0.01)=>{const a=parseFloat(ans),t=parseFloat(target);return!isNaN(a)&&!isNaN(t)&&Math.abs(a-t)<=tol;};
+
 const parseJSON = t => {
   const s = t.replace(/```json\s*/gi,"").replace(/```\s*/g,"").trim();
   const first = Math.min(...['[','{'].map(c=>s.indexOf(c)<0?Infinity:s.indexOf(c)));
@@ -2430,7 +2437,7 @@ function BatchSummary({ done, batchPaper, subject, pctColor, initials, genFeedba
               </div>
               <button className="btn btn-blue btn-sm"
                 onClick={()=>{
-                  const html=genFeedbackHTML(item.name,batchPaper||subject||"Paper",item.results);
+                  const html=genFeedbackHTML(item.name,batchPaper||subject||"Paper",item.results,item.markedImage||null);
                   const a=document.createElement("a");
                   a.href="data:text/html;charset=utf-8,"+encodeURIComponent(html);
                   a.download=`${item.name.replace(/\s+/g,"_")}_feedback.html`;
@@ -2447,7 +2454,7 @@ function BatchSummary({ done, batchPaper, subject, pctColor, initials, genFeedba
 /* ── SchoolAnalysis ── */
   );
 }
-function SchoolAnalysis({ analysis, pctColor }) {
+const SchoolAnalysis = React.memo(function SchoolAnalysis({ analysis, pctColor }) {
   if (!analysis) return null;
   return (
     <div className="col gap14">
@@ -2521,7 +2528,7 @@ function SchoolAnalysis({ analysis, pctColor }) {
       </div>
     </div>
   );
-}
+}); // end React.memo
 
 function NovaVista() {
   /* state */
@@ -2540,21 +2547,18 @@ function NovaVista() {
   const [markingStep,setMarkingStep] = useState("");
   const [results,setResults]   = useState(null);
 
-  // Review / manual assist state
   const [stitchedImage,setStitchedImage]       = useState(null);  // base64 of joined pages
   const [reviewMode,setReviewMode]             = useState(null);  // null | "review" | "manual"
   const [uncertainQs,setUncertainQs]           = useState([]);    // questions AI couldn't read
   const [manualAnswers,setManualAnswers]        = useState({});    // {id: answerText}
   const [overridingQ,setOverridingQ]           = useState(null);  // question id being overridden
 
-  // Batch upload & mark
   const [batchQueue,setBatchQueue]   = useState([]); // [{id,name,imageB64,status,results,error}]
   const [batchRunning,setBatchRunning] = useState(false);
   const [batchPaper,setBatchPaper]   = useState("");
   const [batchDone,setBatchDone]     = useState(false);
   const batchStopRef                 = useRef(false);
 
-  // Live Mark — answer overlay
   const [overlayOn,setOverlayOn]         = useState(false);
   const [overlayHints,setOverlayHints]   = useState([]);   // unused — kept for compat
   const [overlayQId,setOverlayQId]       = useState("all"); // selected question id
@@ -2563,18 +2567,15 @@ function NovaVista() {
   const [liveOcrLoading,setLiveOcrLoading] = useState(false);
   const [liveOcrDone,setLiveOcrDone]     = useState(false); // true once OCR complete
 
-  // Web search to supplement marking
   const [webSearchEnabled,setWebSearchEnabled] = useState(false);
   const [webSearchEngine,setWebSearchEngine]   = useState("google"); // "google"|"bing"
   const [webSearchKey,setWebSearchKey]         = useState(""); // Google CSE API key or Bing key
   const [webSearchCx,setWebSearchCx]           = useState(""); // Google CX id
   const [webSearching,setWebSearching]         = useState(false);
 
-  // Scan — edge/document boundary detection
   const edgeCanvasRef = useRef(null);
   const edgeRafRef    = useRef(null);
 
-  // Quick Mark — extended upload modes
   const [qmDocText,setQmDocText]     = useState(""); // extracted text from PDF/doc
   const [qmDocName,setQmDocName]     = useState(""); // filename
   const [qmDocLoading,setQmDocLoading] = useState(false);
@@ -2608,20 +2609,16 @@ function NovaVista() {
   const [miscFileName,setMiscFileName]     = useState("");
   const [miscParsing,setMiscParsing]       = useState(false);
 
-  // Class roster
   const [classRoster,setClassRoster]       = useState([]); // [{name}]
   const [rosterInput,setRosterInput]       = useState("");
   const [showRosterDrop,setShowRosterDrop] = useState(false);
 
-  // Scan mode
   const [scanMode,setScanMode]             = useState("auto");  // "auto" | "manual"
   const [autoActive,setAutoActive]         = useState(false);   // auto-scan running
   const [stableMs,setStableMs]             = useState(0);       // ms page has been still
   const [captureFlash,setCaptureFlash]     = useState(false);   // green captured flash
 
-  // API / Privacy mode
   const [apiMode,setApiMode]               = useState("cloud"); // "cloud"|"proxy"|"microsoft"|"gemini"|"openai"|"local"
-  // ── Microsoft / Azure OpenAI state ──────────────────────────────────────
   const [msClientId,    setMsClientId]    = useState(() => localStorage.getItem("nv_ms_client_id")  || "");
   const [msTenantId,    setMsTenantId]    = useState(() => localStorage.getItem("nv_ms_tenant_id")  || "common");
   const [msEndpoint,    setMsEndpoint]    = useState(() => localStorage.getItem("nv_ms_endpoint")   || "");
@@ -2636,13 +2633,12 @@ function NovaVista() {
   const [offlineTempFolders,setOfflineTempFolders] = useState({}); // session-only temp folders
   const [tesseractReady,setTesseractReady]   = useState(false);
   const [tesseractLoading,setTesseractLoading] = useState(false);
-  const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
+    const [ocrConfidence,   setOcrConfidence]   = useState(null);  // null | {avgConf, lowConfWords}
+const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
   const [ocrLoadStep,setOcrLoadStep]         = useState("");  // stage label
   const tesseractWorkerRef                   = useRef(null);
 
-  // ── Offline Tools state ────────────────────────────────────────────────────
   const [offlineToolsTab,setOfflineToolsTab] = useState("rules");
-  // ── Topic Extractor state ──────────────────────────────────────────────
   const [topicRows,setTopicRows]           = useState([]);
   const [topicInput,setTopicInput]         = useState("");
   const [topicSubject,setTopicSubject]     = useState("");
@@ -2655,30 +2651,21 @@ function NovaVista() {
   const [topicExtractionMode,setTopicExtractionMode] = useState("local"); // "local"|"ai"
   const [topicSourceText,setTopicSourceText] = useState(""); // full combined raw text
   const [topicDragOver,setTopicDragOver]   = useState(false);
-  // 1. Auto-marking rules
   const [markingRules,setMarkingRules]       = useState({}); // {qId:[{id,type,conditions,marks,code}]}
   const [rulesEditQ,setRulesEditQ]           = useState("Q1");
   const [newRuleConds,setNewRuleConds]       = useState([{field:"answer",op:"contains",value:""}]);
-  // 2. Calc checker
   const [calcChecks,setCalcChecks]           = useState({}); // {qId:{answer,tolerance,units}}
-  // 3. Grade boundaries
   const [gradeBounds,setGradeBounds]         = useState({A:70,B:55,C:40,D:25});
-  // 4. CSV roster
   const [csvPreview,setCsvPreview]           = useState([]);
-  // 5. Group tags
   const [studentGroups,setStudentGroups]     = useState({}); // {studentName:groupName}
   const [groupNames,setGroupNames]           = useState(["Set 1","Set 2","Intervention","G&T"]);
-  // 6. Common errors DB
   const [errorsDB,setErrorsDB]               = useState({}); // {topic:[{id,error,hint}]}
   const [errorsTopicEdit,setErrorsTopicEdit] = useState("");
   const [newErrorText,setNewErrorText]       = useState("");
   const [newErrorHint,setNewErrorHint]       = useState("");
-  // 8. Paper templates
   const [paperTemplates,setPaperTemplates]   = useState([]);
   const [templateEdit,setTemplateEdit]       = useState(null);
-  // 11. Predicted grades
   const [targetGrades,setTargetGrades]       = useState({}); // {studentName:{paper:grade}}
-  // 12. Deadlines
   const [markingDeadlines,setMarkingDeadlines] = useState([]);
   const [newDeadline,setNewDeadline]         = useState({paper:"",classSize:"",dueDate:""});
   const [localEndpoint,setLocalEndpoint]   = useState("http://localhost:11434");
@@ -2692,17 +2679,8 @@ function NovaVista() {
   const [showTerms,       setShowTerms]          = useState(false);
   const [termsAccepted,   setTermsAccepted]      = useState(() => !!localStorage.getItem("nv_terms_v1"));
 
-  // Learning from corrections
-  // Each entry: { id, timestamp, subject, question, markScheme,
-  //   aiAnswer (text), humanAnswer (text),
-  //   aiMarks, humanMarks, aiMaxMarks,
-  //   aiFeedback, humanFeedback,
-  //   aiOcr, humanOcr,  <- if transcription was corrected
-  //   type: "marks"|"feedback"|"ocr"|"full"
-  // }
   const [corrections,setCorrections]       = useState([]);
 
-  // Teacher account (stored locally in localStorage)
   const [teacherName,setTeacherName]       = useState("");
   const [teacherDept,setTeacherDept]       = useState("");
   const [teacherSchool,setTeacherSchool]   = useState("");
@@ -2713,13 +2691,11 @@ function NovaVista() {
   const [pinError,setPinError]             = useState(false);
   const [showAccountModal,setShowAccountModal] = useState(false);
 
-  // School sync — reading/writing JSON files in a shared folder
   const [syncStatus,setSyncStatus]         = useState("idle"); // "idle"|"syncing"|"done"|"error"
   const [syncMsg,setSyncMsg]               = useState("");
   const [schoolData,setSchoolData]         = useState(null);  // combined school analysis
   const [loadedTeachers,setLoadedTeachers] = useState([]);    // parsed teacher files
 
-  // Licence system
   const [licenceKey,setLicenceKey]         = useState("");
   const [licenceStatus,setLicenceStatus]   = useState("none"); // "none"|"trial"|"active"|"expired"
   const [licenceTier,setLicenceTier]       = useState("");     // "teacher"|"department"|"school"
@@ -2728,7 +2704,6 @@ function NovaVista() {
   const [licenceInput,setLicenceInput]     = useState("");
   const [licenceError,setLicenceError]     = useState("");
 
-  // Responsive sidebar
   const [sidebarOpen,setSidebarOpen]       = useState(false);
 
   const videoRef=useRef(null),canvasRef=useRef(null),annotRef=useRef(null),streamRef=useRef(null);
@@ -2740,18 +2715,15 @@ function NovaVista() {
   const lastCaptureRef  = useRef(0);
   const motionCanvasRef = useRef(document.createElement("canvas"));
 
-  // ── Persist roster + class data to localStorage ──────────────────────────
   useEffect(() => {
     try {
       const raw = localStorage.getItem("nv_roster");
       if (raw) setClassRoster(JSON.parse(raw));
     } catch {}
     try {
-      // Load classes — without image blobs (too large); images are session-only
       const raw = localStorage.getItem("nv_classes");
       if (raw) {
         const parsed = JSON.parse(raw);
-        // Strip out image data that was saved (legacy); keep only results metadata
         Object.values(parsed).forEach(paper => {
           (paper.students||[]).forEach(st => { delete st.originalImage; delete st.markedImage; });
         });
@@ -2782,20 +2754,17 @@ function NovaVista() {
         setTeacherName(a.name||""); setTeacherDept(a.dept||"");
         setTeacherSchool(a.school||""); setTeacherPin(a.pin||"");
         setTeacherRole(a.role||"teacher");
-        // If no PIN set, unlock immediately
         if (!a.pin) setPinUnlocked(true);
       } else {
         setPinUnlocked(true); // new user, no PIN yet
       }
     } catch { setPinUnlocked(true); }
-    // First-run terms check
     if (!localStorage.getItem("nv_terms_v1")) { setTimeout(()=>setShowTerms(true),800); }
     try {
       const raw = localStorage.getItem("nv_prefs");
       if (raw) {
         const p=JSON.parse(raw);
         if(p.apiMode)      setApiMode(p.apiMode);
-        // Show T&C on first run
         if (!localStorage.getItem("nv_terms_v1")) setShowTerms(true);
         if(p.offlineMode!==undefined) setOfflineMode(p.offlineMode);
         if(p.localEndpoint)setLocalEndpoint(p.localEndpoint);
@@ -2808,7 +2777,6 @@ function NovaVista() {
         if(p.webSearchKey)    setWebSearchKey(p.webSearchKey);
         if(p.webSearchCx)     setWebSearchCx(p.webSearchCx);
       }
-      // Load saved topics
       const rawT = localStorage.getItem("nv_topics");
       if (rawT) {
         const t = JSON.parse(rawT);
@@ -2831,7 +2799,6 @@ function NovaVista() {
 
   useEffect(() => {
     try {
-      // Save classes — strip only raw image blobs (too large), keep feedbackHTML (text only)
       const slim = {};
       Object.entries(classes).forEach(([k,v]) => {
         slim[k] = { ...v, students: (v.students||[]).map(st => ({
@@ -2840,14 +2807,12 @@ function NovaVista() {
           hasFeedback:!!st.feedbackHTML,
           hasMarkedImage:!!st.markedImage,
           hasOriginalImage:!!st.originalImage,
-          // Strip base64 images — too large for localStorage
           markedImage: null,
           originalImage: null,
         }))};
       });
       localStorage.setItem("nv_classes", JSON.stringify(slim));
     } catch(e) {
-      // If quota exceeded, try saving without feedbackHTML
       try {
         const slim = {};
         Object.entries(classes).forEach(([k,v]) => {
@@ -2885,7 +2850,6 @@ function NovaVista() {
 
   const schoolFolderRef = useRef(null); // FileSystem API directory handle
 
-  // ── PIN helpers ──────────────────────────────────────────────────────────
   const handlePinKey = useCallback(async (key) => {
     if (pinError) { setPinError(false); setPinEntry(""); }
     if (key === "del") { setPinEntry(p => p.slice(0,-1)); return; }
@@ -2902,7 +2866,6 @@ function NovaVista() {
     }
   }, [pinEntry, teacherPin, pinError]);
 
-  // ── PIN hashing (SHA-256 via WebCrypto — runs offline, no server needed) ────
   const hashPin = async (pin) => {
     if (!pin) return "";
     const enc = new TextEncoder().encode(pin + "nv-salt-2026");
@@ -2912,7 +2875,6 @@ function NovaVista() {
 
   const verifyPin = async (entry, stored) => {
     if (!stored) return true;           // no PIN set — always pass
-    // Support both legacy plain-text PINs and new hashed PINs
     if (stored.length === 4) return entry === stored;   // legacy
     return (await hashPin(entry)) === stored;
   };
@@ -2924,12 +2886,6 @@ function NovaVista() {
     if (!pin) setPinUnlocked(true);
   }, [hashPin]);
 
-  // ── Licence validation ────────────────────────────────────────────────────
-  // Key format: NV-[TIER]-[YYYY]-[MM]-[SCHOOLCODE]-[CHECKSUM]
-  // Example:    NV-SCH-2026-12-STMARY-K7
-  // Tiers: TCH=teacher, DEP=department, SCH=school
-  // The checksum is a simple sum of char codes mod 99 formatted as 2 digits
-  // This runs entirely offline — no server call needed.
   const VALID_TIERS = { TCH:"teacher", DEP:"department", SCH:"school" };
 
   const computeChecksum = (parts) => {
@@ -2951,7 +2907,6 @@ function NovaVista() {
     if (!key) { setLicenceError("Please enter a licence key."); return; }
 
     const parts = key.split("-");
-    // Minimum: NV-TIER-YYYY-MM-SCHOOL-CS = 6 parts
     if (parts.length < 6 || parts[0] !== "NV") {
       setLicenceError("Invalid key format. Keys look like: NV-SCH-2026-12-SCHOOL-XX");
       return;
@@ -2972,14 +2927,12 @@ function NovaVista() {
       return;
     }
 
-    // Check expiry
     const expYear  = parseInt(year, 10);
     const expMonth = parseInt(month, 10);
     const now = new Date();
     const expiryDate = new Date(expYear, expMonth, 0); // last day of expiry month
     const expired = now > expiryDate;
 
-    // All valid — save
     setLicenceKey(key);
     setLicenceTier(tierName);
     setLicenceSchool(school);
@@ -2992,18 +2945,15 @@ function NovaVista() {
     }
   }, []);
 
-  // Convenience: is School Sync unlocked?
   const syncUnlocked = licenceStatus === "active" && (licenceTier === "Department" || licenceTier === "School");
   const anyLicence   = licenceStatus === "active";
 
-  // ── Generate a licence key (admin/you only — for issuing to schools) ──────
   const generateKey = useCallback((tier, year, month, school) => {
     const parts = ["NV", tier.toUpperCase(), String(year), String(month).padStart(2,"0"), school.toUpperCase().replace(/\s+/g,"").slice(0,8)];
     const cs = computeChecksum(parts);
     return [...parts, cs].join("-");
   }, []);
 
-  // ── School folder sync ────────────────────────────────────────────────────
   const connectSchoolFolder = useCallback(async () => {
     if (!window.showDirectoryPicker) {
       setError("School folder sync requires Chrome or Edge browser.");
@@ -3014,7 +2964,6 @@ function NovaVista() {
       schoolFolderRef.current = dir;
       setSyncStatus("done");
       setSyncMsg(`Connected to: ${dir.name}`);
-      // Auto-sync immediately
       await syncMyData(dir);
     } catch(e) {
       if (e.name !== "AbortError") { setSyncStatus("error"); setSyncMsg("Could not connect: " + e.message); }
@@ -3026,7 +2975,6 @@ function NovaVista() {
     if (!handle || !teacherName) return;
     setSyncStatus("syncing"); setSyncMsg("Saving your data…");
     try {
-      // Build teacher's data payload (no images — too large)
       const payload = {
         teacher: { name: teacherName, dept: teacherDept, school: teacherSchool, role: teacherRole },
         lastSync: new Date().toISOString(),
@@ -3066,7 +3014,6 @@ function NovaVista() {
     } catch(e) { setSyncStatus("error"); setSyncMsg("Load failed: " + e.message); }
   }, []);
 
-  // ── Build combined school analysis from loaded teacher data ───────────────
   const buildSchoolAnalysis = useCallback(() => {
     if (!loadedTeachers.length) return null;
     const allPapers = {};
@@ -3081,7 +3028,6 @@ function NovaVista() {
       });
     });
 
-    // Build dept breakdown
     const depts = {};
     Object.values(allPapers).forEach(paper => {
       const d = paper.dept || "Unknown";
@@ -3097,17 +3043,14 @@ function NovaVista() {
       totalDepts: Object.keys(depts).length };
   }, [loadedTeachers]);
 
-  // Export combined school Excel
   const exportSchoolExcel = useCallback(() => {
     const analysis = buildSchoolAnalysis();
     if (!analysis) return;
     const wb = XLSX.utils.book_new();
-    // Summary sheet
     const summaryRows = Object.values(analysis.depts).map(d => ({
       Department: d.name, Papers: d.papers, Students: d.students, "Avg %": d.avgPct,
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "School Summary");
-    // Per-paper sheets
     Object.values(analysis.papers).forEach(paper => {
       const qIds = getAllQIds(paper.students);
       const rows = paper.students.map(st => {
@@ -3122,7 +3065,6 @@ function NovaVista() {
     });
     XLSX.writeFile(wb, `NovaVista_School_Analysis_${new Date().toISOString().slice(0,10)}.xlsx`);
   }, [buildSchoolAnalysis]);
-  // ── Microsoft SSO helpers ────────────────────────────────────────────────
   const getMsalInstance = useCallback(() => {
     if (!msClientId.trim()) throw new Error("Client ID not set — add it in Privacy & Data → Microsoft.");
     if (!msalRef.current) {
@@ -3177,7 +3119,6 @@ function NovaVista() {
     return result.accessToken;
   }, [getMsalInstance, msAccount, msToken]);
 
-  // Persist Microsoft config to localStorage
   useEffect(() => { localStorage.setItem("nv_ms_client_id",  msClientId);   }, [msClientId]);
   useEffect(() => { localStorage.setItem("nv_ms_tenant_id",  msTenantId);   }, [msTenantId]);
   useEffect(() => { localStorage.setItem("nv_ms_endpoint",   msEndpoint);   }, [msEndpoint]);
@@ -3196,7 +3137,6 @@ function NovaVista() {
     setShowTerms(true);
   }, []);
 
-  // ── Exponential backoff retry wrapper ───────────────────────────────────
   const withRetry = async (fn, retries=2, baseDelay=800) => {
     for (let attempt=0; attempt<=retries; attempt++) {
       try { return await fn(); }
@@ -3217,11 +3157,9 @@ function NovaVista() {
 
   const callAPI = useCallback(async(messages, system, maxTokens=1500) => {
 
-    // ── OFFLINE MODE — mark locally using the mark scheme, no AI needed ──────
     if (offlineMode) {
       await new Promise(r => setTimeout(r, 400 + Math.random()*300));
 
-      // Detect what kind of call this is
       const isMarkWhole = system && system.includes('"totalScore"');
       const isExtract   = system && system.includes('"canRead"');
       const isQmMark    = system && system.includes('"marksAwarded"') && system.includes('"breakdown"');
@@ -3230,14 +3168,11 @@ function NovaVista() {
       const isDetectQ   = system && system.includes('which question');
       const isOcr       = system && system.includes('Extract and list');
 
-      // ── Local marking engine ───────────────────────────────────────────────
-      // Checks rules first, then calc checks, then keyword matching
       const localMark = (answerText, scheme, maxMarks) => {
         const ans = (answerText||"").toLowerCase();
         const scheme_ = scheme || globalScheme || "";
         const lines   = scheme_.split(/\n/).map(l=>l.trim()).filter(Boolean);
 
-        // ── Step 1: Check marking rules (teacher-defined IF statements) ───────
         const ruleResults = [];
         Object.entries(markingRules).forEach(([qId,rules])=>{
           rules.forEach(rule=>{
@@ -3270,29 +3205,28 @@ function NovaVista() {
           });
         });
 
-        // ── Step 2: Check calc checks ──────────────────────────────────────────
         const calcResults = [];
         Object.entries(calcChecks).forEach(([qId,cc])=>{
           if(!cc.answer) return;
           const expected = parseFloat(cc.answer);
           const tol      = parseFloat(cc.tolerance)||0;
           const nums     = ans.match(/-?[\d.]+/g)?.map(Number)||[];
-          const hit      = nums.some(n=>Math.abs(n-expected)<=tol);
+          const normAns = normaliseAns(answerText);
+          const normNum = parseFloat(normAns);
+          const hit     = nums.some(n=>Math.abs(n-expected)<=tol)
+                       || (!isNaN(normNum) && Math.abs(normNum-expected)<=tol);
           const hasWorking = ans.includes("/") || ans.includes("×") || ans.includes("*") || ans.includes("=") || ans.includes("+") || ans.includes("-") || /\d+\s*[÷×]\s*\d+/.test(ans);
           if(hit) calcResults.push({code:"A1",text:`Correct answer: ${expected}${cc.units?" "+cc.units:""}`,awarded:true,marks:parseInt(cc.marks)||1});
           if(!hit&&hasWorking) calcResults.push({code:"M1",text:`Method shown for ${qId}`,awarded:true,marks:1});
         });
 
-        // ── Step 3: Keyword matching from scheme ───────────────────────────────
         const stopWords = new Set(["the","a","an","and","or","of","to","in","is","are","was","were","it","its","for","on","at","by","as","with","from","that","this","be","been","being","have","has","had","do","does","did","will","would","can","could","should","not","no","all","any","each","per","use","used","show","shown","give","given","required","needed","through","using","energy","correct","named","examples","least"]);
         const keywords = w => w.toLowerCase().match(/\b[a-z]{4,}\b/g)?.filter(w=>!stopWords.has(w)) || [];
 
-        // Extract numbers from a string as exact values
         const extractNums = str => { const cleaned=(str||'').replace(/(\d),(\d)/g,'$1$2'); return (cleaned.match(/-?[\d]+(?:\.\d+)?/g)||[]).map(Number); };
 
         const points = [];
         lines.forEach(line=>{
-          // Strip question-number prefixes like "Q1", "Q1)", "Qn 9)", "1.", "(a)", "Part a"
           const stripped = line
             .replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"")
             .replace(/^\d+[a-z]?[\.\)\s]+/,"")
@@ -3303,12 +3237,10 @@ function NovaVista() {
 
           const codeMatch = stripped.match(/\b([BMACPEF][0-9](?:\.[0-9])?)\b/i);
           const code = codeMatch ? codeMatch[1].toUpperCase() : "B1";
-          // Strip mark code from display text
           const text = stripped.replace(/\b[BMACPEF][0-9](?:\.[0-9])?\b/gi,"").replace(/^[-•*]\s*/,"").trim();
           if(text.length > 2) points.push({code, text, nums: extractNums(text)});
         });
 
-        // maxPts: use totalMarks if set, else use number of points found (NOT a minimum of 4)
         const maxPts = maxMarks
           ? parseInt(maxMarks)
           : (totalMarks ? parseInt(totalMarks) : points.length || 1);
@@ -3328,26 +3260,18 @@ function NovaVista() {
           };
 
           if(ptNums.length > 0){
-            // FIX: When scheme has numbers, ONLY award if the numeric answer matches.
-            // Keywords alone are insufficient — "pens" matching "write with pens"
-            // should NOT award if student didn't get the right answer (32).
-            const expectedAnswer = ptNums[ptNums.length - 1];
+                  const expectedAnswer = ptNums[ptNums.length - 1];
             awarded = extractNums(ans).some(n => Math.abs(n - expectedAnswer) < 0.01);
           } else if(pt.code==="M1" || pt.code==="P1"){
-            // Method/process marks: award if student shows working, even without keywords
-            // Pedagogically correct — showing working = demonstrating method
             const hasWorking = /[=÷×\/\*]|\b(divided|multiplied|times|plus|minus|equals|formula|method|substitut|calculat|workings?)\b/i.test(ans);
             if(ptWords.length > 0){
               const hits = ptWords.filter(w=>stemMatch(w)).length;
-              // Award if keywords match, OR if working is shown (method mark)
-              awarded = (hits >= 1 && ans.length > 5) || (hasWorking && ans.length > 5);
+                awarded = (hits >= 1 && ans.length > 5) || (hasWorking && ans.length > 5);
             } else {
               awarded = hasWorking && ans.length > 5;
             }
           } else if(ptWords.length > 0){
             const hits = ptWords.filter(w=>stemMatch(w)).length;
-            // Thresholds: 1 word → 1 hit; 2 words → 1 hit; 3+ words → 65%
-            // Cap at 3 most specific keywords sorted by length (longer = more domain-specific)
             const _sw = [...ptWords].sort((a,b)=>b.length-a.length);
             const _mw = _sw.length > 3 ? _sw.slice(0,3) : _sw;
             const _h = _mw.filter(w=>stemMatch(w)).length;
@@ -3356,19 +3280,15 @@ function NovaVista() {
           return {...pt, awarded};
         });
 
-        // ── Combine all results ────────────────────────────────────────────────
         const allPoints = [...ruleResults, ...calcResults, ...kwPoints];
-        // FIX: cap marksAwarded against marksAvailable (not maxPts) to prevent 1 point = 100%
         const marksAvailable = Math.min(
           Math.max(points.length, ruleResults.length + calcResults.length),
           maxPts
         );
-        // marksAwarded cannot exceed marksAvailable
         const marksAwarded = Math.min(allPoints.filter(p=>p.awarded).length, marksAvailable);
         const percentage   = marksAvailable > 0 ? Math.round((marksAwarded / marksAvailable) * 100) : 0;
         const grade        = percentage>=(gradeBounds.A||70)?"A":percentage>=(gradeBounds.B||55)?"B":percentage>=(gradeBounds.C||40)?"C":percentage>=(gradeBounds.D||25)?"D":"F";
 
-        // Check error DB for misconception hints
         const misconceptions = [];
         Object.values(errorsDB).flat().forEach(err=>{
           const errWords=keywords(err.error);
@@ -3382,7 +3302,6 @@ function NovaVista() {
         return {marksAwarded,marksAvailable,percentage,grade,awardedPoints:allPoints,strengths,improvements,misconceptions};
       };
 
-      // Extract answer text from messages
       const getAnswerText = () => {
         for(const msg of messages){
           if(typeof msg.content === "string") return msg.content;
@@ -3396,13 +3315,10 @@ function NovaVista() {
       const answerText = getAnswerText();
       const scheme = globalScheme || "";
 
-      // ── Detect question ────────────────────────────────────────────────────
       if(isDetectQ) return JSON.stringify({questionId:"Q1",questionLabel:"Q1",confidence:"medium"});
 
-      // ── OCR (can't read images locally — return placeholder) ──────────────
       if(isOcr) return "Offline mode: image OCR unavailable without AI. Student answer text visible on paper — use text paste mode for offline marking.";
 
-      // ── Parse scheme into overlay questions ───────────────────────────────
       if(isScheme){
         const qs = scheme.split(/\n(?=Q\d|Question\s*\d|\d+[\.\)])/i)
           .filter(s=>s.trim().length>5)
@@ -3423,9 +3339,7 @@ function NovaVista() {
         return JSON.stringify({questions:qs});
       }
 
-      // ── Extract / Review ───────────────────────────────────────────────────
       if(isExtract){
-        // Parse scheme into questions, flag image-based ones as unreadable
         const hasImage = messages.some(m=>Array.isArray(m.content)&&m.content.some(b=>b.type==="image"));
         const schemeQs = scheme.split(/\n(?=Q\d|Question\s*\d|\d+[\.\)])/i).filter(s=>s.trim().length>5).slice(0,6);
         const questions = schemeQs.map((s,i)=>{
@@ -3439,22 +3353,16 @@ function NovaVista() {
         return JSON.stringify({studentName: studentName||"Student", questions});
       }
 
-      // ── Mark whole paper / batch ────────────────────────────────────────────
       if(isMarkWhole || isBatch){
-        // Detect if this is an image-only call (no real typed answer)
         const hasImageMsg = messages.some(m=>Array.isArray(m.content)&&m.content.some(b=>b.type==="image"));
-        // A real answer is either: long text, contains STUDENT ANSWERS block, or isn't the default phrase
         const realAnswer  = answerText && (
           answerText.includes("STUDENT ANSWERS:") ||
           (answerText.trim().length>20 && answerText!=="Mark this paper.")
         );
-        // Extract just the answer portion if it follows "STUDENT ANSWERS:"
         const cleanAnswer = answerText.includes("STUDENT ANSWERS:")
           ? answerText.split("STUDENT ANSWERS:")[1]?.trim() || answerText
           : answerText;
 
-        // If we have an image but no typed answer, we can't keyword-match handwriting.
-        // Return a special flag so markWhole can route to Manual Assist.
         if(hasImageMsg && !realAnswer){
           return JSON.stringify({
             _offlineNeedsText: true,
@@ -3491,7 +3399,6 @@ function NovaVista() {
         });
       }
 
-      // ── Quick Mark ─────────────────────────────────────────────────────────
       if(isQmMark){
         const qScheme = qmScheme||globalScheme||"";
         const {marksAwarded,marksAvailable,percentage,awardedPoints,strengths,improvements} = localMark(answerText, qScheme, 4);
@@ -3515,7 +3422,6 @@ function NovaVista() {
       return JSON.stringify({response:"Offline mode.",totalScore:0,maxScore:0,percentage:0,grade:"N/A"});
     }
 
-    // ── Helper: convert Anthropic-style messages → OpenAI format ────────────
     const toOAI = (msgs, sys) => {
       const out = [];
       if (sys) out.push({ role:"system", content: sys });
@@ -3540,7 +3446,6 @@ function NovaVista() {
     };
 
     if (apiMode === "local") {
-      // ── Ollama / LocalAI ──────────────────────────────────────────────────
       const endpoint = localEndpoint.replace(/\/+$/,"");
       const res = await fetch(`${endpoint}/v1/chat/completions`, {
         method:"POST",
@@ -3552,7 +3457,6 @@ function NovaVista() {
       return d.choices?.[0]?.message?.content || "";
 
     } else if (apiMode === "proxy") {
-      // ── Cloudflare Worker proxy ───────────────────────────────────────────
       if (!proxyUrl.trim()) throw new Error("Proxy URL not set — add it in Privacy & Data.");
       const base = proxyUrl.trim().replace(/\/+$/,"");
       const res = await fetch(`${base}/v1/messages`, {
@@ -3565,14 +3469,11 @@ function NovaVista() {
       return d.content.find(c=>c.type==="text")?.text || "";
 
     } else if (apiMode === "gemini") {
-      // ── Google Gemini 1.5 Flash ───────────────────────────────────────────
       if (!geminiKey.trim()) throw new Error("Gemini API key not set — add it in Privacy & Data.");
       const model = "gemini-1.5-flash";
       const url   = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey.trim()}`;
 
-      // Convert messages → Gemini parts format
       const contents = [];
-      // Inject system prompt as first user turn (Gemini doesn't have a system role)
       const allParts = [];
       if (system) allParts.push({ text: `INSTRUCTIONS:\n${system}\n\n` });
 
@@ -3585,12 +3486,10 @@ function NovaVista() {
             if (block.type === "text")  return { text: block.text };
             if (block.type === "image") return { inlineData:{ mimeType: block.source?.media_type||"image/jpeg", data: block.source?.data||"" }};
             if (block.type === "document") {
-              // Gemini supports PDF natively via inlineData
               return { inlineData:{ mimeType:"application/pdf", data: block.source?.data||"" }};
             }
             return { text:"" };
           });
-          // Prepend system to first user turn
           if (allParts.length && role === "user") {
             contents.push({ role:"user", parts:[...allParts, ...parts] });
             allParts.length = 0;
@@ -3599,7 +3498,6 @@ function NovaVista() {
           }
           continue;
         }
-        // Handle string-content roles with prepended system
         if (allParts.length && role === "user") {
           contents[contents.length-1].parts = [...allParts, ...contents[contents.length-1].parts||[]];
           allParts.length = 0;
@@ -3622,7 +3520,6 @@ function NovaVista() {
       return d.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     } else if (apiMode === "openai") {
-      // ── OpenAI GPT-4o (powers Microsoft Copilot) ──────────────────────────
       if (!openaiKey.trim()) throw new Error("OpenAI API key not set — add it in Privacy & Data.");
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method:"POST",
@@ -3634,7 +3531,6 @@ function NovaVista() {
       return d.choices?.[0]?.message?.content || "";
 
     } else if (apiMode === "microsoft") {
-      // ── Microsoft Azure OpenAI (school SSO) ───────────────────────────────
       if (!msEndpoint.trim()) throw new Error("Azure OpenAI endpoint not set — add it in Privacy & Data → Microsoft.");
       if (!msAccount)         throw new Error("Not signed in — click 'Sign in with Microsoft' in Privacy & Data.");
       let token;
@@ -3654,7 +3550,6 @@ function NovaVista() {
       return azData.choices?.[0]?.message?.content || "";
 
     } else {
-      // ── Anthropic Claude direct ───────────────────────────────────────────
       if (!apiKey.trim()) throw new Error("API key not set — click the key icon or switch provider in Privacy & Data.");
       const res = await withRetry(() => fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
@@ -3742,11 +3637,9 @@ function NovaVista() {
     if(!qmSavePaper.trim()||!qmSaveStudent.trim()||!qmResult)return;
     const pid=qmSavePaper.trim().toLowerCase().replace(/\s+/g,"-");
 
-    // Get annotated image from canvas if available, else null
     const annotImg = (qmAnnotReady && qmAnnotRef.current)
       ? qmAnnotRef.current.toDataURL("image/jpeg",0.93) : null;
 
-    // Generate personalised feedback HTML for this single question
     const date=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
     const pct=qmResult.percentage||0;
     const gc=pct>=70?"#3dd68c":pct>=50?"#f5c842":"#e8473f";
@@ -3792,7 +3685,6 @@ function NovaVista() {
     const isText = /\.(txt|csv|md)$/i.test(file.name) || file.type.startsWith("text/");
     if(isText) { const t = await file.text(); addRosterNames(t); }
     else {
-      // Try to read as text anyway (xlsx we won't attempt)
       try { const t = await file.text(); addRosterNames(t); } catch{}
     }
   }, [addRosterNames]);
@@ -3810,7 +3702,6 @@ function NovaVista() {
     if (!prevFrameRef.current) { prevFrameRef.current = curr; return 999; }
     const prev = prevFrameRef.current;
     let diff = 0;
-    // Sample every 4th pixel (every 16 bytes) for speed
     for (let i = 0; i < curr.length; i += 16) diff += Math.abs(curr[i] - prev[i]);
     prevFrameRef.current = curr;
     return diff / (curr.length / 16);
@@ -3830,12 +3721,10 @@ function NovaVista() {
     }
 
     if (motion < 3.5) {
-      // Page is still
       if (!stableStartRef.current) stableStartRef.current = now;
       const elapsed = now - stableStartRef.current;
       setStableMs(elapsed);
       if (elapsed >= STABLE_NEEDED) {
-        // CAPTURE
         stableStartRef.current = null;
         lastCaptureRef.current = now;
         setStableMs(0);
@@ -3874,10 +3763,8 @@ function NovaVista() {
   }, [autoActive, autoScanTick]);
 
   const startAutoScan = useCallback(async () => {
-    // Access streamRef directly to avoid stale cameraActive closure
     if (!streamRef.current) {
       await startCamera();
-      // Wait briefly for camera to initialise before starting auto-scan
       await new Promise(r => setTimeout(r, 400));
     }
     setAutoActive(true);
@@ -3906,14 +3793,18 @@ function NovaVista() {
   },[callAPI]);
 
   /* ── class helpers ── */
-  // getMarkedImg only uses a ref (annotRef) so empty dep array is correct
   const getMarkedImg=useCallback(()=>annotRef.current?annotRef.current.toDataURL("image/jpeg",0.92):null,[]);
 
-  const genFeedbackHTML=useCallback((sName,pName,res)=>{
+  const genFeedbackHTML=useCallback((sName,pName,res,annotatedImage=null)=>{
     const date=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
     const pct=res.percentage??0,gc=res.grade==="A"?"#3dd68c":res.grade==="B"?"#f5c842":res.grade==="C"?"#f0956b":"#e8473f";
     const wrongs=(res.questions||[]).filter(q=>!q.correct);
-    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${wrongs.length?`<h2>🎯 What You Need to Do</h2><div class="todo"><h3>Focus on these areas:</h3>${wrongs.map(q=>`<div class="tdi">• <strong>${escHtml(q.id||'')}:</strong> ${escHtml(q.feedback||'')}</div>`).join("")}</div>`:""}${(res.improvements||[]).length?`<div style="margin-top:10px">${res.improvements.map(s=>`<span class="tag tr">${escHtml(s)}</span>`).join("")}</div>`:""}<div class="footer">© DMA 2026 · NovaVista AI Paper Marking · ${date}</div></div></body></html>`;
+    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${wrongs.length?`<h2>🎯 What You Need to Do</h2><div class="todo"><h3>Focus on these areas:</h3>${wrongs.map(q=>`<div class="tdi">• <strong>${escHtml(q.id||'')}:</strong> ${escHtml(q.feedback||'')}</div>`).join("")}</div>`:""}${(res.improvements||[]).length?`<div style="margin-top:10px">${res.improvements.map(s=>`<span class="tag tr">${escHtml(s)}</span>`).join("")}</div>`:""}<div class="footer">© DMA 2026 · NovaVista AI Paper Marking · ${date}</div>${annotatedImage ? `
+          <div style="margin-top:24px;padding:16px;background:white;border:1px solid #e0e0ef;border-radius:8px;">
+            <h2 style="font-size:1rem;margin:0 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:6px;">Annotated Script</h2>
+            <img src="${annotatedImage}" style="width:100%;border-radius:4px;border:1px solid #e0e0ef;" alt="Marked paper"/>
+          </div>` : ""}
+          ${annotatedImage?`<div style="margin-top:24px;padding:16px;background:white;border:1px solid #e0e0ef;border-radius:8px"><h2 style="font-size:1rem;margin:0 0 10px">📋 Annotated Script</h2><img src="${annotatedImage}" style="width:100%;border-radius:4px" alt="Marked paper"/></div>`:""}</div></body></html>`;
   },[]);
 
   const genCollectiveHTML=useCallback((paper)=>{
@@ -3943,7 +3834,6 @@ function NovaVista() {
       offline: offlineMode||undefined, // flag temp folder
       students:[...(prev[pid]?.students||[]).filter(s=>s.name!==saveStudentName.trim()),rec]
     }}));
-    // Track temp folders separately for offline indicator
     if(offlineMode) setOfflineTempFolders(prev=>({...prev,[pid]:true}));
     setShowSaveModal(false);setSavePaperName("");setSaveStudentName("");
     setExpandedPaper(pid);setTab("classes");
@@ -4007,10 +3897,8 @@ function NovaVista() {
       for(const st of paper.students){
         setSavingStep(`Saving ${st.name}…`);
         const sd=await paperDir.getDirectoryHandle(st.name.replace(/[/\\:*?"<>|]/g,"_"),{create:true});
-        // Images only available in-session — save if present
         if(st.originalImage) await writeImg(sd,"original_scan.jpg",st.originalImage);
         if(st.markedImage)   await writeImg(sd,"marked_paper.jpg",st.markedImage);
-        // Feedback HTML — use stored or regenerate
         const html=st.feedbackHTML || genFeedbackHTML(st.name,paper.name,st.results);
         if(html) await writeText(sd,"personalised_feedback.html",html);
       }
@@ -4058,7 +3946,6 @@ function NovaVista() {
   },[genCollectiveHTML,genFeedbackHTML]);
 
   const dlFeedback=useCallback((st, paperName)=>{
-    // Use stored HTML or regenerate from results
     const html = st.feedbackHTML || (st.results ? genFeedbackHTML(st.name, paperName||"Paper", st.results) : null);
     if(!html){setError("Feedback document not available — please re-mark and save this student.");return;}
     const a=document.createElement("a");
@@ -4082,7 +3969,6 @@ function NovaVista() {
   const startCamera=useCallback(async()=>{
     try{
       setError("");
-      // Request highest res + continuous autofocus from the start
       const constraints={
         video:{
           facingMode:{ideal:"environment"},
@@ -4094,14 +3980,11 @@ function NovaVista() {
       const s=await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current=s;
       setCameraActive(true);
-      // Apply continuous autofocus immediately after stream starts
       const track=s.getVideoTracks()[0];
       if(track){
-        // Attempt focusMode constraint immediately
         try{
           await track.applyConstraints({advanced:[{focusMode:"continuous"}]});
         }catch{}
-        // Then check capabilities and apply best available focus mode
         try{
           const caps=track.getCapabilities?.();
           if(caps?.focusMode){
@@ -4112,7 +3995,6 @@ function NovaVista() {
         }catch{}
       }
     }catch(e){
-      // Fallback to basic constraints if advanced ones fail
       try{
         const s=await navigator.mediaDevices.getUserMedia({
           video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}
@@ -4134,7 +4016,6 @@ function NovaVista() {
     }
   },[]);
 
-  // Assign the stream to the video element once it exists in the DOM
   useEffect(()=>{
     if(cameraActive && videoRef.current && streamRef.current){
       videoRef.current.srcObject = streamRef.current;
@@ -4147,9 +4028,7 @@ function NovaVista() {
     streamRef.current=null;
     setCameraActive(false);
     setAutoActive(false);
-    // Stop edge detection loop
     if(edgeRafRef.current){ cancelAnimationFrame(edgeRafRef.current); edgeRafRef.current=null; }
-    // Reset live OCR state
     setLiveOcrText(""); setLiveOcrDone(false);
   },[]);
   useEffect(()=>()=>stopCamera(),[stopCamera]);
@@ -4163,13 +4042,11 @@ function NovaVista() {
     canvas.width=W; canvas.height=H;
     const ctx=canvas.getContext("2d");
     ctx.clearRect(0,0,W,H);
-    // Sample at low res for speed
     const S=0.1, sw=Math.round(W*S), sh=Math.round(H*S);
     const tmp=document.createElement("canvas"); tmp.width=sw; tmp.height=sh;
     const tc=tmp.getContext("2d");
     tc.drawImage(video,0,0,sw,sh);
     const pix=tc.getImageData(0,0,sw,sh).data;
-    // Find bounding box of bright/document region
     let minX=sw,minY=sh,maxX=0,maxY=0,count=0;
     for(let y=1;y<sh-1;y++){
       for(let x=1;x<sw-1;x++){
@@ -4191,21 +4068,17 @@ function NovaVista() {
       const bx=Math.max(0,minX-pad), by=Math.max(0,minY-pad);
       const bw=Math.min(W,maxX+pad)-bx, bh=Math.min(H,maxY+pad)-by;
       const coverage=(bw*bh)/(W*H);
-      // Colour: green if good coverage, amber if partial
       const col=coverage>0.55?"#3dd68c":coverage>0.28?"#f5c842":"#e8473f";
       const lw=3;
-      // Draw rounded rect
       ctx.beginPath();
       ctx.roundRect?ctx.roundRect(bx,by,bw,bh,8):ctx.rect(bx,by,bw,bh);
       ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.stroke();
-      // Draw corner accents (thicker)
       const cs=28;
       [[bx,by,1,1],[bx+bw,by,-1,1],[bx,by+bh,1,-1],[bx+bw,by+bh,-1,-1]].forEach(([cx,cy,dx,dy])=>{
         ctx.beginPath();
         ctx.moveTo(cx+dx*cs,cy); ctx.lineTo(cx,cy); ctx.lineTo(cx,cy+dy*cs);
         ctx.strokeStyle=col; ctx.lineWidth=5; ctx.lineCap="round"; ctx.stroke();
       });
-      // Coverage badge
       ctx.fillStyle="rgba(0,0,0,0.55)";
       ctx.beginPath(); try{ctx.roundRect(bx,by-24,88,20,4);}catch{ctx.rect(bx,by-24,88,20);} ctx.fill();
       ctx.fillStyle=col; ctx.font="bold 11px Inter,sans-serif";
@@ -4214,7 +4087,6 @@ function NovaVista() {
     edgeRafRef.current=requestAnimationFrame(runEdgeDetection);
   },[]);
 
-  // Start/stop edge detection with camera
   useEffect(()=>{
     if(cameraActive){ edgeRafRef.current=requestAnimationFrame(runEdgeDetection); }
     else { if(edgeRafRef.current){ cancelAnimationFrame(edgeRafRef.current); edgeRafRef.current=null; } }
@@ -4277,7 +4149,6 @@ function NovaVista() {
      • Multi-pass OCR (PSM 1 + PSM 6), takes better result
   ══════════════════════════════════════════════════════════════════════ */
 
-  // ── IndexedDB helpers for caching traineddata ─────────────────────────
   const idbGet = useCallback((key) => new Promise((res, rej) => {
     const req = indexedDB.open("nv_ocr_cache", 1);
     req.onupgradeneeded = e => e.target.result.createObjectStore("data");
@@ -4302,23 +4173,18 @@ function NovaVista() {
     req.onerror = () => res(false);
   }), []);
 
-  // Check if a trained model is in cache
   const idbHas = useCallback(async (key) => {
     const v = await idbGet(key);
     return v != null;
   }, [idbGet]);
 
-  // ── Fetch traineddata with IndexedDB cache ────────────────────────────
-  // Downloads once, stores in browser DB, serves locally forever after
   const fetchTrainedData = useCallback(async (modelName, onProgress) => {
     const cacheKey = `traineddata_${modelName}`;
-    // Check IDB cache first
     const cached = await idbGet(cacheKey);
     if (cached) {
       onProgress && onProgress(100, "Loaded from local cache");
       return cached; // ArrayBuffer
     }
-    // Not cached — download tessdata_best (much better LSTM model for handwriting)
     const url = `https://github.com/tesseract-ocr/tessdata_fast/raw/main/${modelName}.traineddata`;
     onProgress && onProgress(5, `Downloading ${modelName} model…`);
     const resp = await fetch(url);
@@ -4343,14 +4209,12 @@ function NovaVista() {
     return buf.buffer;
   }, [idbGet, idbSet]);
 
-  // ── Create/get Tesseract worker with best model ───────────────────────
   const getTesseractWorker = useCallback(async () => {
     if (tesseractWorkerRef.current) return tesseractWorkerRef.current;
     if (typeof Tesseract === "undefined") throw new Error("Tesseract.js not loaded.");
     setTesseractLoading(true);
     setOcrProgress(0);
     try {
-      // Check what traineddata to use: custom uploaded > best > standard
       const customKey = "traineddata_custom";
       const bestKey   = "traineddata_eng_best";
       const hasCustom = await idbHas(customKey);
@@ -4370,7 +4234,6 @@ function NovaVista() {
         setMarkingStep("Loading high-accuracy OCR model from cache…");
         setOcrLoadStep("Loading from cache…"); setOcrProgress(20);
       } else {
-        // First time — download tessdata_best
         setMarkingStep("Downloading OCR model (~4MB, once only)…");
         setOcrLoadStep("Downloading model…"); setOcrProgress(2);
         try {
@@ -4383,7 +4246,6 @@ function NovaVista() {
           modelLabel = "eng_fast";
           setOcrLoadStep("Cached locally ✓"); setOcrProgress(85);
         } catch (dlErr) {
-          // Fallback to standard model via CDN
           setMarkingStep("Using standard OCR model…");
           setOcrLoadStep("Using standard model…"); setOcrProgress(20);
         }
@@ -4404,17 +4266,13 @@ function NovaVista() {
 
       let worker;
       if (langData) {
-        // Create worker with cached/custom data (no network needed)
         worker = await Tesseract.createWorker(modelLabel, 1, workerOpts);
-        // Load the cached data directly
         await worker.loadLanguage(modelLabel, langData);
         await worker.initialize(modelLabel);
       } else {
-        // Fallback: standard eng from CDN
         worker = await Tesseract.createWorker("eng", 1, workerOpts);
       }
 
-      // Best parameters for exam paper handwriting
       await worker.setParameters({
         tessedit_pageseg_mode:      "1",   // Auto page seg + OSD
         preserve_interword_spaces:  "1",
@@ -4434,13 +4292,10 @@ function NovaVista() {
     }
   }, [idbGet, idbHas, idbSet, fetchTrainedData]);
 
-  // ── Enhanced image preprocessing: CLAHE-lite + Otsu + deskew ──────────
-  // upscale → local contrast normalisation → Otsu binarisation → deskew
   const preprocessForOCR = useCallback((imageB64) => {
     return new Promise(resolve => {
       const img = new Image();
       img.onload = () => {
-        // Step 1: Upscale to 1400px min; cap at 2800px to avoid memory issues
         const MIN_DIM = 1400, MAX_DIM = 2800;
         let scale = img.width < MIN_DIM ? MIN_DIM / img.width : 1;
         if (img.width * scale > MAX_DIM) scale = MAX_DIM / img.width;
@@ -4450,20 +4305,18 @@ function NovaVista() {
         const c = document.createElement("canvas");
         c.width = W; c.height = H;
         const ctx = c.getContext("2d");
-        // Use crisp scaling for text
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
+        ctx.filter = "contrast(1.35) brightness(1.05)";
         ctx.drawImage(img, 0, 0, W, H);
+        ctx.filter = "none";  // reset filter
         const d = ctx.getImageData(0, 0, W, H);
 
-        // Step 2: Convert to greyscale
         const grey = new Uint8Array(W * H);
         for (let i = 0, j = 0; i < d.data.length; i += 4, j++) {
           grey[j] = Math.round(0.299*d.data[i] + 0.587*d.data[i+1] + 0.114*d.data[i+2]);
         }
 
-        // Step 3: CLAHE-lite — tile-based local contrast normalisation
-        // Fixes uneven lighting from phone photos (shadow on one side, etc.)
         const TILE = 64;
         const normed = new Uint8Array(W * H);
         for (let ty = 0; ty < H; ty += TILE) {
@@ -4481,7 +4334,6 @@ function NovaVista() {
           }
         }
 
-        // Step 4: Otsu threshold on contrast-normalised image
         const hist = new Array(256).fill(0);
         for (let i = 0; i < normed.length; i++) hist[normed[i]]++;
         const total = normed.length;
@@ -4496,7 +4348,6 @@ function NovaVista() {
           if (variance > maxVar) { maxVar = variance; threshold = t; }
         }
 
-        // Step 5: Apply binary threshold using normed values
         for (let i = 0, j = 0; i < d.data.length; i += 4, j++) {
           const v = normed[j] <= threshold ? 0 : 255;
           d.data[i] = d.data[i+1] = d.data[i+2] = v;
@@ -4504,8 +4355,6 @@ function NovaVista() {
         }
         ctx.putImageData(d, 0, 0);
 
-        // Step 6: Lightweight deskew — test 5 angles (±2° in 1° steps)
-        // Catches most real-world paper tilts without the cost of 13 rotations
         let bestAngle = 0;
         let bestVar   = -1;
         const angles  = [-2, -1, 0, 1, 2];
@@ -4527,7 +4376,6 @@ function NovaVista() {
           if (variance > bestVar) { bestVar=variance; bestAngle=angle; }
         }
 
-        // Apply best rotation
         const fc = document.createElement("canvas"); fc.width=W; fc.height=H;
         const fx = fc.getContext("2d");
         fx.fillStyle="#fff"; fx.fillRect(0,0,W,H);
@@ -4540,43 +4388,60 @@ function NovaVista() {
     });
   }, []);
 
-  // ── Smart OCR — single pass by default, second pass only if needed ────
-  const runTesseractOCR = useCallback(async (imageB64) => {
+  const runTesseractOCR = useCallback(async (imageB64, returnConfidence=false, subjectHint="") => {
     const worker = await getTesseractWorker();
     setOcrProgress(0);
     setOcrLoadStep("Reading handwriting…");
 
-    // Single pass: PSM 6 (uniform block) — fastest and works best for answer sheets
-    await worker.setParameters({ tessedit_pageseg_mode: "6" });
+    const mathLike = /math|maths|physics|chemistry|numeracy/i.test(subjectHint||subject||"");
+    const ocrParams = { tessedit_pageseg_mode: "6" };
+    if (mathLike) {
+      ocrParams.tessedit_char_whitelist = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-*/=()[].,% ";
+    }
+    await worker.setParameters(ocrParams);
     const r1 = await worker.recognize(imageB64);
     const t1  = (r1.data.text || "").trim();
     setOcrProgress(70);
 
-    // Only run second pass if first returned very little (< 15 chars) — likely OSD failure
+    let bestResult = r1;
     let result = t1;
     if (t1.length < 15) {
       setOcrLoadStep("Trying full-page mode…");
       await worker.setParameters({ tessedit_pageseg_mode: "1" });
       const r2 = await worker.recognize(imageB64);
       const t2  = (r2.data.text || "").trim();
-      result = t2.length > t1.length ? t2 : t1;
+      if (t2.length > t1.length) { bestResult = r2; result = t2; }
     }
     setOcrProgress(100);
     setOcrLoadStep("Done");
 
-    // Clean common OCR artefacts from exam papers
-    return result
+    const cleaned = result
       .replace(/[|]{2,}/g, "")
       .replace(/\f/g, "\n")
       .replace(/[ \t]{3,}/g, "  ")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
+
+    if (!returnConfidence) return cleaned;
+
+    const CONF_THRESHOLD = 70;  // Raise to 70% — flag below this for Manual Review
+    const words = (bestResult.data.words || []).map(w => ({
+      text: w.text,
+      conf: w.confidence,
+      low:  w.confidence < CONF_THRESHOLD && w.text.trim().length > 1,
+    }));
+    const avgConf = words.length
+      ? Math.round(words.reduce((s,w)=>s+w.conf,0)/words.length) : 100;
+    const lowConfWords = words.filter(w=>w.low).map(w=>w.text);
+
+    return { text: cleaned, words, avgConf, lowConfWords,
+             hasLowConf: lowConfWords.length > 0,
+             needsManualReview: avgConf < CONF_THRESHOLD || lowConfWords.length > 3 };
   }, [getTesseractWorker]);
 
   /* ── Pre-warm OCR worker silently when offline mode is enabled ─────── */
   useEffect(() => {
     if (!offlineMode || tesseractReady || tesseractLoading) return;
-    // Start loading in background — don't block UI
     let cancelled = false;
     const prewarm = async () => {
       await new Promise(r => setTimeout(r, 800)); // small delay so UI settles
@@ -4592,7 +4457,6 @@ function NovaVista() {
       reader.onload = async (e) => {
         try {
           await idbSet("traineddata_custom", e.target.result);
-          // Clear existing worker so it reinitialises with new model
           if (tesseractWorkerRef.current) {
             await tesseractWorkerRef.current.terminate();
             tesseractWorkerRef.current = null;
@@ -4606,7 +4470,6 @@ function NovaVista() {
     });
   }, [idbSet]);
 
-  // ── Delete cached model ───────────────────────────────────────────────
   const clearOcrCache = useCallback(async () => {
     await new Promise(res => {
       const req = indexedDB.open("nv_ocr_cache", 1);
@@ -4687,15 +4550,13 @@ Rules:
             const ab = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({data:ab}).promise;
             let pdfText = "";
-            for (let p = 1; p <= Math.min(pdf.numPages, 20); p++) {
+            for (let p = 1; p <= Math.min(pdf.numPages, 20) /* large PDFs: first 20 pages only — split before uploading for best results */; p++) {
               const page = await pdf.getPage(p);
-              // First try text layer (typed PDFs)
               try {
                 const tc = await page.getTextContent();
                 const pageText = tc.items.map(i=>i.str).join(" ").trim();
                 if (pageText.length > 30) { pdfText += pageText + "\n"; continue; }
               } catch {}
-              // Fall back to OCR for scanned PDFs
               const vp = page.getViewport({scale:2.0});
               const canvas = document.createElement("canvas");
               canvas.width = vp.width; canvas.height = vp.height;
@@ -4703,23 +4564,38 @@ Rules:
               const b64 = canvas.toDataURL("image/png");
               const preprocessed = await preprocessForOCR(b64);
               setTopicOcrProgress(Math.round(((fi + p/pdf.numPages)/total)*100));
-              const ocrText = await runTesseractOCR(preprocessed);
+              const ocrResult = await runTesseractOCR(preprocessed, true, subject);
+          const ocrText = typeof ocrResult === "string" ? ocrResult : ocrResult.text;
+          if (typeof ocrResult === "object" && ocrResult.hasLowConf) {
+            setOcrConfidence({
+            avgConf: ocrResult.avgConf,
+            lowConfWords: ocrResult.lowConfWords,
+            needsReview: ocrResult.needsManualReview,
+          });
+          if (ocrResult.needsManualReview) {
+            setMarkingStep("⚠ Low OCR confidence — please verify handwriting reading");
+          }
+          } else {
+            setOcrConfidence(null);
+          }
               pdfText += ocrText + "\n";
             }
-            combined += `\n\n=== ${file.name} ===\n${pdfText}`;
+            if (pdf.numPages > 20) {
+              combined += `\n\n=== ${file.name} === [Large PDF: showing pages 1-20 of ${pdf.numPages} — split the file for complete extraction]\n${pdfText}`;
+            } else {
+              combined += `\n\n=== ${file.name} ===\n${pdfText}`;
+            }
           }
         } else if (["jpg","jpeg","png","webp","bmp","gif"].includes(ext)) {
-          // Image — OCR it
           const b64 = await new Promise(res=>{
             const r = new FileReader();
             r.onload = e => res(e.target.result);
             r.readAsDataURL(file);
           });
           const preprocessed = await preprocessForOCR(b64);
-          const ocrText = await runTesseractOCR(preprocessed);
+          const ocrText = await runTesseractOCR(preprocessed, false, topicSubject||subject||"");
           combined += `\n\n=== ${file.name} ===\n${ocrText}`;
         } else {
-          // Plain text / CSV
           const text = await file.text();
           combined += `\n\n=== ${file.name} ===\n${text}`;
         }
@@ -4739,30 +4615,20 @@ Rules:
     const rows = [];
     let seqNum = 1;
 
-    // Patterns for topic codes — ordered most specific first
     const patterns = [
-      // 1A) or 1a) or 1B) — e.g. "1A) Solving two step equations"
       { re: /^(\d+)\s*([A-Za-z])\s*[\)\.:\-]\s*(.+)$/,    code: (m)=>`${m[1]}${m[2].toUpperCase()}` },
-      // Q1a) or Q1b)
       { re: /^Q(\d+)\s*([A-Za-z])\s*[\)\.:\-]\s*(.+)$/i,  code: (m)=>`Q${m[1]}${m[2].toUpperCase()}` },
-      // 1.1 or 2.3 — e.g. "1.1 Algebra basics"
       { re: /^(\d+)\.(\d+)\s*[\)\.:\-]?\s*(.+)$/,          code: (m)=>`${m[1]}.${m[2]}` },
-      // 1) or 2) — simple numbered
       { re: /^(\d+)\s*[\)\.:\-]\s*(.+)$/,                   code: (m,t)=>`${m[1]}`, topic: (m)=>m[2] },
-      // Topic 3 or Chapter 5
       { re: /^(?:topic|chapter|unit|section|part)\s*(\d+[A-Za-z]?)[:\-\s]+(.+)$/i, code: (m)=>`T${m[1].toUpperCase()}`, topic:(m)=>m[2] },
-      // B1 B2 mark codes with content
       { re: /^[BMACPEFbmacpef][0-9]\s+(.{8,})$/,            code: (m,_,i)=>`MK${i+1}`, topic:(m)=>m[1] },
     ];
 
-    // Also try to detect section headers (all caps / bold-like lines with few words)
     let currentSection = "";
 
     lines.forEach((line, idx) => {
-      // Skip very short lines and pure code lines
       if (line.length < 4) return;
 
-      // Detect section headers: short, no sentence-ending punctuation, caps or title case
       const wordCount = line.split(/\s+/).length;
       const isHeader = wordCount <= 6 &&
         !line.match(/\)$/) &&
@@ -4778,7 +4644,6 @@ Rules:
         if (m) {
           const code = p.code(m, line, rows.length);
           const topicText = p.topic ? p.topic(m) : (m[3]||m[2]||"").trim();
-          // Clean up common mark scheme noise
           const clean = topicText
             .replace(/\b[BMACPEF][0-9]\b/gi,"")
             .replace(/\(\d+\s*marks?\)/gi,"")
@@ -4798,7 +4663,6 @@ Rules:
         }
       }
 
-      // Fallback: if line looks like a topic (long enough, starts with capital)
       if (line.length > 15 && /^[A-Z]/.test(line) && !line.includes("{") && !line.includes("<")) {
         rows.push({
           id: seqNum++,
@@ -4848,7 +4712,6 @@ Rules:
       "Year Group": r.year,
       "Marks Available": r.marks,
     })));
-    // Column widths
     ws["!cols"] = [{wch:10},{wch:55},{wch:20},{wch:14},{wch:12},{wch:14}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Topics");
@@ -4857,13 +4720,11 @@ Rules:
 
   /* ── markWhole — full AI marking of an image ── */
   const markWhole=useCallback(async (img, extraAnswers)=>{
-    setMarking(true);setMarkingStep("Sending to AI marker…");
+    setMarking(true);setMarkingStep("Preparing paper for marking…");
     try{
-      // ── Auto-fallback: if online mode but no API key, use local marking engine ──
       if(!offlineMode && !apiReady){
         setMarkingStep("No API key — using local mark scheme matching…");
         await new Promise(r=>setTimeout(r,600));
-        // Extract any typed answers from extraAnswers, or use scheme-only marking
         const combinedAnswer = extraAnswers
           ? Object.values(extraAnswers).join(" ")
           : "";
@@ -4906,7 +4767,6 @@ Rules:
         const pct=avail>0?Math.round((awarded/avail)*100):0;
         const gb={A:70,B:55,C:40,D:25};
         const grade=pct>=gb.A?"A":pct>=gb.B?"B":pct>=gb.C?"C":pct>=gb.D?"D":"F";
-        // If no typed answer was provided (image only), we can't keyword match
         const imageOnly = !combinedAnswer && img;
         const fallbackResult = imageOnly ? {
           totalScore:0,maxScore:avail,percentage:0,grade:"—",
@@ -4933,23 +4793,20 @@ Rules:
       }
 
       const b64=img.split(",")[1];
-      // If teacher provided manual answers for uncertain questions, inject them
       const answerNote = extraAnswers && Object.keys(extraAnswers).length>0
         ? `\n\nTEACHER-SUPPLIED ANSWERS FOR UNCLEAR QUESTIONS:\n${Object.entries(extraAnswers).map(([id,ans])=>`${id}: ${ans}`).join("\n")}\nUse these answers when marking those questions — do not try to re-read them from the image.`
         : "";
-      // Web search supplement
       let searchNote="";
       if(webSearchEnabled&&webSearchKey&&globalScheme){
-        setMarkingStep("Searching web for answer reference…");
+        setMarkingStep("Searching web for context…");
         const query=`${subject||""} exam mark scheme answers ${globalScheme.split("\n")[0].slice(0,80)}`;
         const hits=await searchWeb(query);
         if(hits&&hits.length>0){
           searchNote=`\n\nWEB REFERENCE (use only to supplement mark scheme — do not override it):\n${hits.map(h=>`• ${h.title}: ${h.snippet}`).join("\n")}`;
         }
-        setMarkingStep("Sending to AI marker…");
+        setMarkingStep("Reading student work…"); await new Promise(r=>setTimeout(r,250)); setMarkingStep("Sending to AI marker…");
       }
       const sys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}${studentName?`\nStudent: ${studentName}`:""}\nMARKING SCHEME: ${globalScheme||"Apply standard academic marking."}\n${globalMisconceptions?`MISCONCEPTIONS TO FLAG: ${globalMisconceptions}`:""}\n${answerNote}${searchNote}\nFor each question use B/M/A mark codes matching the marking scheme.\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"<B1|M1|A1 etc>","feedback":"","correct":<bool>,"misconception":null,"uncertain":<bool>}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
-      // Build the typed answers note for offline engine
       const typedAnswerText = extraAnswers && Object.keys(extraAnswers).length>0
         ? Object.entries(extraAnswers).map(([id,ans])=>`${id}: ${ans}`).join("\n")
         : "";
@@ -4959,7 +4816,6 @@ Rules:
       const text=await callAPI([{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:msgText}]}],sys,2500);
       const parsed=parseJSON(text);
 
-        // ── Offline image-only: use Tesseract local OCR ───────────────────
         if(parsed._offlineNeedsText){
           setMarkingStep("Running local OCR — reading handwriting…");
           let ocrText = "";
@@ -4967,7 +4823,6 @@ Rules:
             const preprocessed = await preprocessForOCR(img);
             ocrText = await runTesseractOCR(preprocessed);
           } catch(ocrErr) {
-            // OCR failed — fall back to manual input
             const schemeLines=(globalScheme||"").split(/\n/).map(l=>l.trim()).filter(Boolean);
             const schemeQs=schemeLines.map((line,i)=>{
               const stripped=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").replace(/^\d+[a-z]?[\.\)\s]+/,"").trim();
@@ -4982,7 +4837,6 @@ Rules:
           }
 
           if (ocrText.length < 5) {
-            // OCR produced nothing useful — go to manual
             const schemeLines=(globalScheme||"").split(/\n/).map(l=>l.trim()).filter(Boolean);
             const schemeQs=schemeLines.map((line,i)=>{
               const stripped=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").replace(/^\d+[a-z]?[\.\)\s]+/,"").trim();
@@ -4996,16 +4850,13 @@ Rules:
             return;
           }
 
-          // OCR succeeded — now run local marking against extracted text
-          setMarkingStep("OCR complete — matching against mark scheme…");
+          setMarkingStep("Handwriting extracted — comparing against mark scheme…");
           await new Promise(r=>setTimeout(r,300));
-          // Reuse the callAPI offline path by passing the OCR text as answer
           const ocrResult = await callAPI(
             [{role:"user",content:`STUDENT ANSWERS:\n${ocrText}`}],
             sys, 2500
           );
           const ocrParsed = parseJSON(ocrResult);
-          // Add the OCR text to the result so teacher can review what was read
           ocrParsed._ocrText = ocrText;
           ocrParsed.image = img;
           setResults(ocrParsed);
@@ -5018,7 +4869,6 @@ Rules:
       setReviewMode(null); setUncertainQs([]); setManualAnswers({});
       setTab("results");
     }catch(e){
-      // If API fails, offer offline fallback
       if(e.message&&(e.message.includes("key not set")||e.message.includes("API key")||e.message.includes("401")||e.message.includes("403"))){
         setError("No API key set. Switch to Offline Mode in the sidebar to mark using your mark scheme, or add an API key in Privacy & Data.");
       } else {
@@ -5030,13 +4880,11 @@ Rules:
 
   /* ── extractAndReview — OCR pass to flag questions AI can't read ── */
   const extractAndReview=useCallback(async(img)=>{
-    // If no API key (online) or offline mode — use Tesseract local OCR
     if(offlineMode || (!offlineMode && !apiReady)){
       setMarking(true); setMarkingStep("Running local OCR — reading paper…");
       try {
         const preprocessed = await preprocessForOCR(img);
-        const ocrText = await runTesseractOCR(preprocessed);
-        // Build question list from scheme + OCR text
+        const ocrText = await runTesseractOCR(preprocessed, false, topicSubject||subject||"");
         const schemeLines=(globalScheme||"").split(/\n/).map(l=>l.trim()).filter(Boolean);
         const schemeQs=schemeLines.map((line,i)=>{
           const stripped=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").replace(/^\d+[a-z]?[\.\)\s]+/,"").trim();
@@ -5049,14 +4897,12 @@ Rules:
             readingNote: ocrText.length>10?"OCR extracted text — verify before marking":"OCR could not read clearly — check and correct below"
           }:null;
         }).filter(Boolean);
-        // Only give OCR text to first question; rest are blank for teacher to review
         schemeQs.forEach((q,i)=>{ if(i>0){q.studentAnswer=""; q.canRead=false; q.readingNote="Check OCR text above, type this answer separately";} });
         if(schemeQs.length===0) schemeQs.push({id:"Q1",description:"Student answer",studentAnswer:ocrText,canRead:ocrText.length>10,confidence:"low",readingNote:"OCR extracted text above — verify"});
         setUncertainQs(schemeQs); setManualAnswers({Q1:ocrText});
         setReviewMode("manual"); setMarking(false); setMarkingStep("");
         if(ocrText.length<10) setError("⚠ OCR could not read much text — handwriting may be unclear. Review and correct below.");
       } catch(e) {
-        // OCR completely failed — manual entry
         const pts=(globalScheme||"").split(/\n/).map(l=>l.trim()).filter(Boolean)
           .map((line,i)=>{const s=line.replace(/^Q(?:n|uestion)?\s*\d+[a-z]?[\s\)\.:\-]*/i,"").trim().replace(/\b[BMACPEF][0-9]\b/gi,"").trim();return s.length>2?{id:`Q${i+1}`,description:s.slice(0,80),studentAnswer:"",canRead:false,confidence:"low",readingNote:"OCR failed — type the answer below"}:null;}).filter(Boolean);
         setUncertainQs(pts.length>0?pts:[{id:"Q1",description:"Student answer",studentAnswer:"",canRead:false,confidence:"low",readingNote:"Type the answer below"}]);
@@ -5134,7 +4980,6 @@ Rules:
                 || file.type === "application/msword";
     const isImg  = file.type.startsWith("image/");
 
-    // ── IMAGE ──────────────────────────────────────────────────────────────
     if (isImg) {
       return new Promise(res => {
         const r = new FileReader();
@@ -5143,7 +4988,6 @@ Rules:
       });
     }
 
-    // ── PDF ────────────────────────────────────────────────────────────────
     if (isPDF) {
       try {
         if (typeof pdfjsLib === "undefined")
@@ -5153,7 +4997,6 @@ Rules:
         const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
         const numPages = Math.min(pdf.numPages, 6); // cap at 6 pages per paper
 
-        // Render each page to canvas, then stitch vertically
         const canvases = [];
         for (let p = 1; p <= numPages; p++) {
           const page  = await pdf.getPage(p);
@@ -5166,7 +5009,6 @@ Rules:
           canvases.push(canvas);
         }
 
-        // Stitch pages vertically
         const totalW = Math.max(...canvases.map(c => c.width));
         const totalH = canvases.reduce((s, c) => s + c.height, 0);
         const stitched = document.createElement("canvas");
@@ -5187,7 +5029,6 @@ Rules:
       }
     }
 
-    // ── DOCX / DOC ─────────────────────────────────────────────────────────
     if (isDOCX) {
       try {
         if (typeof mammoth === "undefined")
@@ -5198,11 +5039,9 @@ Rules:
 
         if (/\.docx$/i.test(file.name) ||
             file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-          // DOCX — full text extraction
           const result = await mammoth.extractRawText({ arrayBuffer: arrayBuf });
           textContent = result.value.trim();
         } else {
-          // .doc (old binary format) — mammoth has limited support, try anyway
           try {
             const result = await mammoth.extractRawText({ arrayBuffer: arrayBuf });
             textContent = result.value.trim();
@@ -5220,7 +5059,6 @@ Rules:
       }
     }
 
-    // Unsupported
     return { ...base, fileType: "unknown", imageB64: null, textContent: null,
              status: "failed", error: `Unsupported file type: ${file.type || file.name.split('.').pop()}` };
   }, []);
@@ -5236,7 +5074,6 @@ Rules:
     );
     if (!supported.length) { setError("No supported files. Upload images (JPG/PNG), PDFs, or Word documents (.docx)."); return; }
 
-    // Show items immediately as "loading" then resolve
     const placeholders = supported.map(f => ({
       id: Date.now()+Math.random(), name: f.name, fileType:"loading",
       status:"pending", imageB64:null, textContent:null, error:null
@@ -5244,7 +5081,6 @@ Rules:
     setBatchQueue(prev => [...prev, ...placeholders]);
     setBatchDone(false);
 
-    // Process files and replace placeholders
     const items = await Promise.all(supported.map(fileToQueueItem));
     setBatchQueue(prev => {
       const next = [...prev];
@@ -5267,7 +5103,6 @@ Rules:
     const scheme=globalScheme.trim()||"Apply standard UK academic marking.";
     const baseSys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}\nMARKING SCHEME: ${scheme}\n${globalMisconceptions?`MISCONCEPTIONS: ${globalMisconceptions}`:""}\nFor each question use B/M/A mark codes from the marking scheme.\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"<from paper or blank>","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"","feedback":"","correct":<bool>,"misconception":null}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
 
-    // ── Local offline marking helper (same engine as callAPI offline branch) ──
     const runLocalMark = (answerText) => {
       const ans = (answerText||"").toLowerCase();
       const lines = scheme.split(/\n/).map(l=>l.trim()).filter(Boolean);
@@ -5334,18 +5169,15 @@ Rules:
       try{
         let parsed;
 
-        // ── OFFLINE MODE ─────────────────────────────────────────────────────
         if(offlineMode){
           if(item.fileType==="docx"&&item.textContent){
-            // Word/text — can keyword-match directly ✅
             parsed=runLocalMark(item.textContent);
             parsed.studentName=item.name;
           } else if((item.fileType==="pdf"||item.fileType==="image")&&item.imageB64){
-            // PDF/image — run Tesseract local OCR, then keyword-match ✅
             setBatchQueue(prev=>prev.map((it,idx)=>idx===i?{...it,status:"marking",ocrStatus:"Running local OCR…"}:it));
             try {
               const preprocessed = await preprocessForOCR(item.imageB64);
-              const ocrText = await runTesseractOCR(preprocessed);
+              const ocrText = await runTesseractOCR(preprocessed, false, topicSubject||subject||"");
               if(ocrText.length < 5){
                 parsed={
                   totalScore:0, maxScore:totalMarks?parseInt(totalMarks):1,
@@ -5374,7 +5206,6 @@ Rules:
             throw new Error("No content to mark — file may have failed to load.");
           }
         } else {
-          // ── ONLINE MODE (AI) ────────────────────────────────────────────────
           let text="";
           if(item.fileType==="docx"&&item.textContent){
             const wordLimit=3000;
@@ -5471,7 +5302,6 @@ Rules:
         setQmDocText(item.textContent);
         setQmMode("doc");
       } else if(item.imageB64){
-        // PDF rendered to image — treat like an image upload
         setQmImageB64(item.imageB64);
         setQmImageURL(item.imageB64);
         setQmMode("image");
@@ -5503,8 +5333,6 @@ Rules:
 
     const lines = scheme.split(/\n/).map(l => l.trim()).filter(Boolean);
 
-    // Regex: detect a question header line
-    // Matches: Q1, Q2a, Q2 a), Q2(a), Question 1, 1., 1a., (1), Part a, a), i), ii)
     const Q_HEADER = /^(?:Q(?:uestion)?\s*(\d+)\s*([a-e])?[\s:.)\-]*$|Q(?:uestion)?\s*(\d+)\s*\(([a-e])\)|(\d+)\s*([a-e])\)|(\d+)\s*([a-e])?\s*[:.]\s*$|Part\s+([a-e])[:.)]?|^\(?([a-e])\)[\s:.]*$|^([ivx]+)\))/i;
 
     const HINT_POSITIONS = [
@@ -5520,7 +5348,6 @@ Rules:
       for (const line of markLines) {
         if (pi >= HINT_POSITIONS.length) break;
         if (line.length < 3) continue;
-        // Skip pure header lines that slipped through
         if (/^Q\d|^Question\s*\d/i.test(line) && line.length < 20) continue;
         const codeMatch = line.match(/\b([BMAP]\d)\b/i);
         const code = codeMatch ? codeMatch[1].toUpperCase() : "";
@@ -5541,19 +5368,16 @@ Rules:
       return hints;
     };
 
-    // ── Split scheme into question buckets ──────────────────────────
     const buckets = []; // [{rawId, label, lines[]}]
     let current = null;
 
     for (const line of lines) {
-      // Does this line look like a question header?
       const isHeader = Q_HEADER.test(line) && line.length < 40;
       if (isHeader) {
         current = { rawId: line, label: line.replace(/[:.)\s]+$/,"").trim(), lines: [] };
         buckets.push(current);
       } else {
         if (!current) {
-          // Lines before any header — lump into a "General" bucket
           current = { rawId:"general", label:"General", lines:[] };
           buckets.push(current);
         }
@@ -5561,9 +5385,7 @@ Rules:
       }
     }
 
-    // ── If no question headers found, try splitting by blank-line blocks ──
     if (buckets.length <= 1 && buckets[0]?.rawId === "general") {
-      // Try to auto-detect question structure by looking for number prefixes
       const numbered = [];
       let cur = null;
       for (const line of lines) {
@@ -5580,13 +5402,11 @@ Rules:
         }
       }
       if (numbered.length > 1) {
-        // Rebuild using numbered structure
         buckets.length = 0;
         numbered.forEach(b => buckets.push(b));
       }
     }
 
-    // ── Build final question objects ──────────────────────────────────
     const questions = buckets
       .filter(b => b.lines.length > 0)
       .map((b, i) => ({
@@ -5604,7 +5424,6 @@ Rules:
     if (overlayOn) {
       const qs = parseSchemeIntoQuestions();
       setParsedSchemeQs(qs);
-      // Default: select first question if available, else "all"
       setOverlayQId(qs.length > 0 ? qs[0].id : "all");
     }
   }, [overlayOn, globalScheme, parseSchemeIntoQuestions]);
@@ -5618,12 +5437,10 @@ Rules:
   }, [parseSchemeIntoQuestions, overlayQId]);
 
   const handleMark=useCallback(async()=>{
-    // Get answer from the correct source
     const answer = qmMode==="image" ? qmOcr
                  : qmMode==="doc"   ? qmDocText
                  : qmPasted;
     if(!answer.trim()){setError("Please provide a student answer.");return;}
-    // If teacher edited OCR text, record as a correction before marking
     if(qmMode==="image" && qmOcr && qmOcr!==qmOcrOriginal && qmOcrOriginal) {
       recordCorrection("ocr", qmOcrOriginal, qmOcr, { question:qmQuestion, subject });
     }
@@ -5635,8 +5452,9 @@ Rules:
     const markTypes = [hasB?"B (knowledge/fact)":"", hasM?"M (method)":"", hasA?"A (accuracy)":"", hasP?"P (process)":""].filter(Boolean).join(", ") || "B (knowledge), M (method), A (accuracy)";
     const sys=`You are an expert examiner marking a single student answer for a UK school.\n${subject?`Subject: ${subject}`:""}\n${qmQuestion?`Question: ${qmQuestion}`:""}\nMark Scheme: ${scheme||"Apply appropriate UK academic standards."}\n${globalMisconceptions?`Misconceptions to watch for: ${globalMisconceptions}`:""}\n\nANNOTATION STYLE:\nUse proper exam board annotation notation. Detected mark types in this scheme: ${markTypes}.\nFor each marking point assign the correct mark code (B1, B2, M1, M2, A1, A2, P1, P2 etc.).\n\nRespond ONLY with valid JSON, no markdown:\n{"marksAwarded":<n>,"marksAvailable":<n or null>,"percentage":<0-100>,"breakdown":[{"point":"<mark scheme point text>","code":"<B1|M1|A1|P1 etc>","awarded":<bool>,"comment":"<why awarded or not>"}],"annotations":[{"label":"<B1✓ or M1✗ etc>","type":"correct|incorrect|partial","placement":"<top-left|top-right|middle-left|middle-right|bottom-left|bottom-right>"}],"feedback":"<2-3 sentences directly to student>","misconceptions":[],"strengths":[],"improvements":[]}`;
     setQmAnnotReady(false);
-    setQmLoading(true);setQmResult(null);setError("");
+    setQmLoading(true);setQmResult(null);setError(""); setMarkingStep("Analysing student answer…");
     try{
+      setMarkingStep("Comparing answer to mark scheme…"); await new Promise(r=>setTimeout(r,200));
       const text=await callAPI([{role:"user",content:`Student answer:\n\n${answer}`}],sys,1200);
       const parsed=parseJSON(text);
       parsed._aiMarks    = parsed.marksAwarded;
@@ -5644,14 +5462,12 @@ Rules:
       setQmResult(parsed);setQmEditing(false);
     }
     catch(e){setError("Marking failed: "+e.message);}
-    finally{setQmLoading(false);}
+    finally{setQmLoading(false);setMarkingStep("");}
   },[callAPI,qmMode,qmOcr,qmOcrOriginal,qmPasted,qmDocText,qmScheme,globalScheme,globalMisconceptions,subject,qmQuestion,recordCorrection]);
 
   const handleAccept=useCallback(()=>{
     if(!qmResult)return;
-    // Store the original AI result before teacher edits for comparison
     const originalResult = qmResult._original || qmResult;
-    // Record any corrections the teacher made
     if (qmEditing && originalResult._aiMarks !== undefined && qmResult.marksAwarded !== originalResult._aiMarks) {
       recordCorrection("marks", originalResult._aiMarks, qmResult.marksAwarded, {
         question: qmQuestion, studentAnswer: qmMode==="image"?qmOcr:qmPasted, feedback: qmResult.feedback, markScheme: qmScheme||globalScheme
@@ -5663,7 +5479,6 @@ Rules:
       });
     }
     setSaved(p=>[{id:Date.now(),question:qmQuestion||"(no question)",score:`${qmResult.marksAwarded}${qmResult.marksAvailable?"/"+qmResult.marksAvailable:""}`,pct:qmResult.percentage,feedback:qmResult.feedback,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),result:qmResult},...p]);
-    // Reset ALL input state — including doc mode so next paper starts clean
     setQmResult(null);
     setQmOcr("");setQmOcrOriginal("");setQmPasted("");
     setQmDocText("");setQmDocName("");
@@ -5720,7 +5535,6 @@ Rules:
         "bottom-right": [W*0.70, H*0.88],
       };
 
-      // Track used positions to avoid overlap
       const usedY={};
 
       (qmResult.annotations||[]).forEach((ann,idx)=>{
@@ -5729,7 +5543,6 @@ Rules:
         const basePos=placements[ann.placement]||placements["top-left"];
         let x=basePos[0], y=basePos[1];
 
-        // Nudge down if position is already used
         const posKey=ann.placement||"top-left";
         if(usedY[posKey]==null) usedY[posKey]=y;
         else { usedY[posKey]+=fs*2.2; y=usedY[posKey]; }
@@ -5739,21 +5552,17 @@ Rules:
         const pad=fs*0.45;
         const bw=metrics.width+pad*2, bh=fs*1.5;
 
-        // Background pill
         ctx.fillStyle="rgba(255,255,255,0.92)";
         rrect(ctx, x-pad*0.5, y-bh*0.75, bw, bh, bh*0.4);
         ctx.fill();
 
-        // Coloured left strip
         ctx.fillStyle=col;
         ctx.fillRect(x-pad*0.5, y-bh*0.75, 4, bh);
 
-        // Text
         ctx.fillStyle=col;
         ctx.fillText(ann.label, x+4, y);
       });
 
-      // Score stamp top-right corner
       const scoreText=`${qmResult.marksAwarded}${qmResult.marksAvailable!=null?"/"+qmResult.marksAvailable:""}`;
       const sf=Math.max(30,Math.round(W*0.038));
       ctx.font=`bold ${sf}px Playfair Display,serif`;
@@ -6305,7 +6114,6 @@ Rules:
                       const next=!overlayOn;
                       setOverlayOn(next);
                       if(next&&cameraActive&&!liveOcrDone&&!liveOcrLoading){
-                        // OCR the paper FIRST before showing overlay
                         await runLiveOcr();
                       }
                     }}>
@@ -6928,6 +6736,17 @@ Rules:
                       : `Stitch & Review ${scannedPages.length} Page${scannedPages.length>1?"s":""}`}
                   </button>
 
+              {ocrConfidence&&ocrConfidence.lowConfWords.length>0&&(
+                <div className="warn-box" style={{fontSize:"0.8rem",display:"flex",gap:10,alignItems:"flex-start",marginBottom:8}}>
+                  <span>⚠</span>
+                  <div>
+                    <strong>{ocrConfidence.needsReview?"⚠ Manual Review Recommended":"Low OCR confidence"} ({ocrConfidence.avgConf}% avg)</strong>
+                    {" — "}these words may be misread:{" "}
+                    <em style={{color:"var(--red)"}}>{ocrConfidence.lowConfWords.slice(0,8).join(", ")}{ocrConfidence.lowConfWords.length>8?" …":""}</em>.
+                    {ocrConfidence.needsReview&&<div style={{marginTop:6,fontWeight:600}}>Please verify the extracted text above before accepting the AI mark.</div>}
+                  </div>
+                </div>
+              )}
                   {scannedPages.length>0&&(
                     <div className="blue-box">
                       Pages will be joined top-to-bottom and sent to the AI as one complete paper. The result will be saved with the student name above.
@@ -7711,7 +7530,8 @@ Rules:
                           <div className="folder-toolbar">
                             <div className="toggle-group" style={{width:200}}>
                               <button className={`toggle-opt ${classView==="students"?"on":""}`} onClick={()=>setClassView("students")}>👤 Students</button>
-                              <button className={`toggle-opt ${classView==="table"?"on":""}`}    onClick={()=>setClassView("table")}>📊 Topic Table</button>
+                              <button className={`toggle-opt ${classView==="table"?"on":""}`}    onClick={()=>setClassView("table")}>📊 Table</button>
+                              <button className={`toggle-opt ${classView==="mistakes"?"on":""}`} onClick={()=>setClassView("mistakes")}>⚠ Mistakes</button>
                             </div>
                             <div className="folder-toolbar-sep"/>
                             <button className="btn btn-ghost btn-sm" onClick={()=>{const a=document.createElement("a");a.href="data:text/html;charset=utf-8,"+encodeURIComponent(genCollectiveHTML(paper));a.download=`${paper.name.replace(/\s+/g,"_")}_summary.html`;a.click();}}>
@@ -7839,6 +7659,52 @@ Rules:
                               <div className="row gap8" style={{justifyContent:"flex-end"}}>
                                 <button className="btn btn-green btn-sm" onClick={()=>exportToExcel(paper)}><Ic d={I.xlsx} size={13}/> Export to Excel</button>
                               </div>
+                            </div>
+                          )}
+                          {classView==="mistakes"&&sts.length>0&&(
+                            <div className="col gap12">
+                              <div style={{fontSize:"0.78rem",color:"var(--text2)",marginBottom:4}}>Most common mistakes across {sts.length} students. <strong style={{color:"var(--red)"}}>Red = less than 50% correct.</strong></div>
+                              {qIds.map(qid=>{
+                                const allQs=sts.map(st=>(st.results?.questions||[]).find(q=>q.id===qid)).filter(Boolean);
+                                if(!allQs.length)return null;
+                                const wrong=allQs.filter(q=>!q.correct);
+                                const wrongPct=Math.round((wrong.length/allQs.length)*100);
+                                const misconceptions=allQs.map(q=>q.misconception).filter(Boolean);
+                                const miscCounts={};misconceptions.forEach(m=>{miscCounts[m]=(miscCounts[m]||0)+1;});
+                                const topMisc=Object.entries(miscCounts).sort((a,b)=>b[1]-a[1]).slice(0,3);
+                                const avgMarks=allQs.length?Math.round(allQs.reduce((s,q)=>s+(q.marksAwarded||0),0)/allQs.length*10)/10:0;
+                                const maxMarks=allQs[0]?.marksAvailable||0;
+                                const isWeak=wrongPct>=50;
+                                return(
+                                  <div key={qid} className="card card-pad" style={{borderLeft:`3px solid ${isWeak?"var(--red)":"var(--border)"}`}}>
+                                    <div className="row-between" style={{marginBottom:topMisc.length?8:0}}>
+                                      <div>
+                                        <span style={{fontWeight:700,fontSize:"0.9rem"}}>{qid}</span>
+                                        <span style={{marginLeft:10,fontSize:"0.78rem",color:"var(--text3)"}}>{avgMarks}/{maxMarks} avg</span>
+                                        {isWeak&&<span style={{marginLeft:8,fontSize:"0.68rem",fontWeight:700,padding:"1px 6px",borderRadius:99,background:"rgba(232,71,63,0.12)",color:"var(--red)"}}>WEAK POINT</span>}
+                                      </div>
+                                      <div style={{fontSize:"0.85rem",fontWeight:700,color:isWeak?"var(--red)":"var(--text2)"}}>
+                                        {wrongPct}% incorrect
+                                      </div>
+                                    </div>
+                                    {topMisc.length>0&&(
+                                      <div className="col gap4">
+                                        {topMisc.map(([m,count],i)=>(
+                                          <div key={i} style={{fontSize:"0.78rem",display:"flex",gap:8,alignItems:"center"}}>
+                                            <span style={{color:"var(--red)",fontWeight:700,minWidth:18}}>{count}×</span>
+                                            <span style={{color:"var(--text2)"}}>{m}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {!topMisc.length&&wrong.length>0&&(
+                                      <div style={{fontSize:"0.75rem",color:"var(--text3)"}}>
+                                        {wrong.length} student{wrong.length!==1?"s":""} answered incorrectly — no specific misconception data recorded.
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
                           {classView==="table"&&sts.length===0&&<div className="info-box">Add students to see the topic breakdown table.</div>}
@@ -8035,7 +7901,6 @@ Rules:
                     setTopicExtractBusy(true);
                     try {
                       let rawText = topicInput;
-                      // If files uploaded, process them first
                       if(topicFiles.length>0){
                         const fileText = await processTopicFiles(topicFiles);
                         rawText = [rawText, fileText].filter(Boolean).join("\n\n");
@@ -8046,7 +7911,6 @@ Rules:
                       if(topicExtractionMode==="ai"&&apiReady){
                         rows = await extractTopicsWithAI(rawText);
                       } else {
-                        // Small delay so UI shows "Extracting…"
                         await new Promise(r=>setTimeout(r,80));
                         rows = extractTopics(rawText);
                       }
@@ -8321,7 +8185,6 @@ Rules:
                   </button>
                   {teacherPin&&<button className="btn btn-ghost" onClick={()=>{
                     setPinUnlocked(false);
-                    // Re-trigger lock screen
                   }}>🔒 Lock Now</button>}
                 </div>
               </div>
@@ -10338,7 +10201,6 @@ ollama create novavista-marker -f novavista-Modelfile</div>
         <span>© DM Venture &amp; Insights 2026 — NovaVista · Licenced software · Unauthorised use prohibited</span>
         <span style={{color:"rgba(255,255,255,0.15)"}}>All rights reserved · For educational use only</span>
       </div>
-
 
     </div>
   );
