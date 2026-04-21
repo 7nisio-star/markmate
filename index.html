@@ -5224,7 +5224,7 @@ Rules:
           improvements:marked.filter(p=>!p.awarded).map(p=>`Include: ${p.text}`).slice(0,3),
           _fallback:true, image:img
         };
-        setResults({...fallbackResult,_studentId:studentName||Date.now()});
+        setResults({...fallbackResult,_studentId:studentName||Date.now()});setError("");
         setReviewMode(null);setUncertainQs([]);setManualAnswers({});
         setTab("results");
         return;
@@ -5300,13 +5300,13 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
           const ocrParsed = parseJSON(ocrResult);
           ocrParsed._ocrText = ocrText;
           ocrParsed.image = img;
-          setResults({...ocrParsed,_studentId:studentName||Date.now()});
+          setResults({...ocrParsed,_studentId:studentName||Date.now()});setError("");
           setReviewMode(null); setUncertainQs([]); setManualAnswers({});
           setTab("results");
           return;
         }
 
-      setResults({...parsed,image:img,_studentId:studentName||Date.now()});
+      setResults({...parsed,image:img,_studentId:studentName||Date.now()});setError("");
       setReviewMode(null); setUncertainQs([]); setManualAnswers({});
       setTab("results");
     }catch(e){
