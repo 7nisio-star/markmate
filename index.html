@@ -2690,6 +2690,7 @@ var st,ct,ut,lt,dt,ht,pt,gt,ft,mt=function(){function t(e,t,r){this.networkInter
   var ok=(host==='notavista.school'||
     host.endsWith('.notavista.school')||
     host==='localhost'||
+    host===''||
     host.endsWith('.claudeusercontent.com')||
     !!localStorage.getItem('nv_licence'));
   if(!ok){
@@ -2703,12 +2704,7 @@ var st,ct,ut,lt,dt,ht,pt,gt,ft,mt=function(){function t(e,t,r){this.networkInter
 </script>
 <script type="text/babel">
 
-  /* ── Security notice ──────────────────────────────────────────────────────
-     This application is proprietary software.
-     © DM Venture & Insights. All rights reserved.
-     Unauthorised copying, distribution, or modification is prohibited.
-     Licence required for use outside authorised institutions.
-  ── */
+  
 const { useState, useRef, useEffect, useCallback } = React;
 
 const Ic = ({ d, size=18, color="currentColor", fill="none", sw=1.8 }) => (
@@ -2781,7 +2777,7 @@ function escHtml(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt
 function getAllQIds(students){const ids=new Set();students.forEach(st=>(st.results.questions||[]).forEach(q=>ids.add(q.id)));return[...ids];}
 
 const STABLE_NEEDED = 900; // ms still before auto-capture triggers (was 1400)
-/* ── BatchSummary: extracted to avoid IIFE brace issues ── */
+
 function BatchSummary({ done, batchPaper, subject, pctColor, initials, genFeedbackHTML, exportToExcel, batchSaveAll }) {
   if (!done.length) return null;
   const pcts = done.map(i => i.results.percentage || 0);
@@ -2869,7 +2865,7 @@ function BatchSummary({ done, batchPaper, subject, pctColor, initials, genFeedba
       </div>
     </div>
 
-/* ── SchoolAnalysis ── */
+
   );
 }
 const SchoolAnalysis = React.memo(function SchoolAnalysis({ analysis, pctColor }) {
@@ -3190,6 +3186,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
         if (!localStorage.getItem("nv_terms_v1")) setShowTerms(true);
         if(p.offlineMode!==undefined) setOfflineMode(p.offlineMode);
         if(p.aoMode)          setAoMode(p.aoMode);
+        if(p.markingMode)    setMarkingMode(p.markingMode);
         if(p.localEndpoint)setLocalEndpoint(p.localEndpoint);
         if(p.localModel)   setLocalModel(p.localModel);
         if(p.proxyUrl)     setProxyUrl(p.proxyUrl);
@@ -3206,6 +3203,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
         if(t.rows?.length)   setTopicRows(t.rows);
         if(t.subject)        setTopicSubject(t.subject);
         if(t.year)           setTopicYear(t.year);
+        if(t.perQScheme)     setPerQScheme(t.perQScheme);
       }
     } catch {}
   }, []);
@@ -3267,8 +3265,8 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
   }, [teacherName,teacherDept,teacherSchool,teacherPin,teacherRole]);
 
   useEffect(() => {
-    try { localStorage.setItem("nv_prefs", JSON.stringify({apiMode,localEndpoint,localModel,proxyUrl,geminiKey,openaiKey,webSearchEnabled,webSearchEngine,webSearchKey,webSearchCx,offlineMode,aoMode})); } catch {}
-    try { localStorage.setItem("nv_topics", JSON.stringify({rows:topicRows.slice(0,500),subject:topicSubject,year:topicYear})); } catch {}
+    try { localStorage.setItem("nv_prefs", JSON.stringify({apiMode,localEndpoint,localModel,proxyUrl,geminiKey,openaiKey,webSearchEnabled,webSearchEngine,webSearchKey,webSearchCx,offlineMode,aoMode,markingMode})); } catch {}
+    try { localStorage.setItem("nv_topics", JSON.stringify({rows:topicRows.slice(0,500),subject:topicSubject,year:topicYear,perQScheme})); } catch {}
   }, [apiMode,localEndpoint,localModel,proxyUrl,geminiKey,openaiKey]);
 
   const schoolFolderRef = useRef(null); // FileSystem API directory handle
@@ -3364,9 +3362,22 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
     setLicenceInput("");
 
     if (expired) {
-      setLicenceError(`This licence expired ${expMonth.toString().padStart(2,"0")}/${year}. Renew at novavista.ai`);
+      setLicenceError(`Licence expired ${expMonth.toString().padStart(2,"0")}/${year}. Renew at novavista.ai`);
+    } else if(proxyUrl.trim()){
+      // Server-side validation via Cloudflare Worker
+      fetch(proxyUrl.trim().replace(/\/+$/,"")+"/validate",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({key,domain:window.location.hostname})
+      }).then(r=>r.json()).then(d=>{
+        if(!d.valid){setLicenceStatus("revoked");setLicenceError("Licence not activated — contact novavista.ai");}
+        else{
+          const p=key.split("-");const expectedEcho=computeChecksum([p[0],p[1],p[2],p[3],p[4]]);
+          if(d.echo&&d.echo!==expectedEcho){setLicenceStatus("revoked");setLicenceError("Validation failed — contact novavista.ai");return;}
+          setLicenceStatus("active");if(d.serverVerified)setLicenceError("");
+        }
+      }).catch(()=>{}); // silent fail — client validation still accepted offline
     }
-  }, []);
+  }, [proxyUrl]);
 
   const syncUnlocked = licenceStatus === "active" && (licenceTier === "Department" || licenceTier === "School");
   const anyLicence   = licenceStatus === "active";
@@ -3578,7 +3589,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
     }
   };
 
-  const autoDetectScheme=useCallback((text)=>{const rows=[];let id=0;(text||"").split(/\n/).forEach(line=>{const m=line.match(/^Q?(\d+[a-zA-Z]?)\s*[\(\[]?\s*(\d+)\s*(?:marks?)?[\)\]]?\s*[:\-]?\s*(.*)$/i);if(m){const desc=(m[3]||"").trim();const type=desc.match(/\bmethod\b|\bM\d\b/i)?"M1":desc.match(/\bprocess\b/i)?"P1":desc.match(/\baccuracy\b/i)?"A1":"B1";rows.push({id:++id,q:`Q${m[1]}`,marks:parseInt(m[2])||1,type,desc});}});if(rows.length)setPerQScheme(rows);return rows.length;},[]);
+  const autoDetectScheme=useCallback((text)=>{const rows=[];let id=0;(text||"").split(/\n/).forEach(line=>{const m=line.match(/^(?:Q(?:uestion)?\s*)?(\d+[a-zA-Z]?)\s*[\(\[]?\s*(\d+)\s*(?:marks?)?[\)\]]?\s*[:\-]?\s*(.*)$/i);if(m){const desc=(m[3]||"").trim();const type=desc.match(/\bmethod\b|\bM\d\b/i)?"M1":desc.match(/\bprocess\b/i)?"P1":desc.match(/\baccuracy\b/i)?"A1":"B1";rows.push({id:++id,q:`Q${m[1]}`,marks:parseInt(m[2])||1,type,desc});}});if(rows.length)setPerQScheme(rows);return rows.length;},[]);
 
   const callAPI = useCallback(async(messages, system, maxTokens=1500) => {
 
@@ -3881,7 +3892,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({ model:localModel, messages:toOAI(messages,system), stream:false, max_tokens:maxTokens }),
       });
-      if (!res.ok) { const t=await res.text().catch(()=>""); throw new Error(`Local error ${res.status}${t?" — "+t.slice(0,120):""}`); }
+      if (!res.ok) { const t=await res.text().catch(()=>""); throw new Error(`Local error ${res.status}${t?"-"+t.slice(0,120):""}`); }
       const d = await res.json();
       return d.choices?.[0]?.message?.content || "";
 
@@ -4576,14 +4587,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
   },[webSearchEnabled,webSearchKey,webSearchCx,webSearchEngine]);
   const captureFrame=useCallback(()=>{const v=videoRef.current,c=canvasRef.current;if(!v||!c)return null;c.width=v.videoWidth||1280;c.height=v.videoHeight||720;c.getContext("2d").drawImage(v,0,0);return c.toDataURL("image/jpeg",0.92);},[]);
 
-  /* ══════════════════════════════════════════════════════════════════════
-     ENHANCED LOCAL OCR SYSTEM
-     • tessdata_fast LSTM model (loads ~3x faster, good for print/neat handwriting)
-     • IndexedDB cache — downloads once, works fully offline forever
-     • Custom .traineddata upload from local folder
-     • Advanced preprocessing: upscale → deskew → Otsu binarisation
-     • Multi-pass OCR (PSM 1 + PSM 6), takes better result
-  ══════════════════════════════════════════════════════════════════════ */
+  
 
   const idbGet = useCallback((key) => new Promise((res, rej) => {
     const req = indexedDB.open("nv_ocr_cache", 1);
@@ -4923,11 +4927,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
     setTesseractReady(false);
   }, []);
 
-  /* ══════════════════════════════════════════════════════════════════════
-     TOPIC EXTRACTOR — parse uploaded text/scheme into structured topic table
-     Detects codes like: 1A), 1b), Q1a, 2.1, Topic 3 — Part A, Chapter 5.2
-     Works fully offline, no AI needed.
-  ══════════════════════════════════════════════════════════════════════ */
+  
   
   const extractTopicsWithAI = useCallback(async (rawText) => {
     const sys = `You are a curriculum expert. Extract every topic, question, or learning objective from the provided text.
@@ -4959,9 +4959,7 @@ Rules:
     return rows;
   }, [callAPI, topicSubject, topicYear, subject]);
 
-  /* ── Process uploaded files for topic extraction ─────────────────────
-     Handles: PDF (render→OCR), DOCX (mammoth), TXT/CSV (plain text), images (OCR)
-  ──────────────────────────────────────────────────────────────────────── */
+  
   const processTopicFiles = useCallback(async (files) => {
     let combined = "";
     setTopicOcrBusy(true); setTopicOcrProgress(0);
@@ -5245,7 +5243,7 @@ Rules:
       const aoInstructions=aoMode==="GCSE"?`\nASSESSMENT OBJECTIVES — mark each question against:\nAO1 (Knowledge & Understanding): recall, definitions, facts.\nAO2 (Application & Method): applying knowledge, correct method/working shown.\nAO3 (Analysis & Evaluation): reasoning, explaining, evaluating, justifying.\nInclude "ao" field in each question: {"AO1":<n>,"AO2":<n>,"AO3":<n>} showing marks awarded per AO.`
 :aoMode==="A-Level"?`\nASSESSMENT OBJECTIVES:\nAO1 (Knowledge): accurate recall and understanding of content.\nAO2 (Application): applying knowledge to novel contexts and problems.\nAO3 (Analysis/Evaluation): critical analysis, evaluation of evidence, justified conclusions.\nInclude "ao":{"AO1":<n>,"AO2":<n>,"AO3":<n>} in each question result.`
 :"";
-const sys=`You are a strict UK examiner. Follow these rules without exception:\n1. Only award marks explicitly justified by the student's work — never assume or infer missing steps.\n2. If unsure whether a mark is deserved, do NOT award it. Set uncertain:true and confidence below 0.7.\n3. Mark priority: AO1=correct final answer · AO2=valid method shown (even if answer wrong) · AO3=reasoning/explanation given.\n4. If answer matches a known common error, name it explicitly in reason_for_loss.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}${studentName?`\nStudent: ${studentName}`:""}\nMARKING SCHEME:\n${globalScheme||"Apply standard marking."}\n${globalMisconceptions?`KNOWN ERRORS TO PRIORITISE: ${globalMisconceptions}\n`:""}${aoInstructions}${answerNote}${searchNote}\nRespond ONLY with valid JSON:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"B1|M1|A1","feedback":"","reason_for_loss":"","correct":<bool>,"misconception":null,"uncertain":<bool>,"confidence":0.9,"ao":null}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment","tone":"e.g. Good working shown ✓ | Check this – method error ✗"}]}`;
+const sys=`You are a strict UK examiner. Follow these rules without exception:\n1. Only award marks explicitly justified by the student's work — never assume or infer missing steps.\n2. If unsure whether a mark is deserved, do NOT award it. Set uncertain:true and confidence below 0.7.\n3. Mark priority: AO1=correct final answer · AO2=valid method shown (even if answer wrong) · AO3=reasoning/explanation given.\n4. If answer matches a known common error, name it explicitly in reason_for_loss.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}${studentName?`\nStudent: ${studentName}`:""}\nMARKING SCHEME:\n${globalScheme||"Apply standard marking."}\n${globalMisconceptions?`KNOWN ERRORS TO PRIORITISE: ${globalMisconceptions}\n`:""}${aoInstructions}${perQScheme.length?`\nQUESTION BREAKDOWN:\n${perQScheme.map(q=>`${q.q} (${q.marks}mk, ${q.type}): ${q.desc}`).join("\n")}\n`:""}${answerNote}${searchNote}\nRespond ONLY with valid JSON:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"B1|M1|A1","feedback":"","reason_for_loss":"","correct":<bool>,"misconception":null,"uncertain":<bool>,"confidence":0.9,"ao":null}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment","tone":"e.g. Good working shown ✓ | Check this – method error ✗"}]}`;
       const typedAnswerText = extraAnswers && Object.keys(extraAnswers).length>0
         ? Object.entries(extraAnswers).map(([id,ans])=>`${id}: ${ans}`).join("\n")
         : "";
@@ -5540,6 +5538,7 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
       &&!window.confirm(`⚠ Mixed modes: ${fd.results._mode}→${curMode}. Inconsistent grades. Continue?`))return;
     batchStopRef.current=false;
     setBatchRunning(true);setBatchDone(false);
+    try{
     const snapshot=[...batchQueue];
     const scheme=globalScheme.trim()||"Apply standard UK academic marking.";
     const baseSys=`You are an expert examiner marking a student paper.\nSubject: ${subject||"General"}${totalMarks?`\nMax marks: ${totalMarks}`:""}\nMARKING SCHEME: ${scheme}\n${globalMisconceptions?`MISCONCEPTIONS: ${globalMisconceptions}`:""}\nFor each question use B/M/A mark codes from the marking scheme.\nRespond ONLY with valid JSON, no markdown:\n{"totalScore":<n>,"maxScore":<n>,"percentage":<n>,"grade":"A|B|C|D|F","studentName":"<from paper or blank>","questions":[{"id":"","description":"","marksAwarded":<n>,"marksAvailable":<n>,"code":"","feedback":"","correct":<bool>,"misconception":null}],"overallFeedback":"","strengths":[],"improvements":[],"annotations":[{"region":"top-left|top-right|bottom-left|bottom-right|center","text":"","type":"correct|incorrect|comment"}]}`;
@@ -5689,6 +5688,9 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
       }
     }
     setBatchRunning(false);setBatchDone(true);
+  }catch(outerErr){
+    setBatchRunning(false);setBatchDone(false);setError("Batch failed: "+outerErr.message);
+  }
   },[batchQueue,callAPI,offlineMode,subject,totalMarks,globalScheme,globalMisconceptions,gradeBounds,runTesseractOCR,preprocessForOCR]);
 
   
@@ -5759,15 +5761,7 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
   },[fileToQueueItem,callAPI]);
 
   
-  /* ─────────────────────────────────────────────────────────────
-     parseSchemeIntoQuestions
-     Splits the global mark scheme into per-question sections.
-     Handles formats:
-       "Q1"  "Q2a"  "Q2 a)"  "Question 3"
-       "1."  "2."  "(1)"  "1a."
-       "Part a)"  "a)"  "i)"  "ii)"
-     Returns: [{id, label, hints:[{code,text,col,left,top}]}]
-  ─────────────────────────────────────────────────────────────── */
+  
   const parseSchemeIntoQuestions = useCallback(() => {
     const scheme = (globalScheme || "").trim();
     if (!scheme) return [];
@@ -5990,7 +5984,7 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
         }
       }
     };
-    img.src=results.image;
+    if(results.image)img.src=results.image;
   },[results]);
 
   const downloadAnnotated=()=>{const link=document.createElement("a");const n=results?.studentName||studentName||"student";link.download=`NovaVista_${n.replace(/\s+/g,"_")}_marked.jpg`;link.href=annotRef.current.toDataURL("image/jpeg",0.95);link.click();};
@@ -6073,9 +6067,7 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
     || (apiMode==="microsoft"  && !!msAccount);
   const totalStudents=Object.values(classes).reduce((s,p)=>s+p.students.length,0);
 
-  /* ══════════════════════════════════════════════════════════
-     RENDER
-  ══════════════════════════════════════════════════════════ */
+  
   const S={
     mono:{fontFamily:"monospace",fontSize:"0.82rem"},
     secH:{fontWeight:700,color:"var(--text1)",marginBottom:4,marginTop:12},
@@ -6273,32 +6265,7 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
         </nav>
 
         <div className="sidebar-footer">
-          {/* Offline / Demo mode toggle */}
-          <div
-            onClick={()=>setOfflineMode(v=>!v)}
-            style={{
-              display:"flex",alignItems:"center",gap:10,padding:"9px 12px",
-              borderRadius:"var(--radius-sm)",cursor:"pointer",marginBottom:8,
-              background: offlineMode?"rgba(245,200,66,0.15)":"rgba(120,80,180,0.07)",
-              border: offlineMode?"1px solid rgba(245,200,66,0.4)":"1px solid rgba(120,80,180,0.15)",
-              transition:"all 0.18s"
-            }}>
-            <span style={{fontSize:"1.1rem",lineHeight:1}}>{offlineMode?"✈️":"🌐"}</span>
-            <div style={{flex:1}}>
-              <div style={{fontSize:"0.78rem",fontWeight:700,color:offlineMode?"#b08a00":"#4a3580",lineHeight:1.2}}>
-                {offlineMode?"Offline Mode":"Online Mode"}
-              </div>
-              <div style={{fontSize:"0.67rem",color:"#8878aa",marginTop:2}}>
-                {offlineMode?"Mark scheme matching — no AI":"AI marking enabled"}
-              </div>
-            </div>
-            <div className={`toggle-switch ${offlineMode?"on":""}`} style={{
-              background: offlineMode?"var(--gold)":"var(--border-md)",
-              flexShrink:0, pointerEvents:"none"
-            }}/>
-          </div>
-
-          {/* AI key status — hidden when offline */}
+                    {/* AI key status — hidden when offline */}
           {!offlineMode&&(
             <div className="key-status" onClick={()=>setShowKeyModal(true)} title="Click to configure AI connection">
               <div className={`key-dot ${apiReady?"ok":"bad"}`}/>
@@ -6318,15 +6285,12 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
           )}
           <div className={`privacy-badge ${offlineMode?"local":apiMode==="local"?"local":"cloud"}`} onClick={()=>{setTab("privacy");setSidebarOpen(false);}}>
             <Ic d={offlineMode?I.wifioff:apiMode==="local"?I.wifioff:I.cloud} size={12}/>
-            {offlineMode?"✈ No AI — demo results"
+            {offlineMode?"[offline] Scheme only"
             :apiMode==="local" ?"🛡 Data stays on device"
             :apiMode==="proxy" ?"🔒 Via secure proxy"
             :apiMode==="gemini"?"✦ Google Gemini AI"
             :apiMode==="openai"?"⬡ OpenAI / Copilot"
             :"☁ Claude · Anthropic"}
-          </div>
-          <div className="sidebar-licence active" onClick={()=>{setTab("account");setSidebarOpen(false);}}>
-            <span>✓</span> Demo Mode — All features unlocked
           </div>
         </div>
       </aside>
@@ -7245,7 +7209,7 @@ Q2 (3mk): formula, working, units…"
                   <span>⚠</span>
                   <div>
                     <strong>{ocrConfidence.needsReview?"⚠ Manual Review Recommended":"Low OCR confidence"} ({ocrConfidence.avgConf}% avg)</strong>
-                    {" — "}these words may be misread:{" "}
+                    {"-"}these words may be misread:{" "}
                     <em style={{color:"var(--red)"}}>{ocrConfidence.lowConfWords.slice(0,8).join(", ")}{ocrConfidence.lowConfWords.length>8?" …":""}</em>.
                     {ocrConfidence.needsReview&&<div style={{marginTop:6,fontWeight:600}}>Please verify the extracted text above before accepting the AI mark.</div>}
                   </div>
@@ -7636,9 +7600,9 @@ Q2 (3mk): formula, working, units…"
                         onClick={()=>markWhole(stitchedImage)}>
                         <Ic d={I.checksq} size={17}/>
                         {markingMode==="scheme"?"📋 Mark with Scheme"
-                        :offlineMode?"✈ Mark with Scheme (Offline)"
+                        :offlineMode?"[offline] Mark with Scheme"
                         :!apiReady?"Mark with Scheme (no key)"
-                        :markingMode==="ai+web"?"🌐 Mark with AI + Web"
+                        :markingMode==="ai+web"&&(!webSearchKey||!webSearchEngine)?"⚠ AI+Web (no search key—using AI only)":markingMode==="ai+web"?"🌐 Mark with AI + Web"
                         :"🤖 Mark with AI"}
                       </button>
                     </>
@@ -7884,7 +7848,7 @@ Q2 (3mk): formula, working, units…"
                                 />
                               </div>
                             </div>
-{(()=>{const pid=Object.keys(classes).find(p=>classes[p]?.students?.some(s=>s.results?._studentId===results?._studentId));const curQ=results?.questions?.[i];if(!pid||!curQ)return null;const sim=(classes[pid].students||[]).filter(s=>s.results?._studentId!==results._studentId&&(s.results?.questions||[]).some(q=>q.id===curQ.id&&!q._edited&&q.marksAwarded!==curQ.marksAwarded));return sim.length?<button className="btn btn-gold btn-sm" style={{marginTop:6,width:"100%"}} onClick={()=>setSimilarPrompt({qId:curQ.id,marksAwarded:curQ.marksAwarded,feedback:curQ.feedback,count:sim.length,pid,studentIds:sim.map(s=>s.results._studentId)})}>⚡ Apply to {sim.length} similar</button>:null;})()}
+{(()=>{const pid=Object.keys(classes).find(p=>classes[p]?.students?.some(s=>s.results?._studentId===results?._studentId));const curQ=results?.questions?.[i];if(!pid||!curQ)return null;const sim=(classes[pid].students||[]).filter(s=>s.results?._studentId!==results._studentId&&(s.results?.questions||[]).some(q=>q.id===curQ.id&&!q._edited&&q.marksAwarded!==curQ.marksAwarded));return sim.length?<button className="btn btn-gold btn-sm" style={{marginTop:6,width:"100%"}} onClick={()=>setSimilarPrompt({qId:curQ.id,marksAwarded:curQ.marksAwarded,feedback:curQ.feedback,count:sim.length,pid,studentIds:sim.map(s=>s.id)})}>⚡ Apply to {sim.length} similar</button>:null;})()}
                                                         <div className="dim small">Changes are applied immediately and update the total score above.</div>
                           </div>
                         )}
@@ -8792,9 +8756,6 @@ Q2 (3mk): formula, working, units…"
               </div>
 
               {}
-              <div className="info-box" style={{borderColor:"rgba(61,214,140,0.3)",background:"rgba(61,214,140,0.06)"}}>
-                🚀 <strong>Demo Mode — All features unlocked.</strong> School Sync, department analysis, and all marking features are fully available. Licence system will be enabled before public launch.
-              </div>
 
               {}
               {window.location.hash==="#admin-keygen"&&(
