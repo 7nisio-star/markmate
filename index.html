@@ -4753,9 +4753,13 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
         const d = ctx.getImageData(0, 0, W, H);
 
         const grey = new Uint8Array(W * H);
-        for (let i = 0, j = 0; i < d.data.length; i += 4, j++) {
-          grey[j] = Math.round(0.299*d.data[i] + 0.587*d.data[i+1] + 0.114*d.data[i+2]);
-        }
+        {let rS=0,gS=0,bS=0,n=0;
+        for(let i=0;i<d.data.length;i+=16){const r=d.data[i],g=d.data[i+1],b=d.data[i+2];if(r<210||g<210||b<210){rS+=r;gS+=g;bS+=b;n++;}}
+        const iR=n?rS/n:100,iG=n?gS/n:100,iB=n?bS/n:100;
+        const isRed=iR>iG+25&&iR>iB+25,isBlue=iB>iR+25&&iB>iG+25;
+        const [wr,wg,wb]=isRed?[0.8,0.1,0.1]:isBlue?[0.1,0.1,0.8]:[0.299,0.587,0.114];
+        for(let i=0,j=0;i<d.data.length;i+=4,j++)grey[j]=Math.min(255,Math.round(wr*d.data[i]+wg*d.data[i+1]+wb*d.data[i+2]));}
+        
 
         const TILE = 64;
         const normed = new Uint8Array(W * H);
@@ -5931,6 +5935,13 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
       canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
       const ctx=canvas.getContext("2d");ctx.drawImage(img,0,0);
       const W=canvas.width,H=canvas.height,fs=Math.max(22,Math.round(W*.02));
+      // Detect ink colour from paper (red/blue pen detection)
+      const id=ctx.getImageData(0,0,W,H).data;
+      let rS=0,gS=0,bS=0,n=0;
+      for(let i=0;i<id.length;i+=20){const r=id[i],g=id[i+1],b=id[i+2];if(r<200||g<200||b<200){rS+=r;gS+=g;bS+=b;n++;}}
+      const iR=n?rS/n:80,iG=n?gS/n:80,iB=n?bS/n:80;
+      const inkIsRed=iR>iG+20&&iR>iB+20,inkIsBlue=iB>iR+20&&iB>iG+20;
+      const inkHint=inkIsRed?"🔴 Red pen":inkIsBlue?"🔵 Blue pen":"✏ Dark pen";
       // Draw per-question tick/cross + mark chip for each question
       const qs=results.questions||[];
       const cols=H>W?2:3;
@@ -5942,9 +5953,11 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
         const label=`${mark} ${q.id||("Q"+(qi+1))}: ${q.marksAwarded??0}/${q.marksAvailable??1}mk`;
         const mw=ctx.measureText(label).width+fs;
         // Highlight chip
-        ctx.fillStyle=q.correct?"rgba(61,214,140,0.18)":"rgba(232,71,63,0.18)";
+        // Use higher opacity chips when ink is light-coloured (red/blue pen)
+        const chipAlpha=inkIsRed||inkIsBlue?0.32:0.18;
+        ctx.fillStyle=q.correct?`rgba(61,214,140,${chipAlpha})`:`rgba(232,71,63,${chipAlpha})`;
         rrect(ctx,x,y-fs*.9,mw,fs*1.4,6);ctx.fill();
-        ctx.strokeStyle=col;ctx.lineWidth=2;rrect(ctx,x,y-fs*.9,mw,fs*1.4,6);ctx.stroke();
+        ctx.strokeStyle=col;ctx.lineWidth=inkIsRed||inkIsBlue?3:2;rrect(ctx,x,y-fs*.9,mw,fs*1.4,6);ctx.stroke();
         ctx.fillStyle=col;ctx.font=`bold ${fs}px Inter,sans-serif`;
         ctx.fillText(label,x+fs*.4,y);
         // Underline the key feedback
