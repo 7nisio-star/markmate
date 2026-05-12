@@ -100,6 +100,7 @@ body {
   color: var(--text);
   font-family: 'Inter', system-ui, sans-serif;
   line-height: 1.5;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -126,6 +127,8 @@ body {
   z-index: 50;
   transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 .sidebar-logo {
   padding: 24px 20px 20px;
@@ -173,7 +176,7 @@ body {
   padding: 10px 12px 4px;
   margin-top: 4px;
 }
-.nav-item { background: none; border: none; width: 100%; text-align: left; transition: background 0.13s, color 0.13s; position: relative; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.85rem; font-weight: 500; color: rgba(42,28,80,0.65); font-family: 'Inter', sans-serif; }
+.nav-item { background: none; border: none; width: 100%; text-align: left; transition: background 0.13s, color 0.13s; position: relative; display: flex; align-items: center; gap: 10px; -webkit-tap-highlight-color: transparent; touch-action: manipulation; padding: 9px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.85rem; font-weight: 500; color: rgba(42,28,80,0.65); font-family: 'Inter', sans-serif; }
 .nav-item:hover { background: rgba(120,80,180,0.10); color: #2a1c50; }
 .nav-item.active { background: rgba(120,80,180,0.16); color: #2a1c50; font-weight: 600; }
 .nav-item.active-blue { background: rgba(108,143,245,0.16); color: #2a1c50; font-weight: 600; }
@@ -302,6 +305,22 @@ body {
   /* Licence tier grid: 1 col */
   .licence-tier-grid { grid-template-columns: 1fr; }
   .api-mode-grid { grid-template-columns: 1fr; }
+
+  /* Tablet: review mode cards stack */
+  .review-mode-grid { grid-template-columns: 1fr; }
+
+  /* Tablet: batch summary 2 col */
+  .batch-summary-grid { grid-template-columns: 1fr 1fr; }
+
+  /* Tablet: q-row wraps cleanly */
+  .q-row { flex-wrap: wrap; gap: 10px; }
+  .q-mark { min-width: 44px; }
+
+  /* Tablet: topbar row wraps */
+  .row-between { flex-wrap: wrap; }
+
+  /* Tablet: toggle buttons wrap */
+  .toggle-opt { min-width: 80px; }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -310,6 +329,8 @@ body {
 @media (max-width: 600px) {
   :root { --sidebar-w: 260px; }
   html { font-size: 14px; }
+  .sidebar { transform: translateX(-260px); }
+  .sidebar.open { transform: translateX(0); }
 
   .main { margin-left: 0; }
   .topbar { padding: 12px 16px 0; }
@@ -371,6 +392,84 @@ body {
 
   /* Buttons font size */
   .btn-lg { padding: 11px 18px; font-size: 0.88rem; }
+
+  /
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE — iPad portrait (≤768px)
+═══════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Sidebar always overlay on iPad portrait */
+  .sidebar { transform: translateX(-260px); z-index: 100; }
+  .sidebar.open { transform: translateX(0); }
+  .menu-btn { display: flex; }
+  .main { margin-left: 0; }
+
+  /* iPad: nav items slightly larger tap targets */
+  .nav-item { padding: 11px 14px; }
+
+  /* iPad: review mode grid 1 col in portrait */
+  .review-mode-grid { grid-template-columns: 1fr; }
+
+  /* iPad: scan view stacks */
+  .scan-main-row { grid-template-columns: 1fr; }
+
+  /* iPad: content padding */
+  .content { padding: 0 20px 72px; }
+  .topbar { padding: 14px 20px 0; }
+  .page-header { padding-top: 50px; }
+
+  /* iPad: card grids 1 col */
+  .g2 { grid-template-columns: 1fr; }
+  .licence-tier-grid { grid-template-columns: 1fr; }
+  .api-mode-grid { grid-template-columns: 1fr; }
+}
+
+/* iPad landscape / small tablet */
+@media (min-width: 769px) and (max-width: 1024px) {
+  :root { --sidebar-w: 220px; }
+  .content { padding: 0 24px 72px; }
+  .g3 { grid-template-columns: 1fr 1fr; }
+  .batch-summary-grid { grid-template-columns: 1fr 1fr; }
+}
+* Mobile: review mode 1 col */
+  .review-mode-grid { grid-template-columns: 1fr !important; gap: 10px; }
+  .review-mode-card { padding: 14px 16px; }
+
+  /* Mobile: batch summary 2 col */
+  .batch-summary-grid { grid-template-columns: 1fr 1fr; }
+
+  /* Mobile: q-row wraps */
+  .q-row { flex-wrap: wrap; gap: 8px; }
+  .q-id { min-width: 36px; font-size: 0.75rem; }
+  .q-mark { font-size: 1rem; min-width: 40px; }
+  .q-desc { font-size: 0.8rem; }
+  .q-feedback { font-size: 0.78rem; }
+
+  /* Mobile: toggle buttons min width so they don't squish */
+  .toggle-opt { padding: 8px 10px; font-size: 0.78rem; min-width: 72px; }
+
+  /* Mobile: action buttons always full width */
+  .btn-lg { width: 100%; justify-content: center; }
+
+  /* Mobile: results hero stacks */
+  .row-between { flex-wrap: wrap; gap: 8px; }
+
+  /* Mobile: annotated paper full width */
+  canvas { max-width: 100%; height: auto !important; }
+
+  /* Mobile: class view buttons wrap */
+  .class-view-tabs { flex-wrap: wrap; }
+
+  /* Mobile: folder toolbar stacks */
+  .folder-toolbar { flex-direction: column; align-items: stretch; }
+  .folder-toolbar button, .folder-toolbar select { width: 100%; }
+
+  /* Mobile: batch queue items */
+  .batch-status-pill { font-size: 0.68rem; }
+
+  /* Mobile: override panel full width */
+  .q-override-panel { padding: 12px; }
+  .q-override-panel .row { flex-wrap: wrap; }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -414,6 +513,8 @@ body {
 .content {
   padding: 0 28px 80px;
   width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -539,6 +640,7 @@ input::placeholder, textarea::placeholder { color: var(--text4); }
 }
 .toggle-opt {
   flex: 1;
+  min-width: 64px;
   padding: 7px 12px;
   border: none;
   background: none;
@@ -2983,7 +3085,7 @@ function NovaVista() {
   const [liveOcrDone,setLiveOcrDone]     = useState(false); // true once OCR complete
 
   const [webSearchEnabled,setWebSearchEnabled] = useState(false);
-  const [markingMode,setMarkingMode]         = useState("ai"); // "scheme"|"ai"|"ai+web"
+  const [markingMode,setMarkingMode]         = useState("ai"); 
   const [webSearchEngine,setWebSearchEngine]   = useState("google"); // "google"|"bing"
   const [webSearchKey,setWebSearchKey]         = useState(""); // Google CSE API key or Bing key
   const [webSearchCx,setWebSearchCx]           = useState(""); // Google CX id
@@ -3116,6 +3218,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
 
   const [licenceKey,setLicenceKey]         = useState("");
   const [licenceStatus,setLicenceStatus]   = useState("none"); // "none"|"trial"|"active"|"expired"
+  const [sessionToken,setSessionToken]     = useState(()=>{try{return JSON.parse(localStorage.getItem("nv_session"));}catch{return null;}});
   const [licenceTier,setLicenceTier]       = useState("");     // "teacher"|"department"|"school"
   const [licenceExpiry,setLicenceExpiry]   = useState("");
   const [licenceSchool,setLicenceSchool]   = useState("");
@@ -3365,18 +3468,26 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
       setLicenceError(`Licence expired ${expMonth.toString().padStart(2,"0")}/${year}. Renew at novavista.ai`);
     } else if(proxyUrl.trim()){
       // Server-side validation via Cloudflare Worker
-      fetch(proxyUrl.trim().replace(/\/+$/,"")+"/validate",{
+      getFingerprint().then(fp=>{
+      const cached=sessionToken;
+      if(cached&&cached.key===key&&cached.expires>Date.now()){
+        setLicenceStatus("active");setLicenceError("");return;
+      }
+      fetch(proxyUrl.trim().replace(/\/$/,"")+"/validate",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({key,domain:window.location.hostname})
+        body:JSON.stringify({key,domain:window.location.hostname,fp})
       }).then(r=>r.json()).then(d=>{
-        if(!d.valid){setLicenceStatus("revoked");setLicenceError("Licence not activated — contact novavista.ai");}
+        if(!d.valid){setLicenceStatus("revoked");setLicenceError("Not activated");}
         else{
           const p=key.split("-");const expectedEcho=computeChecksum([p[0],p[1],p[2],p[3],p[4]]);
-          if(d.echo&&d.echo!==expectedEcho){setLicenceStatus("revoked");setLicenceError("Validation failed — contact novavista.ai");return;}
-          setLicenceStatus("active");if(d.serverVerified)setLicenceError("");
+          if(d.echo&&d.echo!==expectedEcho){setLicenceStatus("revoked");setLicenceError("Validation failed");return;}
+          const tok={key,expires:Date.now()+23*3600000,fp,serverToken:d.token||""};
+          setSessionToken(tok);try{localStorage.setItem("nv_session",JSON.stringify(tok));}catch{}
+              if(d.fpMismatch)setLicenceError("⚠ New device.");
+          else{setLicenceStatus("active");if(d.serverVerified)setLicenceError("");if(proxyUrl)fetch(proxyUrl.trim().replace(/\/+$/,"")+"/ping",{method:"POST",headers:{"Content-Type":"application/json"},body:key.slice(0,8)}).catch(()=>{});}
+          if(!d.fpMismatch)setLicenceStatus("active");
         }
-      }).catch(()=>{}); // silent fail — client validation still accepted offline
-    }
+      }).catch(()=>{});}); }
   }, [proxyUrl]);
 
   const syncUnlocked = licenceStatus === "active" && (licenceTier === "Department" || licenceTier === "School");
@@ -3590,6 +3701,12 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
   };
 
   const autoDetectScheme=useCallback((text)=>{const rows=[];let id=0;(text||"").split(/\n/).forEach(line=>{const m=line.match(/^(?:Q(?:uestion)?\s*)?(\d+[a-zA-Z]?)\s*[\(\[]?\s*(\d+)\s*(?:marks?)?[\)\]]?\s*[:\-]?\s*(.*)$/i);if(m){const desc=(m[3]||"").trim();const type=desc.match(/\bmethod\b|\bM\d\b/i)?"M1":desc.match(/\bprocess\b/i)?"P1":desc.match(/\baccuracy\b/i)?"A1":"B1";rows.push({id:++id,q:`Q${m[1]}`,marks:parseInt(m[2])||1,type,desc});}});if(rows.length)setPerQScheme(rows);return rows.length;},[]);
+
+  const getFingerprint=async()=>{
+    const raw=`${screen.width}x${screen.height}|${navigator.hardwareConcurrency}|${navigator.language}`;
+    const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(raw));
+    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("").slice(0,32);
+  };
 
   const callAPI = useCallback(async(messages, system, maxTokens=1500) => {
 
@@ -4239,7 +4356,7 @@ const [ocrProgress,setOcrProgress]         = useState(0);   // 0-100
     const date=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
     const pct=res.percentage??0,gc=res.grade==="A"?"#3dd68c":res.grade==="B"?"#f5c842":res.grade==="C"?"#f0956b":"#e8473f";
     const wrongs=(res.questions||[]).filter(q=>!q.correct);
-    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#bbb;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${res.questions?.some(q=>q.ao)?`
+    return`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${escHtml(sName)} — ${escHtml(pName)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#1a1a2e;margin:0}.page{max-width:780px;margin:0 auto;padding:40px 30px}.hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);color:white;border-radius:12px;padding:32px;margin-bottom:28px}.hdr h1{font-size:1.8rem;margin:0 0 4px}.hdr p{opacity:.65;font-size:.9rem;margin:0}.scores{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}.sbox{background:rgba(255,255,255,.1);border-radius:8px;padding:12px 20px;text-align:center}.sbig{font-size:2rem;font-weight:700}.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;opacity:.65}.gp{padding:5px 16px;border-radius:99px;font-weight:700;background:${gc}33;color:${gc};border:2px solid ${gc}}h2{font-size:1.05rem;margin:24px 0 10px;border-bottom:2px solid #e8e8f0;padding-bottom:8px}.qb{background:white;border-radius:8px;padding:14px;margin-bottom:8px;border-left:4px solid #ccc}.qb.wrong{border-left-color:#e8473f;background:#fff8f8}.qb.correct{border-left-color:#3dd68c}.qh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}.qid{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888}.mbadge{font-weight:700;font-size:.88rem;padding:2px 10px;border-radius:99px}.mb-w{background:#fde8e8;color:#e8473f}.mb-c{background:#e8fdf2;color:#3dd68c}.qdesc{font-size:.86rem;margin-bottom:5px}.qfb{font-size:.82rem;color:#666;font-style:italic}.todo{background:#fff8e1;border:1px solid #f5c842;border-radius:8px;padding:14px;margin-bottom:8px}.todo h3{margin:0 0 8px;font-size:.88rem;color:#b8860b}.tdi{font-size:.84rem;padding:3px 0;border-bottom:1px solid #f0e8c0}.tdi:last-child{border:none}.strs{background:#e8fdf2;border:1px solid #3dd68c44;border-radius:8px;padding:14px}.strs h3{margin:0 0 8px;font-size:.88rem;color:#2a9e6a}.tag{display:inline-block;padding:3px 9px;border-radius:99px;font-size:.78rem;margin:2px}.tg{background:#e8fdf2;color:#2a9e6a;border:1px solid #3dd68c44}.tr{background:#fde8e8;color:#e8473f;border:1px solid #e8473f44}.overall{background:white;border-radius:8px;padding:14px;border:1px solid #e0e0ef;font-size:.86rem;line-height:1.7;color:#555}.footer{text-align:center;font-size:.73rem;color:#aaa;margin-top:28px;padding-top:14px;border-top:1px solid #e8e8f0}.wm{position:fixed;bottom:6px;right:10px;font-size:.6rem;color:rgba(108,143,245,0.4);pointer-events:none}</style></head><body><div class="page"><div class="hdr"><h1>📄 ${escHtml(pName)}</h1><p>Personalised Feedback — ${date}</p><div class="scores"><div class="sbox"><div class="sbig">${res.totalScore??0}/${res.maxScore??'?'}</div><div class="slbl">Marks</div></div><div class="sbox"><div class="sbig">${pct}%</div><div class="slbl">Percentage</div></div><div class="sbox"><div class="gp">Grade ${res.grade??'—'}</div></div></div></div><p>Hello <strong>${escHtml(sName)}</strong>, here is your detailed feedback.</p>${res.overallFeedback?`<div class="overall">${escHtml(res.overallFeedback)}</div>`:""}${(res.strengths||[]).length?`<div class="strs" style="margin-top:14px"><h3>✓ Strengths</h3>${res.strengths.map(s=>`<span class="tag tg">${escHtml(s)}</span>`).join("")}</div>`:""}<h2>Question-by-Question Breakdown</h2>${(res.questions||[]).map(q=>`<div class="qb ${q.correct?'correct':'wrong'}"><div class="qh"><span class="qid">${escHtml(q.id||'')}</span><span class="mbadge ${q.correct?'mb-c':'mb-w'}">${q.marksAwarded}/${q.marksAvailable} marks</span></div><div class="qdesc"><strong>${escHtml(q.description||'')}</strong></div><div class="qfb">${escHtml(q.feedback||'')}</div>${q.misconception?`<span class="tag tr" style="margin-top:5px">⚠ ${escHtml(q.misconception)}</span>`:''}</div>`).join("")}${res.questions?.some(q=>q.ao)?`
           <div style="margin:20px 0;padding:16px;background:white;border:1px solid #e0e0ef;border-radius:8px">
             <h2 style="font-size:0.95rem;margin:0 0 10px;color:#1a1a2e">Assessment Objective Breakdown</h2>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -5935,14 +6052,12 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
       canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
       const ctx=canvas.getContext("2d");ctx.drawImage(img,0,0);
       const W=canvas.width,H=canvas.height,fs=Math.max(22,Math.round(W*.02));
-      // Detect ink colour from paper (red/blue pen detection)
       const id=ctx.getImageData(0,0,W,H).data;
       let rS=0,gS=0,bS=0,n=0;
       for(let i=0;i<id.length;i+=20){const r=id[i],g=id[i+1],b=id[i+2];if(r<200||g<200||b<200){rS+=r;gS+=g;bS+=b;n++;}}
       const iR=n?rS/n:80,iG=n?gS/n:80,iB=n?bS/n:80;
       const inkIsRed=iR>iG+20&&iR>iB+20,inkIsBlue=iB>iR+20&&iB>iG+20;
       const inkHint=inkIsRed?"🔴 Red pen":inkIsBlue?"🔵 Blue pen":"✏ Dark pen";
-      // Draw per-question tick/cross + mark chip for each question
       const qs=results.questions||[];
       const cols=H>W?2:3;
       qs.forEach((q,qi)=>{
@@ -5952,8 +6067,6 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
         const mark=q.correct?"✓":"✗";
         const label=`${mark} ${q.id||("Q"+(qi+1))}: ${q.marksAwarded??0}/${q.marksAvailable??1}mk`;
         const mw=ctx.measureText(label).width+fs;
-        // Highlight chip
-        // Use higher opacity chips when ink is light-coloured (red/blue pen)
         const chipAlpha=inkIsRed||inkIsBlue?0.32:0.18;
         ctx.fillStyle=q.correct?`rgba(61,214,140,${chipAlpha})`:`rgba(232,71,63,${chipAlpha})`;
         rrect(ctx,x,y-fs*.9,mw,fs*1.4,6);ctx.fill();
@@ -5974,7 +6087,6 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
           ctx.beginPath();ctx.moveTo(x+fs*.2,y+fs*1.25);ctx.lineTo(x+fs*.2+fw,y+fs*1.25);ctx.stroke();
         }
       });
-      // Regional annotations from AI
       (results.annotations||[]).forEach(a=>{
         const rm={"top-left":[W*.05,H*.04],"top-right":[W*.72,H*.04],"bottom-left":[W*.05,H*.9],"bottom-right":[W*.72,H*.9],"center":[W*.3,H*.5]};
         const[x,y]=rm[a.region]||[W*.05,H*.05];
@@ -5983,7 +6095,6 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
         ctx.fillStyle="rgba(255,255,255,0.9)";rrect(ctx,x-p*.5,y-fs,m.width+p,fs*1.6,6);ctx.fill();
         ctx.fillStyle=col;ctx.fillText(a.text,x,y);
       });
-      // Total score badge top-right
       if(results.totalScore!=null){
         const s=`${results.totalScore}/${results.maxScore??"?"}`,sf=Math.max(36,Math.round(W*.042));
         ctx.font=`bold ${sf}px Playfair Display,serif`;const m=ctx.measureText(s),sx=W-m.width-W*.04,sy=H*.055;
@@ -5995,6 +6106,7 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
           ctx.font=`bold ${Math.round(sf*.6)}px Inter,sans-serif`;
           ctx.fillStyle="#e8473f";ctx.fillText(`Grade ${results.grade}`,sx,sy+sf*.7);
         }
+        ctx.font=`${Math.round(fs*.6)}px Inter,sans-serif`;ctx.fillStyle="rgba(108,143,245,0.55)";ctx.fillText("©NovaVista",W*.04,H*.985);ctx.fillStyle="rgba(0,0,0,0.35)";ctx.fillText(inkHint,W-W*.3,H*.985);
       }
     };
     if(results.image)img.src=results.image;
@@ -6280,7 +6392,7 @@ const sys=`You are a strict UK examiner. Follow these rules without exception:\n
         <div className="sidebar-footer">
                     {/* AI key status — hidden when offline */}
           {!offlineMode&&(
-            <div className="key-status" onClick={()=>setShowKeyModal(true)} title="Click to configure AI connection">
+            <div className="key-status" onClick={()=>setShowKeyModal(true)} title="Configure AI">
               <div className={`key-dot ${apiReady?"ok":"bad"}`}/>
               <span className={`key-label ${apiReady?"ok":""}`}>
                 {apiMode==="local" ?"Local model"
@@ -7505,7 +7617,7 @@ Q2 (3mk): formula, working, units…"
                   <div className="page-sub">
                     {reviewMode==="manual"
                       ?"The AI could not confidently read some answers — fill them in below, then mark"
-                      :"Choose marking method"}
+                      :"Choose method"}
                   </div>
                 </div>
                 <button className="btn btn-ghost btn-sm" onClick={()=>{setReviewMode(null);setStitchedImage(null);setUncertainQs([]);setManualAnswers({});}}>
@@ -8117,7 +8229,7 @@ Q2 (3mk): formula, working, units…"
                                       <button
                                         className="btn btn-blue btn-sm"
                                         onClick={()=>dlFeedback(st,paper.name)}
-                                        title="Download personalised feedback">
+                                        title="Download feedback">
                                         <Ic d={I.filetext} size={13}/> Feedback
                                       </button>
                                       <button className="btn btn-ghost btn-sm" style={{color:"var(--red)"}} onClick={()=>setClasses(prev=>({...prev,[pid]:{...prev[pid],students:prev[pid].students.filter(s=>s.id!==st.id)}}))}>✕</button>
@@ -9235,7 +9347,7 @@ ollama create novavista-marker -f novavista-Modelfile</div>
                   <div className="card card-pad col gap12" style={{background:"var(--inset)",border:"1px solid rgba(61,214,140,0.25)"}}>
                     <div className="field-label" style={S.s0}>Proxy Server URL</div>
                     <input value={proxyUrl} onChange={e=>setProxyUrl(e.target.value)}
-                      placeholder="https://your-worker.workers.dev"/>
+                      placeholder="https://…workers.dev"/>
                     {proxySet
                       ?<div className="info-box">✓ Proxy configured — no key needed in browser.</div>
                       :<div className="warn-box">Paste your Cloudflare Worker URL above.</div>}
